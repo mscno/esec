@@ -1,0 +1,10 @@
+{
+  "_ESEC_PUBLIC_KEY": "493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d",
+  "MY_VALUE": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]",
+  "MY_NUMBER": 123,
+    "MY_ARRAY": [
+        "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:05gVhGzlZ+uAkDhUQkF/Ek8ketC9ta9f:bxHz36i/Etrl3BSGwCw5CmNix89t]",
+        "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:grLDhSld77JjdwXfSrooIp1Trl0/4/5u:iz+qKEJgk4+xD0f04VRInoL3AJOH]"],
+  "MY_OBJECT": {
+      "hello": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:3Zcx6Quy0mj5MdUDJduNKGgPDqBOLHYB:s9/u1dhQtYoeWGymnZlWogT8UnMR]"}
+}
