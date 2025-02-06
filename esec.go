@@ -12,7 +12,6 @@ import (
 	"github.com/mscno/esec/pkg/json"
 	"io"
 	"io/ioutil"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,14 +45,6 @@ const (
 	Eyaml FormatType = ".eyaml"
 	Eyml  FormatType = ".eyml"
 	Etoml FormatType = ".etoml"
-)
-
-type FileType int
-
-const (
-	FileTypeJSON = iota
-	FileTypeYAML
-	FileTypeTOML
 )
 
 // DecryptFromVault retrieves and decrypts a file from an embedded filesystem.
@@ -188,13 +179,11 @@ func encryptData(data []byte, fileFormat FormatType) ([]byte, error) {
 }
 
 func DecryptFile(input string, keydir string, userSuppliedPrivateKey string) ([]byte, error) {
-	slog.Debug("Decrypting file", "file", input, "keydir", keydir, "userSuppliedPrivateKey", userSuppliedPrivateKey)
 	fileName, envName, err := processFileOrEnv(input)
 	if err != nil {
 		fmt.Errorf("error processing file or env: %v", err)
 	}
 
-	slog.Debug("Reading file", "file", fileName)
 	data, err := readFile(fileName)
 	if err != nil {
 		return nil, err
@@ -205,7 +194,6 @@ func DecryptFile(input string, keydir string, userSuppliedPrivateKey string) ([]
 		return nil, err
 	}
 
-	slog.Debug("Locating private key", "keydir", keydir, "envName", envName, "userSuppliedPrivateKey", userSuppliedPrivateKey)
 	privkey, err := findPrivateKey(keydir, envName, userSuppliedPrivateKey)
 	if err != nil {
 		return nil, err
@@ -249,12 +237,10 @@ func decryptData(privkey [32]byte, data []byte, fileFormat FormatType) ([]byte, 
 	default:
 		return nil, fmt.Errorf("unsupported format: %s", fileFormat)
 	}
-	slog.Debug("Extracting public key from data")
 	pubkey, err := formatter.ExtractPublicKey(data)
 	if err != nil {
 		return nil, err
 	}
-	slog.Debug("Extracted public key", "pubkey", fmt.Sprintf("%x", pubkey))
 
 	myKP := crypto.Keypair{
 		Public:  pubkey,
@@ -263,19 +249,12 @@ func decryptData(privkey [32]byte, data []byte, fileFormat FormatType) ([]byte, 
 
 	decrypter := myKP.Decrypter()
 
-	slog.Debug("Decrypting data", "data", string(data))
 	decryptedData, err := formatter.TransformScalarValues(data, decrypter.Decrypt)
 	if err != nil {
 		return nil, err
 	}
-	slog.Debug("Decrypted data", "data", string(decryptedData))
 	return decryptedData, nil
 }
-
-const (
-	// ESECPrivateKey is the base key name for environment variables
-	ESECPrivateKey = "ESEC_PRIVATE_KEY"
-)
 
 // findPrivateKey retrieves a private key from user input, environment variables, or keyring file.
 // It prioritizes user-supplied keys, then environment variables, and finally the keyring file.
@@ -284,7 +263,6 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 
 	// If the user supplied a private key, use it directly.
 	if userSuppliedPrivateKey != "" {
-		slog.Debug("Using user-supplied private key")
 		return format.ParseKey(userSuppliedPrivateKey)
 	}
 
@@ -296,14 +274,11 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 	vars := os.Environ()
 	_ = vars
 	// Check if the private key is in environment variables.
-	slog.Debug("Looking up private key in environment variables", "key", keyToLookup)
 	if privKeyString, exists := os.LookupEnv(keyToLookup); exists {
 		return format.ParseKey(privKeyString)
 	}
 
 	// If not found in env vars, try reading from the keyring file.
-	slog.Debug("Private key not found in environment variables. Checking keyring file...", "key", keyToLookup)
-
 	keyringPath := filepath.Join(keyPath, ".esec-keyring")
 	privateKeyFile, err := os.ReadFile(keyringPath)
 	if err != nil {

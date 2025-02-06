@@ -44,7 +44,6 @@ func Execute() {
 	if cli.Format == "json" {
 		opts = append(opts, logger.WithFormat(logger.FormatJSON))
 	}
-	logger.NewSlogger(opts...)
 
 	err := ctx.Run(&Context{Context: context.Background(), Debug: cli.Debug})
 	ctx.FatalIfErrorf(err)

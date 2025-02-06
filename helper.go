@@ -2,7 +2,6 @@ package esec
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -17,7 +16,6 @@ func DetectFormat(input string) (FormatType, error) {
 
 	for format := range validFormats {
 		if strings.HasPrefix(filepath.Base(input), string(format)) {
-			slog.Debug("Detected format", "format", format)
 			return format, nil
 		}
 	}
@@ -47,7 +45,6 @@ func processFileOrEnv(input string) (filename string, environment string, err er
 	}
 
 	if isFile {
-		slog.Debug("Input is a file")
 		// Input is a filename, parse the environment from it
 		environment, err = parseEnvironment(path.Base(input))
 		if err != nil {
