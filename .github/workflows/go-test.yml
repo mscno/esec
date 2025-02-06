@@ -1,0 +1,26 @@
+# See https://fly.io/docs/app-guides/continuous-deployment-with-github-actions/
+
+name: Test
+on:
+    push:
+        branches:
+            - master
+jobs:
+    test:
+        name: "go test"
+        permissions:
+            id-token: write
+            contents: read
+        runs-on: "ubuntu-latest"
+
+        steps:
+            - name: Check out repository code
+              uses: actions/checkout@v4
+              with:
+                  lfs: true
+            - uses: actions/setup-go@v5
+              with:
+                  go-version: 1.23
+                  cache: true
+            - name: Test
+              run: go test ./...
