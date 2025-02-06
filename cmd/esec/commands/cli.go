@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/alecthomas/kong"
 	"github.com/mscno/esec"
-	"github.com/mscno/esec/pkg/logger"
 	"io"
 	"os"
 )
@@ -25,8 +24,6 @@ type CLI struct {
 	Keygen  KeygenCmd  `cmd:"" help:"Generate key"`
 	Encrypt EncryptCmd `cmd:"" help:"Encrypt a secret"`
 	Decrypt DecryptCmd `cmd:"" help:"Decrypt a secret"`
-	Debug   bool       `help:"Enable debug mode"`
-	Format  string     `help:"Output format" enum:"json,console" default:"console"`
 }
 
 func Execute() {
@@ -37,15 +34,7 @@ func Execute() {
 		kong.Description("EncryptedSecrets"),
 	)
 
-	var opts []logger.LoggerOption
-	if cli.Debug {
-		opts = append(opts, logger.WithDebug())
-	}
-	if cli.Format == "json" {
-		opts = append(opts, logger.WithFormat(logger.FormatJSON))
-	}
-
-	err := ctx.Run(&Context{Context: context.Background(), Debug: cli.Debug})
+	err := ctx.Run(&Context{Context: context.Background()})
 	ctx.FatalIfErrorf(err)
 }
 
