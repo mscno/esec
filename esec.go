@@ -272,31 +272,6 @@ func decryptData(privkey [32]byte, data []byte, fileFormat FormatType) ([]byte, 
 	return decryptedData, nil
 }
 
-func sniffEnvName() (string, error) {
-	var setKeys []string
-
-	// Scan environment variables for keys starting with ESEC_PRIVATE_KEY
-	for _, envVar := range os.Environ() {
-		if strings.HasPrefix(envVar, ESEC_PRIVATE_KEY) {
-			key := strings.SplitN(envVar, "=", 2)[0]
-			setKeys = append(setKeys, key)
-		}
-	}
-
-	switch len(setKeys) {
-	case 0:
-		return "", nil // Default to "" (blank env) if no key is found
-	case 1:
-		// Extract the environment name from the key
-		if setKeys[0] == ESEC_PRIVATE_KEY {
-			return "", nil
-		}
-		return strings.ToLower(strings.TrimPrefix(setKeys[0], ESEC_PRIVATE_KEY+"_")), nil
-	default:
-		return "", fmt.Errorf("multiple private keys found: %v", setKeys)
-	}
-}
-
 const (
 	// ESECPrivateKey is the base key name for environment variables
 	ESECPrivateKey = "ESEC_PRIVATE_KEY"
