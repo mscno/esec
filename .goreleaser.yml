@@ -1,8 +1,5 @@
 version: 2
 
-git:
-    tag: true
-
 builds:
     - main: ./cmd/esec/
       flags:
