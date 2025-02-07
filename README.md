@@ -1,15 +1,23 @@
 # esec: Encrypted Secrets Management for Go
 
 **Esec** is a Go library and CLI tool for managing encrypted secrets using **environment files (`.env`), JSON (`.ejson`), and other formats**. It allows developers to securely store and retrieve sensitive configurations using **public-key cryptography**.
+
 It draws heavy inspiration from the [EJSON](https://github.com/Shopify/ejson) project and aims to provide a similar experience for Go developers. A large part of the crypto related  code and the file format handling is also inspired by or directly taken from the EJSON project.
+
+Main differences are that **esec** is more opinionated on the file naming conventions and the key lookup process. Ejson writes the keys to a local dir in the format of `keydir/<public-key>/<private-key>` and then looks up the keys from there. **esec** uses environment variables and a `.esec-keyring` file for key lookup. 
 
 
 ### Features
 ✅ **Secure secrets storage** using public/private key encryption.  
-✅ **Support for multiple formats** (`.env`, `.ejson`, `.eyaml`, `.etoml`).  
+✅ **Support for multiple formats** (`.env`, `.ejson`).  
 ✅ **Decryption of secrets in embedded or external vaults**.  
 ✅ **CLI tool for encryption & decryption**.  
 ✅ **Integrates easily into Go applications**.
+
+### Todo
+- [ ] Add support for more file formats (`.eyaml`, `.etoml`).
+- [ ] Add more test coverage.
+- [ ] Standardize the package API.
 
 ---
 
