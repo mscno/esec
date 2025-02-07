@@ -8,10 +8,12 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/mscno/esec/pkg/crypto"
 	"github.com/mscno/esec/pkg/dotenv"
+	"github.com/mscno/esec/pkg/fileutils"
 	"github.com/mscno/esec/pkg/format"
 	"github.com/mscno/esec/pkg/json"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -32,22 +34,15 @@ func GenerateKeypair() (pub string, priv string, err error) {
 type FileFormat string
 
 const (
-	Env   FileFormat = ".env"
-	Ejson FileFormat = ".ejson"
-	Eyaml FileFormat = ".eyaml"
-	Eyml  FileFormat = ".eyml"
-	Etoml FileFormat = ".etoml"
+	FileFormatEnv   FileFormat = ".env"
+	FileFormatEjson FileFormat = ".ejson"
+	FileFormatEyaml FileFormat = ".eyaml"
+	FileFormatEyml  FileFormat = ".eyml"
+	FileFormatEtoml FileFormat = ".etoml"
 )
 
-// EncryptInputInPlace takes a string that represents a file path or an environment variable.
-// It determines if the input is a file or an environment variable, and encrypts the corresponding data.
-func EncryptInputInPlace(filePath string, fileFormat FileFormat) (int, error) {
-	filePath, _, err := processFileOrEnv(filePath, fileFormat)
-	if err != nil {
-		return -1, fmt.Errorf("error processing file or env: %v", err)
-	}
-
-	return EncryptFileInPlace(filePath)
+func validFormats() []FileFormat {
+	return []FileFormat{FileFormatEnv, FileFormatEjson, FileFormatEyaml, FileFormatEyml, FileFormatEtoml}
 }
 
 // EncryptFileInPlace takes a path to a file on disk, which must be a valid ecfg file
@@ -66,12 +61,12 @@ func EncryptFileInPlace(filePath string) (int, error) {
 		return -1, err
 	}
 
-	formatType, err := ParseFormat(filePath)
+	formatType, err := fileutils.ParseFormat(filePath)
 	if err != nil {
 		return -1, err
 	}
 
-	newdata, err := encryptData(data, formatType)
+	newdata, err := encryptData(data, FileFormat(formatType))
 	if err != nil {
 		return -1, err
 	}
@@ -98,17 +93,12 @@ func Encrypt(in io.Reader, out io.Writer, fileFormat FileFormat) (int, error) {
 }
 
 func encryptData(data []byte, fileFormat FileFormat) ([]byte, error) {
-	// Extract the public key
-	var formatter format.FormatHandler
-	switch fileFormat {
-	case Env:
-		formatter = &dotenv.DotEnvFormatter{}
-	case Ejson:
-		formatter = &json.JsonFormatter{}
-	default:
-		return nil, fmt.Errorf("unsupported format: %s", fileFormat)
+	// Get the formatter for the file format
+	formatter, err := getFormatter(fileFormat)
+	if err != nil {
+		return nil, err
 	}
-
+	// Extract the public key
 	pubkey, err := formatter.ExtractPublicKey(data)
 	if err != nil {
 		return nil, err
@@ -131,7 +121,7 @@ func encryptData(data []byte, fileFormat FileFormat) ([]byte, error) {
 	return formattedData, nil
 }
 
-// DecryptFromVault retrieves and decrypts a file from an embedded filesystem.
+// DecryptFromEmbedFS retrieves and decrypts a file from an embedded filesystem.
 // It determines the environment name automatically unless an override is provided.
 // The function reads the encrypted file based on the specified format, then decrypts it
 // and returns the decrypted data.
@@ -144,23 +134,20 @@ func encryptData(data []byte, fileFormat FileFormat) ([]byte, error) {
 // Returns:
 //   - The decrypted file content as a byte slice.
 //   - An error if any step fails (e.g., environment detection, file reading, decryption).
-func DecryptFromVault(v embed.FS, envOverride string, format FileFormat) ([]byte, error) {
+func DecryptFromEmbedFS(v embed.FS, format FileFormat, envOverride string) ([]byte, error) {
 	// Try to determine the environment name automatically.
-	envName, err := sniffEnvName()
-	if err != nil {
-		return nil, fmt.Errorf("error sniffing environment name: %v", err)
-	}
-
-	// If an environment override is provided, use it instead of the detected name.
-	if envOverride != "" {
-		envName = envOverride
+	var err error
+	envName := envOverride
+	// If an environment override is not provided, use it instead of the detected name.
+	if envOverride == "" {
+		envName, err = sniffEnvName()
+		if err != nil {
+			return nil, fmt.Errorf("error sniffing environment name: %v", err)
+		}
 	}
 
 	// Generate the filename based on the format and environment name.
-	fileName, err := generateFilename(format, envName)
-	if err != nil {
-		return nil, err // Return the error if filename generation fails.
-	}
+	fileName := fileutils.GenerateFilename(fileutils.FileFormat(format), envName)
 
 	// Attempt to read the file from the embedded filesystem.
 	data, err := v.ReadFile(fileName)
@@ -177,21 +164,11 @@ func DecryptFromVault(v embed.FS, envOverride string, format FileFormat) ([]byte
 	return decryptData(privkey, data, format)
 }
 
-// DecryptInput reads an encrypted input string, determines if it is a file or environment variable, and decrypts the corresponding data.
-func DecryptInput(input string, keydir string, userSuppliedPrivateKey string, format FileFormat) ([]byte, error) {
-	fileName, _, err := processFileOrEnv(input, format)
-	if err != nil {
-		fmt.Errorf("error processing file or env: %v", err)
-	}
-
-	return DecryptFile(fileName, keydir, userSuppliedPrivateKey)
-}
-
 // DecryptFile reads an encrypted file from disk, decrypts it, and returns the decrypted data.
 func DecryptFile(filePath string, keydir string, userSuppliedPrivateKey string) ([]byte, error) {
 	envName, err := parseEnvironment(filePath)
 	if err != nil {
-		fmt.Errorf("error processing file or env: %v", err)
+		fmt.Errorf("error parsing env from file: %v", err)
 	}
 
 	data, err := os.ReadFile(filePath)
@@ -199,7 +176,7 @@ func DecryptFile(filePath string, keydir string, userSuppliedPrivateKey string) 
 		return nil, err
 	}
 
-	fileFormat, err := ParseFormat(filePath)
+	fileFormat, err := fileutils.ParseFormat(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +186,7 @@ func DecryptFile(filePath string, keydir string, userSuppliedPrivateKey string) 
 		return nil, err
 	}
 
-	decryptedData, err := decryptData(privkey, data, fileFormat)
+	decryptedData, err := decryptData(privkey, data, FileFormat(fileFormat))
 	if err != nil {
 		return nil, err
 	}
@@ -239,27 +216,28 @@ func Decrypt(in io.Reader, out io.Writer, envName string, fileFormat FileFormat,
 }
 
 func decryptData(privkey [32]byte, data []byte, fileFormat FileFormat) ([]byte, error) {
-	var formatter format.FormatHandler
-	switch fileFormat {
-	case Env:
-		formatter = &dotenv.DotEnvFormatter{}
-	case Ejson:
-		formatter = &json.JsonFormatter{}
-	default:
-		return nil, fmt.Errorf("unsupported format: %s", fileFormat)
+	// Get the formatter for the file format
+	formatter, err := getFormatter(fileFormat)
+	if err != nil {
+		return nil, err
 	}
+
+	// Extract the public key
 	pubkey, err := formatter.ExtractPublicKey(data)
 	if err != nil {
 		return nil, err
 	}
 
+	// Create a keypair using the extracted public and provided private keys
 	myKP := crypto.Keypair{
 		Public:  pubkey,
 		Private: privkey,
 	}
 
+	// Create a decrypter using the private key
 	decrypter := myKP.Decrypter()
 
+	// Decrypt the data
 	decryptedData, err := formatter.TransformScalarValues(data, decrypter.Decrypt)
 	if err != nil {
 		return nil, err
@@ -312,4 +290,66 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 
 	// Parse and return the private key.
 	return format.ParseKey(privKeyString)
+}
+
+// getFormatter returns the appropriate FormatHandler based on the given file format.
+func getFormatter(fileFormat FileFormat) (format.FormatHandler, error) {
+	switch fileFormat {
+	case FileFormatEnv:
+		return &dotenv.DotEnvFormatter{}, nil
+	case FileFormatEjson:
+		return &json.JsonFormatter{}, nil
+	default:
+		return nil, fmt.Errorf("unsupported format: %s", fileFormat)
+	}
+}
+
+func sniffEnvName() (string, error) {
+	var setKeys []string
+
+	// Scan environment variables for keys starting with ESEC_PRIVATE_KEY
+	for _, envVar := range os.Environ() {
+		if strings.HasPrefix(envVar, EsecPrivateKey) {
+			key := strings.SplitN(envVar, "=", 2)[0]
+			setKeys = append(setKeys, key)
+		}
+	}
+
+	switch len(setKeys) {
+	case 0:
+		return "", nil // Default to "" (blank env) if no key is found
+	case 1:
+		// Extract the environment name from the key
+		if setKeys[0] == EsecPrivateKey {
+			return "", nil
+		}
+		return strings.ToLower(strings.TrimPrefix(setKeys[0], EsecPrivateKey+"_")), nil
+	default:
+		return "", fmt.Errorf("multiple private keys found: %v", setKeys)
+	}
+}
+
+// Helper functions from before
+func parseEnvironment(filename string) (string, error) {
+	filename = path.Base(filename)
+
+	validPrefixes := []string{string(FileFormatEnv), string(FileFormatEjson), string(FileFormatEyaml), string(FileFormatEyml), string(FileFormatEtoml)}
+	isValidPrefix := false
+	for _, prefix := range validPrefixes {
+		if strings.HasPrefix(filename, prefix) {
+			isValidPrefix = true
+			break
+		}
+	}
+
+	if !isValidPrefix {
+		return "", fmt.Errorf("invalid file type: %s", filename)
+	}
+
+	parts := strings.Split(filename, ".")
+	if len(parts) <= 2 {
+		return "", nil
+	}
+
+	return parts[len(parts)-1], nil
 }

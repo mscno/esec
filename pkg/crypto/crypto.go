@@ -116,10 +116,6 @@ func (e *Encrypter) encrypt(message []byte) (*boxedMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Encrypting message with nonce %x\n", nonce)
-	fmt.Printf("Encrypter public key: %x\n", e.Keypair.Public)
-	fmt.Printf("Encrypter private key: %x\n", e.Keypair.Private)
-	fmt.Printf("Decrypter public key: %x\n", e.PeerPublic)
 	out := box.SealAfterPrecomputation(nil, message, &nonce, &e.SharedKey)
 
 	return &boxedMessage{
