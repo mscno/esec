@@ -21,17 +21,19 @@ type Context struct {
 }
 
 type CLI struct {
-	Keygen  KeygenCmd  `cmd:"" help:"Generate key"`
-	Encrypt EncryptCmd `cmd:"" help:"Encrypt a secret"`
-	Decrypt DecryptCmd `cmd:"" help:"Decrypt a secret"`
+	Keygen  KeygenCmd        `cmd:"" help:"Generate key"`
+	Encrypt EncryptCmd       `cmd:"" help:"Encrypt a secret"`
+	Decrypt DecryptCmd       `cmd:"" help:"Decrypt a secret"`
+	Version kong.VersionFlag `help:"Show version"`
 }
 
-func Execute() {
+func Execute(version string) {
 	var cli CLI
 	ctx := kong.Parse(&cli,
 		kong.UsageOnError(),
 		kong.Name("esec"),
-		kong.Description("EncryptedSecrets"),
+		kong.Description("esec is a tool for encrypting secrets"),
+		kong.Vars{"version": version},
 	)
 
 	err := ctx.Run(&Context{Context: context.Background()})
