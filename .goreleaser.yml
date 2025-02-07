@@ -4,8 +4,11 @@ builds:
     - main: ./cmd/esec/
       flags:
           - -trimpath
-      ldflags:
-          - -s -w "-X 'main.VERSION={{.Version}}'" -extldflags "-static"
+      ldflags: >
+            -X main.Version={{.Version}}
+            -s
+            -w
+            -extldflags "-static"
       env:
           - CGO_ENABLED=0
       goos:
