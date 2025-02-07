@@ -1,3 +1,11 @@
+# v0.0.7
+
+Fix version build flags
+
+# v0.0.6
+
+Docs update
+
 # v0.0.5
 
 # v0.0.4
