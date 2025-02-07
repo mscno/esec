@@ -146,7 +146,7 @@ func TestSniffEnvName(t *testing.T) {
 		},
 		{
 			name:    "Only ESEC_PRIVATE_KEY set",
-			envVars: map[string]string{ESEC_PRIVATE_KEY: "somevalue"},
+			envVars: map[string]string{EsecPrivateKey: "somevalue"},
 			wantEnv: "",
 			wantErr: false,
 		},

@@ -46,8 +46,10 @@ func TestNonceGeneration(t *testing.T) {
 
 func TestRoundtrip(t *testing.T) {
 	var kpEphemeral, kpSecret Keypair
-	kpEphemeral.Generate()
-	kpSecret.Generate()
+	err := kpEphemeral.Generate()
+	assert.NoError(t, err)
+	err = kpSecret.Generate()
+	assert.NoError(t, err)
 
 	t.Run("Roundtripping", func(t *testing.T) {
 		encrypter := kpEphemeral.Encrypter(kpSecret.Public)
@@ -69,6 +71,7 @@ func TestRoundtrip(t *testing.T) {
 	})
 }
 
+/*
 func exampleEncrypt(peerPublic [32]byte) {
 	var kp Keypair
 	if err := kp.Generate(); err != nil {
@@ -90,3 +93,4 @@ func exampleDecrypt(myPublic, myPrivate [32]byte, encrypted []byte) {
 	plaintext, err := decrypter.Decrypt(encrypted)
 	fmt.Println(plaintext, err)
 }
+*/

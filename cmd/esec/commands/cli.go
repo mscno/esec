@@ -10,17 +10,12 @@ import (
 	"os"
 )
 
-/*
-
- */
-
-type Context struct {
+type cliCtx struct {
 	Debug bool
-	//In    *do.Injector
 	context.Context
 }
 
-type CLI struct {
+type cli struct {
 	Keygen  KeygenCmd        `cmd:"" help:"Generate key"`
 	Encrypt EncryptCmd       `cmd:"" help:"Encrypt a secret"`
 	Decrypt DecryptCmd       `cmd:"" help:"Decrypt a secret"`
@@ -28,7 +23,7 @@ type CLI struct {
 }
 
 func Execute(version string) {
-	var cli CLI
+	var cli cli
 	ctx := kong.Parse(&cli,
 		kong.UsageOnError(),
 		kong.Name("esec"),
@@ -36,14 +31,14 @@ func Execute(version string) {
 		kong.Vars{"version": version},
 	)
 
-	err := ctx.Run(&Context{Context: context.Background()})
+	err := ctx.Run(&cliCtx{Context: context.Background()})
 	ctx.FatalIfErrorf(err)
 }
 
 type KeygenCmd struct {
 }
 
-func (c *KeygenCmd) Run(ctx *Context) error {
+func (c *KeygenCmd) Run(ctx *cliCtx) error {
 	pub, priv, err := esec.GenerateKeypair()
 	if err != nil {
 		return err
@@ -59,7 +54,7 @@ type EncryptCmd struct {
 	DryRun bool   `help:"Print the encrypted message without writing to file" short:"d"`
 }
 
-func (c *EncryptCmd) Run(ctx *Context) error {
+func (c *EncryptCmd) Run(ctx *cliCtx) error {
 	//var data []byte
 	//var err error
 	//if c.File != "" {
@@ -107,7 +102,7 @@ type DecryptCmd struct {
 	KeyDir       string `help:"Directory containing the '.esec_keyring' file" default:"." short:"d"`
 }
 
-func (c *DecryptCmd) Run(ctx *Context) error {
+func (c *DecryptCmd) Run(ctx *cliCtx) error {
 	//var reader io.Reader
 	//if c.File != "" {
 	//	file, err := os.Open(c.File)

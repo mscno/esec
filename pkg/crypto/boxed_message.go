@@ -74,7 +74,7 @@ func (b *boxedMessage) Load(from []byte) error {
 	if err != nil {
 		return err
 	}
-	pubBytes := []byte(pub)
+	pubBytes := pub
 	if len(pubBytes) != 32 {
 		return fmt.Errorf("public key invalid")
 	}
@@ -86,7 +86,7 @@ func (b *boxedMessage) Load(from []byte) error {
 	if err != nil {
 		return err
 	}
-	nonceBytes := []byte(nnc)
+	nonceBytes := nnc
 	if len(nonceBytes) != 24 {
 		return fmt.Errorf("nonce invalid")
 	}
@@ -98,7 +98,7 @@ func (b *boxedMessage) Load(from []byte) error {
 	if err != nil {
 		return err
 	}
-	b.Box = []byte(box)
+	b.Box = box
 
 	return nil
 }

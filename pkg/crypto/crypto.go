@@ -120,7 +120,7 @@ func (e *Encrypter) encrypt(message []byte) (*boxedMessage, error) {
 	fmt.Printf("Encrypter public key: %x\n", e.Keypair.Public)
 	fmt.Printf("Encrypter private key: %x\n", e.Keypair.Private)
 	fmt.Printf("Decrypter public key: %x\n", e.PeerPublic)
-	out := box.SealAfterPrecomputation(nil, []byte(message), &nonce, &e.SharedKey)
+	out := box.SealAfterPrecomputation(nil, message, &nonce, &e.SharedKey)
 
 	return &boxedMessage{
 		SchemaVersion:   1,
@@ -166,4 +166,5 @@ func genNonce() (nonce [24]byte, err error) {
 	return
 }
 
+// ErrInvalidKeyFormat means the key was not in the expected format.
 var ErrInvalidKeyFormat = fmt.Errorf("invalid key format")

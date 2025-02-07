@@ -34,7 +34,6 @@ func TestEncryptFileInPlace(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 666, n)
 	})
-
 }
 
 func TestEncrypt(t *testing.T) {
@@ -42,10 +41,8 @@ func TestEncrypt(t *testing.T) {
 		_, err := Encrypt(bytes.NewBuffer([]byte(`{"a": "b"]`)), bytes.NewBuffer(nil), Ejson)
 		if err == nil {
 			t.Errorf("expected error, but none was received")
-		} else {
-			if !strings.Contains(err.Error(), "invalid character") {
-				t.Errorf("wanted json error, but got %v", err)
-			}
+		} else if !strings.Contains(err.Error(), "invalid character") {
+			t.Errorf("wanted json error, but got %v", err)
 		}
 	})
 
@@ -54,10 +51,8 @@ func TestEncrypt(t *testing.T) {
 		_, err := Encrypt(bytes.NewBuffer([]byte(`{"_ESEC_PUBLIC_KEY": "invalid"}`)), bytes.NewBuffer(nil), Ejson)
 		if err == nil {
 			t.Errorf("expected error, but none was received")
-		} else {
-			if !strings.Contains(err.Error(), "public key has invalid format") {
-				t.Errorf("wanted key error, but got %v", err)
-			}
+		} else if !strings.Contains(err.Error(), "public key has invalid format") {
+			t.Errorf("wanted key error, but got %v", err)
 		}
 	})
 
@@ -74,16 +69,13 @@ func TestEncrypt(t *testing.T) {
 }
 
 func TestDecryptFile(t *testing.T) {
-
 	t.Run("invalid json file", func(t *testing.T) {
 		// invalid json file
 		_, err := Decrypt(bytes.NewBuffer([]byte(`{"a": "b"]`)), bytes.NewBuffer(nil), "", Ejson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
 		if err == nil {
 			t.Errorf("expected error, but none was received")
-		} else {
-			if !strings.Contains(err.Error(), "invalid character") {
-				t.Errorf("wanted json error, but got %v", err)
-			}
+		} else if !strings.Contains(err.Error(), "invalid character") {
+			t.Errorf("wanted json error, but got %v", err)
 		}
 	})
 
@@ -163,5 +155,4 @@ func TestDecryptFile(t *testing.T) {
 			t.Errorf("unexpected output: %s", s)
 		}
 	})
-
 }

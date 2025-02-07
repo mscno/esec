@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	ESEC_PUBLIC_KEY  = "ESEC_PUBLIC_KEY"
-	ESEC_PRIVATE_KEY = "ESEC_PRIVATE_KEY"
+	EsecPublicKey  = "ESEC_PUBLIC_KEY"
+	EsecPrivateKey = "ESEC_PRIVATE_KEY"
 )
 
 func GenerateKeypair() (pub string, priv string, err error) {
@@ -49,6 +49,7 @@ func EncryptFileInPlace(input string) (int, error) {
 	if err != nil {
 		return -1, fmt.Errorf("error processing file or env: %v", err)
 	}
+	filePath = filepath.Clean(filePath)
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return -1, err
@@ -259,9 +260,9 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 	}
 
 	// Determine the key name to look up.
-	keyToLookup := ESEC_PRIVATE_KEY
+	keyToLookup := EsecPrivateKey
 	if envName != "" {
-		keyToLookup = fmt.Sprintf("%s_%s", ESEC_PRIVATE_KEY, strings.ToUpper(envName))
+		keyToLookup = fmt.Sprintf("%s_%s", EsecPrivateKey, strings.ToUpper(envName))
 	}
 
 	// Check if the private key is in environment variables.
@@ -293,13 +294,4 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 
 	// Parse and return the private key.
 	return format.ParseKey(privKeyString)
-}
-
-// for mocking in tests
-func _getMode(path string) (os.FileMode, error) {
-	fi, err := os.Stat(path)
-	if err != nil {
-		return 0, err
-	}
-	return fi.Mode(), nil
 }

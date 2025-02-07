@@ -124,7 +124,7 @@ func sniffEnvName() (string, error) {
 
 	// Scan environment variables for keys starting with ESEC_PRIVATE_KEY
 	for _, envVar := range os.Environ() {
-		if strings.HasPrefix(envVar, ESEC_PRIVATE_KEY) {
+		if strings.HasPrefix(envVar, EsecPrivateKey) {
 			key := strings.SplitN(envVar, "=", 2)[0]
 			setKeys = append(setKeys, key)
 		}
@@ -135,10 +135,10 @@ func sniffEnvName() (string, error) {
 		return "", nil // Default to "" (blank env) if no key is found
 	case 1:
 		// Extract the environment name from the key
-		if setKeys[0] == ESEC_PRIVATE_KEY {
+		if setKeys[0] == EsecPrivateKey {
 			return "", nil
 		}
-		return strings.ToLower(strings.TrimPrefix(setKeys[0], ESEC_PRIVATE_KEY+"_")), nil
+		return strings.ToLower(strings.TrimPrefix(setKeys[0], EsecPrivateKey+"_")), nil
 	default:
 		return "", fmt.Errorf("multiple private keys found: %v", setKeys)
 	}
