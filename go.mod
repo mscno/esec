@@ -1,6 +1,6 @@
 module github.com/mscno/esec
 
-go 1.23.2
+go 1.23
 
 require (
 	github.com/alecthomas/assert/v2 v2.11.0
