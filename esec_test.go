@@ -129,7 +129,7 @@ func TestDecryptFile(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {
-			if !strings.Contains(err.Error(), "private key not found in environment variables, and keyring file does not exist at \"/tmp/.esec-keyring\"") {
+			if !strings.Contains(err.Error(), "private key \"ESEC_PRIVATE_KEY\" not found in environment variables, and keyring file does not exist at \"/tmp/.esec-keyring\"") {
 				t.Errorf("wanted key error, but got %v", err)
 			}
 		}

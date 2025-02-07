@@ -274,7 +274,7 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 	privateKeyFile, err := os.ReadFile(keyringPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return privKey, fmt.Errorf("private key not found in environment variables, and keyring file does not exist at %q", keyringPath)
+			return privKey, fmt.Errorf("private key %q not found in environment variables, and keyring file does not exist at %q", keyToLookup, keyringPath)
 		}
 		return privKey, fmt.Errorf("failed to read keyring file at %q: %w", keyringPath, err)
 	}
