@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// DetectFormat attempts to determine the format type based on the file prefix.
-func DetectFormat(input string) (FormatType, error) {
+// detectFormat attempts to determine the format type based on the file prefix.
+func detectFormat(input string) (FormatType, error) {
 	validFormats := map[FormatType]bool{
 		Env: true, Ejson: true, Eyaml: true, Eyml: true, Etoml: true,
 	}

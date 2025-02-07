@@ -113,7 +113,7 @@ func EncryptFileInPlace(input string) (int, error) {
 		return -1, err
 	}
 
-	formatType, err := DetectFormat(filePath)
+	formatType, err := detectFormat(filePath)
 	if err != nil {
 		return -1, err
 	}
@@ -189,7 +189,7 @@ func DecryptFile(input string, keydir string, userSuppliedPrivateKey string) ([]
 		return nil, err
 	}
 
-	fileFormat, err := DetectFormat(fileName)
+	fileFormat, err := detectFormat(fileName)
 	if err != nil {
 		return nil, err
 	}

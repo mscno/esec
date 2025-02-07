@@ -73,7 +73,7 @@ func (c *EncryptCmd) Run(ctx *Context) error {
 	//	}
 	//}
 	//
-	//format, err := esec.DetectFormat(c.File)
+	//format, err := esec.detectFormat(c.File)
 	//if err != nil {
 	//	return err
 	//}

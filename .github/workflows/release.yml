@@ -1,0 +1,48 @@
+name: Release
+
+on:
+    push:
+        tags: [ 'v*.*.*' ]
+
+permissions:
+    contents: write
+    packages: write
+    id-token: write
+    attestations: write
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+            - name: Get latest Go version
+              id: gover
+              run: echo goversion=$(awk -F':|-' '!/^#/ {print $2}' .github/dockerfile-for-dependabot/Dockerfile) >> "$GITHUB_OUTPUT"
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "${{ steps.gover.outputs.goversion }}"
+            - name: Extract release changelog
+              run: |
+                  version=${GITHUB_REF#refs/tags/v*}
+                  mkdir -p tmp
+                  sed '/^# '$version'/,/^# /!d;//d;/^\s*$/d' CHANGELOG.md > tmp/release_changelog.md
+            - name: Release
+              uses: goreleaser/goreleaser-action@9ed2f89a662bf1735a48bc8557fd212fa902bebf # v6.1.0
+              with:
+                  distribution: goreleaser
+                  version: v2.4.4
+                  args: release --clean --release-notes=tmp/release_changelog.md
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: "Sign .tar.gz"
+              uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4 # v2.2.0
+              with:
+                  subject-path: "dist/*.tar.gz"
+            - name: "Sign .deb"
+              uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4 # v2.2.0
+              with:
+                  subject-path: "dist/*.deb"
