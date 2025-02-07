@@ -3,7 +3,6 @@ package esec
 import (
 	"bytes"
 	"github.com/alecthomas/assert/v2"
-	"io/ioutil"
 	"regexp"
 	"strings"
 	"testing"
@@ -41,7 +40,6 @@ func TestEncryptFileInPlace(t *testing.T) {
 func TestEncrypt(t *testing.T) {
 	t.Run("invalid json file", func(t *testing.T) {
 		_, err := Encrypt(bytes.NewBuffer([]byte(`{"a": "b"]`)), bytes.NewBuffer(nil), Ejson)
-		readFile = ioutil.ReadFile
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {
@@ -80,7 +78,6 @@ func TestDecryptFile(t *testing.T) {
 	t.Run("invalid json file", func(t *testing.T) {
 		// invalid json file
 		_, err := Decrypt(bytes.NewBuffer([]byte(`{"a": "b"]`)), bytes.NewBuffer(nil), "", Ejson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
-		readFile = ioutil.ReadFile
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {
@@ -93,7 +90,6 @@ func TestDecryptFile(t *testing.T) {
 	t.Run("missing key", func(t *testing.T) {
 		// invalid json file
 		_, err := Decrypt(bytes.NewBuffer([]byte(`{"_missing": "invalid"}`)), bytes.NewBuffer(nil), "", Ejson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
-		readFile = ioutil.ReadFile
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {
@@ -106,7 +102,6 @@ func TestDecryptFile(t *testing.T) {
 	t.Run("invalid key", func(t *testing.T) {
 		// invalid json file
 		_, err := Decrypt(bytes.NewBuffer([]byte(`{"_ESEC_PUBLIC_KEY": "invalid"}`)), bytes.NewBuffer(nil), "", Ejson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
-		readFile = ioutil.ReadFile
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {
@@ -119,7 +114,6 @@ func TestDecryptFile(t *testing.T) {
 	t.Run("invalid file and invalid message format", func(t *testing.T) {
 		// invalid json file
 		_, err := Decrypt(bytes.NewBuffer([]byte(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "b"}`)), bytes.NewBuffer(nil), "", Ejson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
-		readFile = ioutil.ReadFile
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {
@@ -132,7 +126,6 @@ func TestDecryptFile(t *testing.T) {
 	t.Run("valid file, but invalid keypath", func(t *testing.T) {
 		// invalid json file
 		_, err := Decrypt(bytes.NewBuffer([]byte(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`)), bytes.NewBuffer(nil), "", Ejson, "/tmp", "")
-		readFile = ioutil.ReadFile
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {
@@ -145,7 +138,6 @@ func TestDecryptFile(t *testing.T) {
 	t.Run("valid file, but invalid userkey", func(t *testing.T) {
 		// invalid json file
 		_, err := Decrypt(bytes.NewBuffer([]byte(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`)), bytes.NewBuffer(nil), "", Ejson, "", "586518639ad138d6c0ce76ce6fc30f54a40e3c5e066b93f0151cebe0ee6ea391")
-		readFile = ioutil.ReadFile
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {

@@ -11,7 +11,6 @@ import (
 	"github.com/mscno/esec/pkg/format"
 	"github.com/mscno/esec/pkg/json"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,52 +39,6 @@ const (
 	Etoml FormatType = ".etoml"
 )
 
-// DecryptFromVault retrieves and decrypts a file from an embedded filesystem.
-// It determines the environment name automatically unless an override is provided.
-// The function reads the encrypted file based on the specified format, then decrypts it
-// and returns the decrypted data.
-//
-// Parameters:
-//   - v: An embedded filesystem containing the encrypted files.
-//   - envOverride: An optional environment name override.
-//   - format: The format type of the encrypted file.
-//
-// Returns:
-//   - The decrypted file content as a byte slice.
-//   - An error if any step fails (e.g., environment detection, file reading, decryption).
-func DecryptFromVault(v embed.FS, envOverride string, format FormatType) ([]byte, error) {
-	// Try to determine the environment name automatically.
-	envName, err := sniffEnvName()
-	if err != nil {
-		return nil, fmt.Errorf("error sniffing environment name: %v", err)
-	}
-
-	// If an environment override is provided, use it instead of the detected name.
-	if envOverride != "" {
-		envName = envOverride
-	}
-
-	// Generate the filename based on the format and environment name.
-	fileName, err := generateFilename(format, envName)
-	if err != nil {
-		return nil, err // Return the error if filename generation fails.
-	}
-
-	// Attempt to read the file from the embedded filesystem.
-	data, err := v.ReadFile(fileName)
-	if err != nil {
-		return nil, fmt.Errorf("error reading file from vault: %v", err)
-	}
-
-	// Decrypt the file data and return the decrypted bytes.
-	privkey, err := findPrivateKey("", envName, "")
-	if err != nil {
-		return nil, err
-	}
-	// Decrypt the file data and return the decrypted bytes.
-	return decryptData(privkey, data, format)
-}
-
 // EncryptFileInPlace takes a path to a file on disk, which must be a valid ecfg file
 // (see README.md for more on what constitutes a valid ecfg file). Any
 // encryptable-but-unencrypted fields in the file will be encrypted using the
@@ -96,12 +49,12 @@ func EncryptFileInPlace(input string) (int, error) {
 	if err != nil {
 		return -1, fmt.Errorf("error processing file or env: %v", err)
 	}
-	data, err := readFile(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return -1, err
 	}
 
-	fileMode, err := getMode(filePath)
+	fileMode, err := os.Stat(filePath)
 	if err != nil {
 		return -1, err
 	}
@@ -116,7 +69,7 @@ func EncryptFileInPlace(input string) (int, error) {
 		return -1, err
 	}
 
-	if err := writeFile(filePath, newdata, fileMode); err != nil {
+	if err := os.WriteFile(filePath, newdata, fileMode.Mode()); err != nil {
 		return -1, err
 	}
 
@@ -171,13 +124,59 @@ func encryptData(data []byte, fileFormat FormatType) ([]byte, error) {
 	return formattedData, nil
 }
 
+// DecryptFromVault retrieves and decrypts a file from an embedded filesystem.
+// It determines the environment name automatically unless an override is provided.
+// The function reads the encrypted file based on the specified format, then decrypts it
+// and returns the decrypted data.
+//
+// Parameters:
+//   - v: An embedded filesystem containing the encrypted files.
+//   - envOverride: An optional environment name override.
+//   - format: The format type of the encrypted file.
+//
+// Returns:
+//   - The decrypted file content as a byte slice.
+//   - An error if any step fails (e.g., environment detection, file reading, decryption).
+func DecryptFromVault(v embed.FS, envOverride string, format FormatType) ([]byte, error) {
+	// Try to determine the environment name automatically.
+	envName, err := sniffEnvName()
+	if err != nil {
+		return nil, fmt.Errorf("error sniffing environment name: %v", err)
+	}
+
+	// If an environment override is provided, use it instead of the detected name.
+	if envOverride != "" {
+		envName = envOverride
+	}
+
+	// Generate the filename based on the format and environment name.
+	fileName, err := generateFilename(format, envName)
+	if err != nil {
+		return nil, err // Return the error if filename generation fails.
+	}
+
+	// Attempt to read the file from the embedded filesystem.
+	data, err := v.ReadFile(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("error reading file from vault: %v", err)
+	}
+
+	// Decrypt the file data and return the decrypted bytes.
+	privkey, err := findPrivateKey("", envName, "")
+	if err != nil {
+		return nil, err
+	}
+	// Decrypt the file data and return the decrypted bytes.
+	return decryptData(privkey, data, format)
+}
+
 func DecryptFile(input string, keydir string, userSuppliedPrivateKey string) ([]byte, error) {
 	fileName, envName, err := processFileOrEnv(input)
 	if err != nil {
 		fmt.Errorf("error processing file or env: %v", err)
 	}
 
-	data, err := readFile(fileName)
+	data, err := os.ReadFile(fileName)
 	if err != nil {
 		return nil, err
 	}
@@ -264,8 +263,7 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 	if envName != "" {
 		keyToLookup = fmt.Sprintf("%s_%s", ESEC_PRIVATE_KEY, strings.ToUpper(envName))
 	}
-	vars := os.Environ()
-	_ = vars
+
 	// Check if the private key is in environment variables.
 	if privKeyString, exists := os.LookupEnv(keyToLookup); exists {
 		return format.ParseKey(privKeyString)
@@ -305,12 +303,3 @@ func _getMode(path string) (os.FileMode, error) {
 	}
 	return fi.Mode(), nil
 }
-
-// for mocking in tests
-var (
-	readFile  = ioutil.ReadFile
-	writeFile = ioutil.WriteFile
-	getMode   = _getMode
-	getuid    = os.Getuid
-	getenv    = os.Getenv
-)
