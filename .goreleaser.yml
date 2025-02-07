@@ -19,9 +19,9 @@ builds:
 
 nfpms:
     - id: goreleaser
-      maintainer: "Shopify <admins@shopify.com>"
-      description: "utility for managing a collection of secrets in source control. Secrets are encrypted using public key, elliptic curve cryptography."
+      maintainer: "mscno <mscno@.com>"
+      description: "esec is a small and opinionated library to make it easy to manage encrypted secrets using public key asymmetric elliptic curve encryption."
       license: "MIT"
-      homepage: "https://github.com/Shopify/ejson"
+      homepage: "https://github.com/mscno/esec"
       formats:
           - deb
