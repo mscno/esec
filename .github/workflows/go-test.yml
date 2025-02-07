@@ -30,6 +30,7 @@ jobs:
               run: |
                   go mod download
                   go test -race -coverprofile=coverage.txt -covermode=atomic
+
     test-old:
         name: Test / Go ${{ matrix.go }}
         runs-on: ubuntu-latest
@@ -41,16 +42,12 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
-            - name: Init Hermit
-              run: ./bin/hermit env -r >> "$GITHUB_ENV"
-            - name: Install Go ${{ matrix.go }}
-              run: |
-                  hermit install go@"${GO_VERSION}"
-                  go version
-              env:
-                  GO_VERSION: ${{ matrix.go }}
+            - name: Setup go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "${{ matrix.go }}"
             - name: Test
-              run: go test ./...
+              run: go test -race ./...
 
     test-windows:
         name: Test / Windows / Go ${{ matrix.go }}
@@ -63,12 +60,12 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
-            - name: Setup Go
+            - name: Setup go
               uses: actions/setup-go@v5
               with:
-                  go-version: ${{ matrix.go }}
+                  go-version: "${{ matrix.go }}"
             - name: Test
-              run: go test ./...
+              run: go test -race ./...
 
 #    lint:
 #        name: Lint
