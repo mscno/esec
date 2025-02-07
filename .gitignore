@@ -6,3 +6,5 @@ local
 .bundle
 /tmp
 /dist/
+coverage.out
+coverage.txt
