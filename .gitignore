@@ -1,2 +1,8 @@
 .idea
 local
+/ejson
+/tags
+/build/
+.bundle
+/tmp
+/dist/
