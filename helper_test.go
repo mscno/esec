@@ -99,7 +99,7 @@ func TestProcessFileOrEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFilename, gotEnv, err := processFileOrEnv(tt.input)
+			gotFilename, gotEnv, err := processFileOrEnv(tt.input, Ejson)
 
 			// Check error cases
 			if tt.wantErr {

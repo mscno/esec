@@ -29,27 +29,33 @@ func GenerateKeypair() (pub string, priv string, err error) {
 	return kp.PublicString(), kp.PrivateString(), nil
 }
 
-type FormatType string
+type FileFormat string
 
 const (
-	Env   FormatType = ".env"
-	Ejson FormatType = ".ejson"
-	Eyaml FormatType = ".eyaml"
-	Eyml  FormatType = ".eyml"
-	Etoml FormatType = ".etoml"
+	Env   FileFormat = ".env"
+	Ejson FileFormat = ".ejson"
+	Eyaml FileFormat = ".eyaml"
+	Eyml  FileFormat = ".eyml"
+	Etoml FileFormat = ".etoml"
 )
+
+// EncryptInputInPlace takes a string that represents a file path or an environment variable.
+// It determines if the input is a file or an environment variable, and encrypts the corresponding data.
+func EncryptInputInPlace(filePath string, fileFormat FileFormat) (int, error) {
+	filePath, _, err := processFileOrEnv(filePath, fileFormat)
+	if err != nil {
+		return -1, fmt.Errorf("error processing file or env: %v", err)
+	}
+
+	return EncryptFileInPlace(filePath)
+}
 
 // EncryptFileInPlace takes a path to a file on disk, which must be a valid ecfg file
 // (see README.md for more on what constitutes a valid ecfg file). Any
 // encryptable-but-unencrypted fields in the file will be encrypted using the
 // public key embdded in the file, and the resulting text will be written over
 // the file present on disk.
-func EncryptFileInPlace(input string) (int, error) {
-	filePath, _, err := processFileOrEnv(input)
-	if err != nil {
-		return -1, fmt.Errorf("error processing file or env: %v", err)
-	}
-	filePath = filepath.Clean(filePath)
+func EncryptFileInPlace(filePath string) (int, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return -1, err
@@ -60,7 +66,7 @@ func EncryptFileInPlace(input string) (int, error) {
 		return -1, err
 	}
 
-	formatType, err := detectFormat(filePath)
+	formatType, err := ParseFormat(filePath)
 	if err != nil {
 		return -1, err
 	}
@@ -77,7 +83,7 @@ func EncryptFileInPlace(input string) (int, error) {
 	return len(newdata), nil
 }
 
-func Encrypt(in io.Reader, out io.Writer, fileFormat FormatType) (int, error) {
+func Encrypt(in io.Reader, out io.Writer, fileFormat FileFormat) (int, error) {
 	// Read the input data
 	data, err := io.ReadAll(in)
 	if err != nil {
@@ -91,7 +97,7 @@ func Encrypt(in io.Reader, out io.Writer, fileFormat FormatType) (int, error) {
 	return out.Write(encryptedData)
 }
 
-func encryptData(data []byte, fileFormat FormatType) ([]byte, error) {
+func encryptData(data []byte, fileFormat FileFormat) ([]byte, error) {
 	// Extract the public key
 	var formatter format.FormatHandler
 	switch fileFormat {
@@ -138,7 +144,7 @@ func encryptData(data []byte, fileFormat FormatType) ([]byte, error) {
 // Returns:
 //   - The decrypted file content as a byte slice.
 //   - An error if any step fails (e.g., environment detection, file reading, decryption).
-func DecryptFromVault(v embed.FS, envOverride string, format FormatType) ([]byte, error) {
+func DecryptFromVault(v embed.FS, envOverride string, format FileFormat) ([]byte, error) {
 	// Try to determine the environment name automatically.
 	envName, err := sniffEnvName()
 	if err != nil {
@@ -171,18 +177,29 @@ func DecryptFromVault(v embed.FS, envOverride string, format FormatType) ([]byte
 	return decryptData(privkey, data, format)
 }
 
-func DecryptFile(input string, keydir string, userSuppliedPrivateKey string) ([]byte, error) {
-	fileName, envName, err := processFileOrEnv(input)
+// DecryptInput reads an encrypted input string, determines if it is a file or environment variable, and decrypts the corresponding data.
+func DecryptInput(input string, keydir string, userSuppliedPrivateKey string, format FileFormat) ([]byte, error) {
+	fileName, _, err := processFileOrEnv(input, format)
 	if err != nil {
 		fmt.Errorf("error processing file or env: %v", err)
 	}
 
-	data, err := os.ReadFile(fileName)
+	return DecryptFile(fileName, keydir, userSuppliedPrivateKey)
+}
+
+// DecryptFile reads an encrypted file from disk, decrypts it, and returns the decrypted data.
+func DecryptFile(filePath string, keydir string, userSuppliedPrivateKey string) ([]byte, error) {
+	envName, err := parseEnvironment(filePath)
+	if err != nil {
+		fmt.Errorf("error processing file or env: %v", err)
+	}
+
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
 
-	fileFormat, err := detectFormat(fileName)
+	fileFormat, err := ParseFormat(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +217,8 @@ func DecryptFile(input string, keydir string, userSuppliedPrivateKey string) ([]
 	return decryptedData, nil
 }
 
-func Decrypt(in io.Reader, out io.Writer, envName string, fileFormat FormatType, keydir string, userSuppliedPrivateKey string) (int, error) {
+// Decrypt reads encrypted data from the input reader, decrypts it, and writes the decrypted data to the output writer.
+func Decrypt(in io.Reader, out io.Writer, envName string, fileFormat FileFormat, keydir string, userSuppliedPrivateKey string) (int, error) {
 
 	data, err := io.ReadAll(in)
 	if err != nil {
@@ -220,7 +238,7 @@ func Decrypt(in io.Reader, out io.Writer, envName string, fileFormat FormatType,
 	return out.Write(decryptedData)
 }
 
-func decryptData(privkey [32]byte, data []byte, fileFormat FormatType) ([]byte, error) {
+func decryptData(privkey [32]byte, data []byte, fileFormat FileFormat) ([]byte, error) {
 	var formatter format.FormatHandler
 	switch fileFormat {
 	case Env:

@@ -8,14 +8,13 @@ import (
 	"strings"
 )
 
-// detectFormat attempts to determine the format type based on the file prefix.
-func detectFormat(input string) (FormatType, error) {
-	validFormats := map[FormatType]bool{
-		Env: true, Ejson: true, Eyaml: true, Eyml: true, Etoml: true,
-	}
+// ParseFormat attempts to determine the format type based on the file prefix.
+func ParseFormat(input string) (FileFormat, error) {
+	formats := []FileFormat{Env, Ejson, Eyaml, Eyml, Etoml}
 
-	for format := range validFormats {
-		if strings.HasPrefix(filepath.Base(input), string(format)) {
+	base := filepath.Base(input)
+	for _, format := range formats {
+		if strings.HasPrefix(base, string(format)) {
 			return format, nil
 		}
 	}
@@ -23,11 +22,9 @@ func detectFormat(input string) (FormatType, error) {
 	return "", fmt.Errorf("unsupported format: %s", input)
 }
 
-const defaultFormat = Ejson
-
-func processFileOrEnv(input string) (filename string, environment string, err error) {
+func processFileOrEnv(input string, defaultFileFormat FileFormat) (filename string, environment string, err error) {
 	// First, check if it's a valid filename by looking for valid prefixes
-	validFormats := map[FormatType]bool{
+	validFormats := map[FileFormat]bool{
 		Env:   true,
 		Ejson: true,
 		Eyaml: true,
@@ -68,24 +65,23 @@ func processFileOrEnv(input string) (filename string, environment string, err er
 
 	if !isFile {
 		// Generate filename using the default format (.env)
-		filename, err = generateFilename(defaultFormat, environment)
+		filename, err = generateFilename(defaultFileFormat, environment)
 		if err != nil {
 			return "", "", fmt.Errorf("error generating filename: %v", err)
 		}
 	}
 
-	return filename, input, nil
+	return path.Clean(filename), input, nil
 }
 
 // Helper functions from before
 func parseEnvironment(filename string) (string, error) {
-	base := filename
+	filename = path.Base(filename)
 
 	validPrefixes := []string{string(Env), string(Ejson), string(Eyaml), string(Eyml), string(Etoml)}
 	isValidPrefix := false
 	for _, prefix := range validPrefixes {
-		base = path.Base(filename)
-		if strings.HasPrefix(base, prefix) {
+		if strings.HasPrefix(filename, prefix) {
 			isValidPrefix = true
 			break
 		}
@@ -95,7 +91,7 @@ func parseEnvironment(filename string) (string, error) {
 		return "", fmt.Errorf("invalid file type: %s", filename)
 	}
 
-	parts := strings.Split(base, ".")
+	parts := strings.Split(filename, ".")
 	if len(parts) <= 2 {
 		return "", nil
 	}
@@ -103,8 +99,8 @@ func parseEnvironment(filename string) (string, error) {
 	return parts[len(parts)-1], nil
 }
 
-func generateFilename(format FormatType, environment string) (string, error) {
-	validFormats := map[FormatType]bool{
+func generateFilename(format FileFormat, environment string) (string, error) {
+	validFormats := map[FileFormat]bool{
 		Env: true, Ejson: true, Eyaml: true, Eyml: true, Etoml: true,
 	}
 

@@ -8,6 +8,7 @@ import (
 	"github.com/mscno/esec"
 	"io"
 	"os"
+	"strings"
 )
 
 type cliCtx struct {
@@ -51,6 +52,7 @@ func (c *KeygenCmd) Run(ctx *cliCtx) error {
 
 type EncryptCmd struct {
 	File   string `arg:"" help:"Message to encrypt" default:""`
+	Format string `help:"File format" default:".ejson" short:"f"`
 	DryRun bool   `help:"Print the encrypted message without writing to file" short:"d"`
 }
 
@@ -90,7 +92,12 @@ func (c *EncryptCmd) Run(ctx *cliCtx) error {
 	//	fmt.Println(buf.String())
 	//}
 
-	n, err := esec.EncryptFileInPlace(c.File)
+	format, err := esec.ParseFormat(c.Format)
+	if err != nil {
+		return fmt.Errorf("error parsing format flag %q: %v", c.Format, err)
+	}
+
+	n, err := esec.EncryptInputInPlace(c.File, format)
 	fmt.Printf("Encrypted %d bytes\n", n)
 	return err
 }
@@ -122,10 +129,16 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 			return err
 		}
 		key = string(data)
+		key = strings.TrimSpace(key)
+	}
+
+	format, err := esec.ParseFormat(c.Format)
+	if err != nil {
+		return fmt.Errorf("error parsing format flag %q: %v", c.Format, err)
 	}
 
 	var buf bytes.Buffer
-	data, err := esec.DecryptFile(c.File, c.KeyDir, key)
+	data, err := esec.DecryptInput(c.File, c.KeyDir, key, format)
 	if err != nil {
 		return err
 	}
