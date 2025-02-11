@@ -7,11 +7,11 @@ require (
 	github.com/alecthomas/kong v1.7.0
 	github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad
 	github.com/joho/godotenv v1.5.1
-	golang.org/x/crypto v0.32.0
+	golang.org/x/crypto v0.33.0
 )
 
 require (
 	github.com/alecthomas/repr v0.4.0 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
-	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
 )
