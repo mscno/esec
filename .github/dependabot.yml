@@ -3,14 +3,14 @@ updates:
     - package-ecosystem: "docker"
       directory: "/.github/dockerfile-for-dependabot/"
       schedule:
-          interval: "daily"
+          interval: "monthly"
     - package-ecosystem: "github-actions"
       directory: "/"
       schedule:
-          interval: "daily"
+          interval: "monthly"
       open-pull-requests-limit: 100
     - package-ecosystem: "gomod"
       directory: "/"  # Adjust if go.mod is in a subdirectory
       schedule:
-          interval: "daily"
+          interval: "monthly"
       open-pull-requests-limit: 10
