@@ -1,3 +1,7 @@
+# v0.3.0
+
+Added options to the decrypt from embed function.
+
 # v0.0.7
 
 Fix version build flags

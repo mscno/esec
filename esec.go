@@ -12,6 +12,7 @@ import (
 	"github.com/mscno/esec/pkg/format"
 	"github.com/mscno/esec/pkg/json"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -134,21 +135,69 @@ func encryptData(data []byte, fileFormat FileFormat) ([]byte, error) {
 // Returns:
 //   - The decrypted file content as a byte slice.
 //   - An error if any step fails (e.g., environment detection, file reading, decryption).
-func DecryptFromEmbedFS(v embed.FS, format FileFormat, envOverride string) ([]byte, error) {
+type DecryptFromEmbedOption func(*decryptFromEmbedOptions) error
+
+type decryptFromEmbedOptions struct {
+	envOverride string
+	logger      *slog.Logger
+	format      FileFormat
+}
+
+func WithEnvOverride(envOverride string) DecryptFromEmbedOption {
+	return func(o *decryptFromEmbedOptions) error {
+		o.envOverride = envOverride
+		return nil
+	}
+}
+
+func WithLogger(logger *slog.Logger) DecryptFromEmbedOption {
+	return func(o *decryptFromEmbedOptions) error {
+		o.logger = logger
+		return nil
+	}
+}
+
+func WithFormat(format FileFormat) DecryptFromEmbedOption {
+	return func(o *decryptFromEmbedOptions) error {
+		o.format = format
+		return nil
+	}
+}
+
+func DecryptFromEmbedFS(v embed.FS, opts ...DecryptFromEmbedOption) ([]byte, error) {
+	// Create a new options struct and apply the provided options
+	o := &decryptFromEmbedOptions{
+		format: FileFormatEjson,
+		logger: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
+			AddSource:   false,
+			Level:       slog.LevelInfo,
+			ReplaceAttr: nil,
+		})),
+		envOverride: "",
+	}
+	// Apply the options
+	for _, opt := range opts {
+		if err := opt(o); err != nil {
+			return nil, err
+		}
+	}
 	// Try to determine the environment name automatically.
 	var err error
-	envName := envOverride
+	envName := o.envOverride
 	// If an environment override is not provided, use it instead of the detected name.
-	if envOverride == "" {
+	if envName == "" {
 		envName, err = sniffEnvName()
 		if err != nil {
 			return nil, fmt.Errorf("error sniffing environment name: %v", err)
 		}
+		o.logger.Info("detected environment", "env", envName)
+	} else {
+		o.logger.Info("using environment override", "env", envName)
 	}
 
 	// Generate the filename based on the format and environment name.
-	fileName := fileutils.GenerateFilename(fileutils.FileFormat(format), envName)
-
+	fileName := fileutils.GenerateFilename(fileutils.FileFormat(o.format), envName)
+	o.logger.Debug("reading file from vault", "file", fileName)
 	// Attempt to read the file from the embedded filesystem.
 	data, err := v.ReadFile(fileName)
 	if err != nil {
@@ -160,8 +209,9 @@ func DecryptFromEmbedFS(v embed.FS, format FileFormat, envOverride string) ([]by
 	if err != nil {
 		return nil, err
 	}
+
 	// Decrypt the file data and return the decrypted bytes.
-	return decryptData(privkey, data, format)
+	return decryptData(privkey, data, o.format)
 }
 
 // DecryptFile reads an encrypted file from disk, decrypts it, and returns the decrypted data.
