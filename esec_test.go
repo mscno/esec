@@ -3,6 +3,7 @@ package esec
 import (
 	"bytes"
 	"github.com/alecthomas/assert/v2"
+	"log/slog"
 	"os"
 	"regexp"
 	"strings"
@@ -65,6 +66,34 @@ func TestEncrypt(t *testing.T) {
 		match := regexp.MustCompile(`{"_ESEC_PUBLIC_KEY": "8d8.*", "a": "ESEC.*"}`)
 		if match.Find(output.Bytes()) == nil {
 			t.Errorf("unexpected output: %s", output.String())
+		}
+	})
+}
+
+func TestDecryptDotEnvFile(t *testing.T) {
+	t.Run("valid keypair", func(t *testing.T) {
+		// valid keypair and a corresponding entry in keydir
+		var out bytes.Buffer
+		_, err := Decrypt(
+			bytes.NewBuffer([]byte(`
+ESEC_PUBLIC_KEY=39e66b09af00d7cce70ef8f41a0f54e652c392e5a34be2702050c9c184a70557
+
+SECRET=ESEC[1:3IbHlK9p1dX8B3dYc3pyl4KmkSHHqCN4jy3TpwCAQww=:7grw6wdWI9yQrd9Sdy1xwS8gNove91JU:WXOFjTE+FGQ8Y8S2ogiIxjKZiAsfZ3H+NkqW]
+`)),
+			&out,
+			"",
+			FileFormatEnv,
+			"",
+			"2894bbe7b4e57ffdce8be56ff3cb25341360473d771ce250ba96bb56b307f933")
+		assertNoError(t, err)
+		s := out.String()
+		v := `
+ESEC_PUBLIC_KEY=39e66b09af00d7cce70ef8f41a0f54e652c392e5a34be2702050c9c184a70557
+
+SECRET="my_secret"
+`
+		if s != v {
+			t.Errorf("unexpected output: %s", s)
 		}
 	})
 }
@@ -223,7 +252,7 @@ func TestSniffEnvName(t *testing.T) {
 			}
 
 			// Run SniffEnvName()
-			gotEnv, err := sniffEnvName()
+			gotEnv, err := sniffEnvName(slog.Default())
 
 			// Check error case
 			if tt.wantErr {
