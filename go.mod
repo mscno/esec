@@ -1,6 +1,9 @@
 module github.com/mscno/esec
 
-go 1.23
+go 1.23.0
+
+toolchain go1.23.6
+
 require (
 	github.com/alecthomas/assert/v2 v2.11.0
 	github.com/alecthomas/kong v1.8.1

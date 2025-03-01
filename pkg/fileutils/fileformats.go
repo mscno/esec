@@ -22,6 +22,9 @@ func ValidFormats() []FileFormat {
 
 // ParseFormat attempts to determine the format type based on the file prefix.
 func ParseFormat(input string) (FileFormat, error) {
+	if !strings.HasPrefix(input, ".") {
+		input = "." + input
+	}
 	base := filepath.Base(input)
 	for _, format := range ValidFormats() {
 		if strings.HasPrefix(base, string(format)) {
