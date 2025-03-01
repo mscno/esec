@@ -186,7 +186,7 @@ func DecryptFromEmbedFS(v embed.FS, opts ...DecryptFromEmbedOption) ([]byte, err
 	envName := o.envOverride
 	// If an environment override is not provided, use it instead of the detected name.
 	if envName == "" {
-		envName, err = sniffEnvName()
+		envName, err = sniffEnvName(o.logger)
 		if err != nil {
 			return nil, fmt.Errorf("error sniffing environment name: %v", err)
 		}
@@ -354,7 +354,7 @@ func getFormatter(fileFormat FileFormat) (format.FormatHandler, error) {
 	}
 }
 
-func sniffEnvName() (string, error) {
+func sniffEnvName(logger *slog.Logger) (string, error) {
 	var setKeys []string
 
 	// Scan environment variables for keys starting with ESEC_PRIVATE_KEY
@@ -367,8 +367,10 @@ func sniffEnvName() (string, error) {
 
 	switch len(setKeys) {
 	case 0:
+		logger.Debug("no private key found in environment variables")
 		return "", nil // Default to "" (blank env) if no key is found
 	case 1:
+		logger.Debug("found private key in environment variables", "key", setKeys[0])
 		// Extract the environment name from the key
 		if setKeys[0] == EsecPrivateKey {
 			return "", nil
