@@ -3,6 +3,7 @@ package esec
 import (
 	"bytes"
 	"embed"
+	gojson "encoding/json"
 	"errors"
 	"fmt"
 	"github.com/joho/godotenv"
@@ -16,6 +17,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -404,4 +406,98 @@ func parseEnvironment(filename string) (string, error) {
 	}
 
 	return parts[len(parts)-1], nil
+}
+
+/*
+	HELPER FUNCTIONS
+*/
+
+func LoadLocalEnv(fileName ...string) error {
+	if len(fileName) > 1 {
+		return fmt.Errorf("only one file can be specified")
+	}
+
+	localEnv, localEnvPath := findConfigFile(".env.local")
+	if !localEnv {
+		return nil
+	}
+
+	slog.Info("reading secrets from local .env file", "path", localEnvPath)
+	if err := godotenv.Load(localEnvPath); err != nil {
+		return fmt.Errorf("error loading .env file: %w", err)
+	}
+	return nil
+}
+
+func EjsonToEnv(payload []byte) (map[string]string, error) {
+	var data map[string]interface{}
+	err := gojson.Unmarshal(payload, &data)
+	if err != nil {
+		return nil, err
+	}
+
+	return extractEnv(data)
+}
+
+func DotEnvToEnv(payload []byte) (map[string]string, error) {
+	return godotenv.Parse(bytes.NewBuffer(payload))
+}
+
+const maxAttempts = 10
+
+func repeatString(s string, count int) string {
+	var result string
+	for i := 0; i < count; i++ {
+		result += s
+	}
+	return result
+}
+
+func findConfigFile(fileName string) (bool, string) {
+	for i := 0; i < maxAttempts; i++ {
+		path := filepath.Join(repeatString("../", i), fileName)
+		// Check if we have a go.mod file in the directory to stop the search as we have reached the root
+		if _, err := os.Stat(path); err == nil {
+			return true, path
+		}
+		if _, err := os.Stat(filepath.Join(repeatString("../", i), "go.mod")); err == nil {
+			break
+		}
+	}
+	return false, ""
+}
+
+var errNoEnv = errors.New("environment is not set in ejson")
+var errEnvNotMap = errors.New("environment is not a map[string]interface{}")
+
+var validIdentifierPattern = regexp.MustCompile(`\A[a-zA-Z_][a-zA-Z0-9_]*\z`)
+
+func extractEnv(secrets map[string]interface{}) (map[string]string, error) {
+	rawEnv, ok := secrets["environment"]
+	if !ok {
+		return nil, errNoEnv
+	}
+
+	envMap, ok := rawEnv.(map[string]interface{})
+	if !ok {
+		return nil, errEnvNotMap
+	}
+
+	envSecrets := make(map[string]string, len(envMap))
+
+	for key, rawValue := range envMap {
+		// Reject keys that would be invalid environment variable identifiers
+		if !validIdentifierPattern.MatchString(key) {
+			err := fmt.Errorf("invalid identifier as key in environment: %q", key)
+
+			return nil, err
+		}
+
+		// Only export values that convert to strings properly.
+		if value, ok := rawValue.(string); ok {
+			envSecrets[key] = value
+		}
+	}
+
+	return envSecrets, nil
 }
