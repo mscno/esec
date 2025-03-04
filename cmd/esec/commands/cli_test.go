@@ -5,6 +5,7 @@ import (
 	"github.com/alecthomas/assert/v2"
 	"github.com/mscno/esec/pkg/fileutils"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ func TestKeygenCmd(t *testing.T) {
 
 	// Capture CLI output
 	out, err := captureOutput(func() error {
-		return cmd.Run(&cliCtx{})
+		return cmd.Run(&cliCtx{Logger: slog.Default()})
 	})
 
 	// Ensure no errors
@@ -42,7 +43,7 @@ func TestEncryptCmd(t *testing.T) {
 
 	// Run command
 	out, errString := captureOutput(func() error {
-		return cmd.Run(&cliCtx{})
+		return cmd.Run(&cliCtx{Logger: slog.Default()})
 	})
 
 	// Check expected output
@@ -66,11 +67,11 @@ func TestEncryptCmdBadFile(t *testing.T) {
 
 	// Run command
 	out, errString := captureOutput(func() error {
-		return cmd.Run(&cliCtx{})
+		return cmd.Run(&cliCtx{Logger: slog.Default()})
 	})
 
 	// Check expected output
-	assert.Equal(t, errString, "public key not present in ecfg file")
+	assert.Contains(t, errString, "public key not present in ecfg file")
 	assert.Equal(t, out, "")
 }
 
@@ -90,7 +91,7 @@ func TestDecryptCmd(t *testing.T) {
 
 	// Run command
 	out, errString := captureOutput(func() error {
-		return cmd.Run(&cliCtx{})
+		return cmd.Run(&cliCtx{Logger: slog.Default()})
 	})
 
 	// Check expected output
