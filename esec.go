@@ -140,9 +140,11 @@ func encryptData(data []byte, fileFormat FileFormat) ([]byte, error) {
 type DecryptFromEmbedOption func(*decryptFromEmbedOptions) error
 
 type decryptFromEmbedOptions struct {
-	envOverride string
-	logger      *slog.Logger
-	format      FileFormat
+	envOverride    string
+	envSniffer     bool
+	keyringSniffer bool
+	logger         *slog.Logger
+	format         FileFormat
 }
 
 func WithEnvOverride(envOverride string) DecryptFromEmbedOption {
@@ -162,6 +164,20 @@ func WithLogger(logger *slog.Logger) DecryptFromEmbedOption {
 func WithFormat(format FileFormat) DecryptFromEmbedOption {
 	return func(o *decryptFromEmbedOptions) error {
 		o.format = format
+		return nil
+	}
+}
+
+func WithEnvSniffer() DecryptFromEmbedOption {
+	return func(o *decryptFromEmbedOptions) error {
+		o.envSniffer = true
+		return nil
+	}
+}
+
+func WithKeyringSniffer() DecryptFromEmbedOption {
+	return func(o *decryptFromEmbedOptions) error {
+		o.keyringSniffer = true
 		return nil
 	}
 }
@@ -381,6 +397,108 @@ func sniffEnvName(logger *slog.Logger) (string, error) {
 	default:
 		return "", fmt.Errorf("multiple private keys found: %v", setKeys)
 	}
+}
+
+const ActiveKey = "ESEC_ACTIVE_KEY"
+const ActiveEnvironment = "ESEC_ACTIVE_ENVIRONMENT"
+
+func sniffFromKeyring(logger *slog.Logger, keyPath string, envName string) (string, error) {
+	// If envName is already provided, just return it
+	if envName != "" {
+		return envName, nil
+	}
+
+	// If not found in env vars, try reading from the keyring file.
+	keyringPath := filepath.Join(keyPath, ".esec-keyring")
+	privateKeyFile, err := os.ReadFile(keyringPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("keyring file does not exist at %q", keyringPath)
+		}
+		return "", fmt.Errorf("failed to read keyring file at %q: %w", keyringPath, err)
+	}
+
+	// Parse the keyring file as environment variables.
+	privateKeyEnvs, err := godotenv.Parse(bytes.NewBuffer(privateKeyFile))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse keyring file %q: %w", keyringPath, err)
+	}
+
+	// Check if both ACTIVE_KEY and ACTIVE_ENVIRONMENT are set (conflict)
+	activeKey, hasActiveKey := privateKeyEnvs[ActiveKey]
+	activeEnv, hasActiveEnv := privateKeyEnvs[ActiveEnvironment]
+
+	if hasActiveKey && hasActiveEnv {
+		return "", fmt.Errorf("conflicting configuration: both %s and %s are set in keyring file",
+			ActiveKey, ActiveEnvironment)
+	}
+
+	// If we have an active environment directly specified, use it
+	if hasActiveEnv {
+		if activeEnv == "" {
+			return "", fmt.Errorf("%s is set but empty in keyring file", ActiveEnvironment)
+		}
+		logger.Debug("using active environment from keyring", "env", activeEnv)
+		return activeEnv, nil
+	}
+
+	// If we have an active key, extract environment from it
+	if hasActiveKey {
+		if !strings.HasPrefix(activeKey, "ESEC_PRIVATE_KEY") {
+			return "", fmt.Errorf("%s value must be an ESEC_PRIVATE_KEY variable name", ActiveKey)
+		}
+
+		// Extract environment from key name
+		if activeKey == "ESEC_PRIVATE_KEY" {
+			// This is the default key with no environment
+			logger.Debug("using default environment from keyring active key")
+			return "", nil
+		}
+
+		// Remove prefix and any underscores
+		envFromKey := strings.TrimPrefix(activeKey, "ESEC_PRIVATE_KEY")
+		envFromKey = strings.TrimLeft(envFromKey, "_")
+		envFromKey = strings.ToLower(envFromKey)
+
+		if envFromKey == "" {
+			return "", fmt.Errorf("could not extract environment from %s=%s", ActiveKey, activeKey)
+		}
+
+		logger.Debug("extracted environment from active key", "env", envFromKey)
+		return envFromKey, nil
+	}
+
+	// If we get here, neither ACTIVE_KEY nor ACTIVE_ENVIRONMENT is set
+
+	// As a fallback, look for any ESEC_PRIVATE_KEY_* variables
+	var envKeys []string
+	for key := range privateKeyEnvs {
+		if strings.HasPrefix(key, "ESEC_PRIVATE_KEY") {
+			envKeys = append(envKeys, key)
+		}
+	}
+
+	// If there's exactly one environment key, use it
+	if len(envKeys) == 1 {
+		envFromKey := strings.TrimPrefix(envKeys[0], "ESEC_PRIVATE_KEY")
+		envFromKey = strings.TrimLeft(envFromKey, "_")
+		envFromKey = strings.ToLower(envFromKey)
+		logger.Debug("using single environment key from keyring", "env", envFromKey)
+		return envFromKey, nil
+	} else if len(envKeys) > 1 {
+		// If there are multiple, that's ambiguous
+		return "", fmt.Errorf("multiple environment keys found in keyring (%v) but no %s or %s specified",
+			envKeys, ActiveKey, ActiveEnvironment)
+	}
+
+	// Check if there's a default key
+	if _, hasDefault := privateKeyEnvs["ESEC_PRIVATE_KEY"]; hasDefault {
+		logger.Debug("using default environment from keyring")
+		return "", nil
+	}
+
+	// We couldn't determine an environment
+	return "", fmt.Errorf("no environment keys found in keyring")
 }
 
 // Helper functions from before

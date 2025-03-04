@@ -3,8 +3,10 @@ package esec
 import (
 	"bytes"
 	"github.com/alecthomas/assert/v2"
+	"io/ioutil"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -277,6 +279,249 @@ func TestSniffEnvName(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSniffFromKeyring(t *testing.T) {
+	// Setup a logger that doesn't output anything for tests
+	logger := slog.New(slog.NewTextHandler(ioutil.Discard, nil))
+
+	// Helper to create a temporary directory with a keyring file
+	setupKeyring := func(t *testing.T, content string) string {
+		t.Helper()
+		dir, err := ioutil.TempDir("", "esec-test-")
+		assert.NoError(t, err)
+
+		// Register cleanup function
+		t.Cleanup(func() {
+			os.RemoveAll(dir)
+		})
+
+		// Write the keyring file
+		keyringPath := filepath.Join(dir, ".esec-keyring")
+		err = ioutil.WriteFile(keyringPath, []byte(content), 0600)
+		assert.NoError(t, err)
+
+		return dir
+	}
+
+	t.Run("Returns provided envName when not empty", func(t *testing.T) {
+		// Setup an empty keyring
+		dir := setupKeyring(t, "")
+
+		// Call the function with a non-empty envName
+		result, err := sniffFromKeyring(logger, dir, "test-env")
+
+		// Verify the result
+		assert.NoError(t, err)
+		assert.Equal(t, "test-env", result)
+	})
+
+	t.Run("Error when keyring file doesn't exist", func(t *testing.T) {
+		// Use a temporary directory without creating a keyring file
+		dir, err := ioutil.TempDir("", "esec-test-")
+		assert.NoError(t, err)
+		t.Cleanup(func() { os.RemoveAll(dir) })
+
+		// Call the function
+		_, err = sniffFromKeyring(logger, dir, "")
+
+		// Verify we get an error
+		assert.Error(t, err)
+		assert.True(t, strings.Contains(err.Error(), "keyring file does not exist"))
+	})
+
+	t.Run("Error when keyring file can't be parsed", func(t *testing.T) {
+		// Setup an invalid keyring file
+		dir := setupKeyring(t, "this is not a valid .env file format===")
+
+		// Call the function
+		_, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify we get an error
+		assert.Error(t, err)
+		assert.True(t, strings.Contains(err.Error(), "no environment keys found in keyring"))
+	})
+
+	t.Run("Error when both ACTIVE_KEY and ACTIVE_ENVIRONMENT are set", func(t *testing.T) {
+		// Setup a conflicting keyring
+		dir := setupKeyring(t, `
+ESEC_ACTIVE_KEY=ESEC_PRIVATE_KEY_PROD
+ESEC_ACTIVE_ENVIRONMENT=dev
+`)
+
+		// Call the function
+		_, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify we get an error
+		assert.Error(t, err)
+		assert.True(t, strings.Contains(err.Error(), "conflicting configuration"))
+	})
+
+	t.Run("Successfully using ACTIVE_ENVIRONMENT", func(t *testing.T) {
+		// Setup a keyring with ACTIVE_ENVIRONMENT
+		dir := setupKeyring(t, `
+ESEC_ACTIVE_ENVIRONMENT=prod
+ESEC_PRIVATE_KEY_PROD=somekey
+ESEC_PRIVATE_KEY_DEV=anotherkey
+`)
+
+		// Call the function
+		result, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify the result
+		assert.NoError(t, err)
+		assert.Equal(t, "prod", result)
+	})
+
+	t.Run("Error when ACTIVE_ENVIRONMENT is empty", func(t *testing.T) {
+		// Setup a keyring with empty ACTIVE_ENVIRONMENT
+		dir := setupKeyring(t, `
+ESEC_ACTIVE_ENVIRONMENT=
+ESEC_PRIVATE_KEY_PROD=somekey
+`)
+
+		// Call the function
+		_, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify we get an error
+		assert.Error(t, err)
+		assert.True(t, strings.Contains(err.Error(), "is set but empty"))
+	})
+
+	t.Run("Successfully using ACTIVE_KEY with default key", func(t *testing.T) {
+		// Setup a keyring with ACTIVE_KEY pointing to default key
+		dir := setupKeyring(t, `
+ESEC_ACTIVE_KEY=ESEC_PRIVATE_KEY
+ESEC_PRIVATE_KEY=somekey
+ESEC_PRIVATE_KEY_PROD=anotherkey
+`)
+
+		// Call the function
+		result, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify the result
+		assert.NoError(t, err)
+		assert.Equal(t, "", result, "Should return empty string for default environment")
+	})
+
+	t.Run("Successfully using ACTIVE_KEY with environment key", func(t *testing.T) {
+		// Setup a keyring with ACTIVE_KEY pointing to an environment key
+		dir := setupKeyring(t, `
+ESEC_ACTIVE_KEY=ESEC_PRIVATE_KEY_STAGING
+ESEC_PRIVATE_KEY=somekey
+ESEC_PRIVATE_KEY_STAGING=anotherkey
+`)
+
+		// Call the function
+		result, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify the result
+		assert.NoError(t, err)
+		assert.Equal(t, "staging", result)
+	})
+
+	t.Run("Successfully using ACTIVE_KEY with environment key containing underscores", func(t *testing.T) {
+		// Setup a keyring with ACTIVE_KEY pointing to a key with underscores
+		dir := setupKeyring(t, `
+ESEC_ACTIVE_KEY=ESEC_PRIVATE_KEY___TEST_ENV
+ESEC_PRIVATE_KEY___TEST_ENV=somekey
+`)
+
+		// Call the function
+		result, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify the result
+		assert.NoError(t, err)
+		assert.Equal(t, "test_env", result)
+	})
+
+	t.Run("Error when ACTIVE_KEY has invalid format", func(t *testing.T) {
+		// Setup a keyring with ACTIVE_KEY with invalid format
+		dir := setupKeyring(t, `
+ESEC_ACTIVE_KEY=INVALID_KEY_FORMAT
+ESEC_PRIVATE_KEY=somekey
+`)
+
+		// Call the function
+		_, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify we get an error
+		assert.Error(t, err)
+		assert.True(t, strings.Contains(err.Error(), "must be an ESEC_PRIVATE_KEY"))
+	})
+
+	t.Run("Error when ACTIVE_KEY has empty environment suffix", func(t *testing.T) {
+		// Setup a keyring with ACTIVE_KEY with empty suffix
+		dir := setupKeyring(t, `
+ESEC_ACTIVE_KEY=ESEC_PRIVATE_KEY_
+ESEC_PRIVATE_KEY_=somekey
+`)
+
+		// Call the function
+		_, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify we get an error
+		assert.Error(t, err)
+		assert.True(t, strings.Contains(err.Error(), "could not extract environment"))
+	})
+
+	t.Run("Fallback to single environment key", func(t *testing.T) {
+		// Setup a keyring with a single environment key
+		dir := setupKeyring(t, `
+ESEC_PRIVATE_KEY_QA=somekey
+`)
+
+		// Call the function
+		result, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify the result
+		assert.NoError(t, err)
+		assert.Equal(t, "qa", result)
+	})
+
+	t.Run("Error with multiple environment keys and no active indicators", func(t *testing.T) {
+		// Setup a keyring with multiple environment keys but no active indicators
+		dir := setupKeyring(t, `
+ESEC_PRIVATE_KEY_DEV=somekey
+ESEC_PRIVATE_KEY_PROD=anotherkey
+ESEC_PRIVATE_KEY_QA=yetanotherkey
+`)
+
+		// Call the function
+		_, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify we get an error
+		assert.Error(t, err)
+		assert.True(t, strings.Contains(err.Error(), "multiple environment keys found"))
+	})
+
+	t.Run("Successfully using default environment with ESEC_PRIVATE_KEY", func(t *testing.T) {
+		// Setup a keyring with only the default key
+		dir := setupKeyring(t, `
+ESEC_PRIVATE_KEY=somekey
+`)
+
+		// Call the function
+		result, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify the result
+		assert.NoError(t, err)
+		assert.Equal(t, "", result, "Should return empty string for default environment")
+	})
+
+	t.Run("Error when no keys found", func(t *testing.T) {
+		// Setup an empty keyring
+		dir := setupKeyring(t, `
+SOME_OTHER_KEY=value
+`)
+
+		// Call the function
+		_, err := sniffFromKeyring(logger, dir, "")
+
+		// Verify we get an error
+		assert.Error(t, err)
+		assert.True(t, strings.Contains(err.Error(), "no environment keys found"))
+	})
 }
 
 // Helper function to split an environment variable string (KEY=VALUE)
