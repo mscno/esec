@@ -12,10 +12,16 @@ Main differences are that **esec** is more opinionated on the file naming conven
 ✅ **Support for multiple formats** (`.env`, `.ejson`).  
 ✅ **Decryption of secrets in embedded or external vaults**.  
 ✅ **CLI tool for encryption & decryption**.  
+✅ **Run commands with decrypted environment variables**.  
+✅ **Flexible environment & key management** via keyring file.  
+✅ **Detailed debug logging**.  
 ✅ **Integrates easily into Go applications**.
 
 ### Todo
 - [ ] Add support for more file formats (`.eyaml`, `.etoml`).
+- [x] Add `run` command to decrypt and execute commands with environment variables.
+- [x] Enhance keyring detection with ESEC_ACTIVE_KEY and ESEC_ACTIVE_ENVIRONMENT.  
+- [x] Add structured debug logging.
 - [ ] Add more test coverage.
 - [ ] Standardize the package API.
 
@@ -36,6 +42,8 @@ go install github.com/mscno/esec/cmd/esec@latest
 
 ## Using the CLI
 
+### Generate Keys
+
 ```sh
 esec keygen
 ```
@@ -47,7 +55,53 @@ Public Key:
 e50e7c0086bfac43263dc087dc9a0118d3b567d26a87c22876690bca8b50c00c
 Private Key:
 dfe357ede9f3b42b34ac1fca814a27a99f610e4fde361d09b78adcc659b88b79
+```
 
+### Encrypt Secrets
+
+```sh
+esec encrypt .ejson.dev
+# or with an environment
+esec encrypt dev
+```
+
+### Decrypt Secrets
+
+```sh
+esec decrypt .ejson.dev
+# or with an environment
+esec decrypt dev
+```
+
+### Run Commands with Decrypted Secrets
+
+The `run` command allows you to decrypt a secrets file, set the values as environment variables, and execute a command in that environment:
+
+```sh
+esec run dev -- myapp serve
+# equivalent to 
+esec run .ejson.dev -- myapp serve
+```
+
+This will decrypt `.ejson.dev`, set all environment variables found in the file, and then run `myapp serve` with those variables available.
+
+or with dotenv files
+
+```sh
+esec run production -f .env -- myapp serve
+# equivalent to 
+esec run .env.production -- myapp serve
+```
+
+This will decrypt `.env.production`, set all environment variables found in the file, and then run `myapp serve` with those variables available.
+
+
+### Debug Mode
+
+Use the `--debug` flag to enable detailed logging:
+
+```sh
+esec --debug decrypt dev
 ```
 
 ## **ESEC Naming Convention and Key Lookup Process**
@@ -137,8 +191,22 @@ Example .esec-keyring file:
 # .esec-keyring file
 ESEC_PRIVATE_KEY_DEV=your-private-key
 ESEC_PRIVATE_KEY_PROD=your-private-key
+
+# Optional - explicitly specify which environment to use when decrypted from embeded file
+ESEC_ACTIVE_ENVIRONMENT=dev
+
+# Alternative - specify which key to use
+# ESEC_ACTIVE_KEY=ESEC_PRIVATE_KEY_DEV
 ```
+
 If esec is decrypting .ejson.dev, it searches for ESEC_PRIVATE_KEY_DEV inside .esec-keyring.
+
+The .esec-keyring file supports two special variables to manage which environment to use:
+
+1. `ESEC_ACTIVE_ENVIRONMENT` - Directly specifies the environment name (e.g., "dev", "prod")
+2. `ESEC_ACTIVE_KEY` - Specifies which key to use (e.g., "ESEC_PRIVATE_KEY_DEV")
+
+If neither of these special variables is set and multiple private keys are found in the keyring file, esec will look for one that matches the file being decrypted.
 
 If a matching key is found, it is used for decryption.
 
@@ -289,8 +357,9 @@ func main() {
 
 ### 3. Decrypting from an Embedded Vault
 
-These example demonstrates how to decrypt secrets from an embedded vault using the `embed` package.
+These examples demonstrate how to decrypt secrets from an embedded vault using the `embed` package.
 
+#### Basic Example
 
 This example assumes that the vault contains an encrypted file named `.ejson`.
 
@@ -321,6 +390,8 @@ func main() {
 }
 ```
 
+#### Environment-specific Example
+
 This example assumes that the vault contains an encrypted file named `.ejson.prod`.
 
 ```go
@@ -347,6 +418,75 @@ func main() {
 	}
 
 	fmt.Println("Decrypted Vault Data:", string(data))
+}
+```
+
+#### Using the Config-based API
+
+For more control, you can use the enhanced config-based API:
+
+```go
+package main
+
+import (
+	"embed"
+	"fmt"
+	"github.com/mscno/esec"
+	"log/slog"
+	"os"
+)
+
+//go:embed secrets/*
+var vault embed.FS
+
+func main() {
+	// Set up a logger
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+
+	// Create a configuration
+	config := esec.DecryptFromEmbedConfig{
+		EnvName: "dev",                    // Explicitly set environment
+		Format:  esec.FileFormatEjson,     // Specify format
+		Logger:  logger,                   // Add logging
+		Keydir:  "/path/to/keyring/dir",   // Optional keyring directory
+	}
+
+	// Decrypt using the config
+	data, err := esec.DecryptFromEmbedFSWithConfig(vault, config)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Decrypted Vault Data:", string(data))
+}
+```
+
+### 4. Using the Run Command
+
+The Run command allows you to decrypt a secrets file, set environment variables, and run a command:
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/mscno/esec/cmd/esec/commands"
+	"os"
+)
+
+func main() {
+	// This would typically be called from your main CLI entrypoint
+	commands.Execute("1.0.0")
+	
+	// Example CLI usage:
+	// esec run dev -- myapp serve
+	
+	// This will:
+	// 1. Decrypt the .ejson.dev file
+	// 2. Set all variables as environment variables
+	// 3. Run the specified command with those variables
 }
 ```
 
