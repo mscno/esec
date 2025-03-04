@@ -9,6 +9,7 @@ import (
 	"github.com/mscno/esec"
 	"github.com/mscno/esec/pkg/fileutils"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -19,7 +20,7 @@ import (
 )
 
 type cliCtx struct {
-	Debug bool
+	Logger *slog.Logger
 	context.Context
 }
 
@@ -41,7 +42,18 @@ func Execute(version string) {
 		kong.Vars{"version": version},
 	)
 
-	err := ctx.Run(&cliCtx{Context: context.Background(), Debug: cli.Debug})
+	// Setup logger with appropriate level based on debug flag
+	logLevel := slog.LevelInfo
+	if cli.Debug {
+		logLevel = slog.LevelDebug
+	}
+
+	// Create logger with handler that respects the level
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: logLevel,
+	}))
+
+	err := ctx.Run(&cliCtx{Context: context.Background(), Logger: logger})
 	ctx.FatalIfErrorf(err)
 }
 
@@ -49,11 +61,15 @@ type KeygenCmd struct {
 }
 
 func (c *KeygenCmd) Run(ctx *cliCtx) error {
+	ctx.Logger.Debug("generating new keypair")
+
 	pub, priv, err := esec.GenerateKeypair()
 	if err != nil {
+		ctx.Logger.Debug("keypair generation failed", "error", err)
 		return err
 	}
 
+	ctx.Logger.Debug("keypair generated successfully")
 	fmt.Printf("Public Key:\n%s\nPrivate Key:\n%s\n", pub, priv)
 
 	return nil
@@ -66,19 +82,46 @@ type EncryptCmd struct {
 }
 
 func (c *EncryptCmd) Run(ctx *cliCtx) error {
+	ctx.Logger.Debug("encrypting secret", "file", c.File, "format", c.Format, "dry_run", c.DryRun)
+
 	format, err := fileutils.ParseFormat(c.Format)
 	if err != nil {
+		ctx.Logger.Debug("format parsing failed", "format", c.Format, "error", err)
 		return fmt.Errorf("error parsing format flag %q: %v", c.Format, err)
 	}
+	ctx.Logger.Debug("parsed format", "format_type", format)
 
 	filePath, err := processFileOrEnv(c.File, format)
 	if err != nil {
+		ctx.Logger.Debug("file/env processing failed", "input", c.File, "error", err)
 		return fmt.Errorf("error processing file or env %q: %v", c.File, err)
 	}
+	ctx.Logger.Debug("resolved file path", "path", filePath)
 
+	// Check if file exists when not in dry run mode
+	if !c.DryRun {
+		fileInfo, err := os.Stat(filePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				ctx.Logger.Debug("file does not exist", "path", filePath)
+				return fmt.Errorf("file does not exist: %s", filePath)
+			}
+			ctx.Logger.Debug("error checking file", "path", filePath, "error", err)
+			return fmt.Errorf("error checking file %s: %v", filePath, err)
+		}
+		ctx.Logger.Debug("file details", "path", filePath, "size", fileInfo.Size(), "mode", fileInfo.Mode())
+	}
+
+	ctx.Logger.Debug("encrypting file", "path", filePath)
 	n, err := esec.EncryptFileInPlace(filePath)
+	if err != nil {
+		ctx.Logger.Debug("encryption failed", "path", filePath, "error", err)
+		return fmt.Errorf("error encrypting file %s: %v", filePath, err)
+	}
+
+	ctx.Logger.Debug("encryption successful", "path", filePath, "bytes", n)
 	fmt.Printf("Encrypted %d bytes\n", n)
-	return err
+	return nil
 }
 
 type DecryptCmd struct {
@@ -89,38 +132,66 @@ type DecryptCmd struct {
 }
 
 func (c *DecryptCmd) Run(ctx *cliCtx) error {
+	ctx.Logger.Debug("decrypting secret", "file", c.File, "format", c.Format, "key_dir", c.KeyDir, "key_from_stdin", c.KeyFromStdin)
+
 	var key string
 	if c.KeyFromStdin {
+		ctx.Logger.Debug("reading private key from stdin")
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			return err
+			ctx.Logger.Debug("stdin read failed", "error", err)
+			return fmt.Errorf("error reading from stdin: %v", err)
 		}
-		key = string(data)
-		key = strings.TrimSpace(key)
+		key = strings.TrimSpace(string(data))
+		ctx.Logger.Debug("private key read from stdin", "key_length", len(key))
+	} else {
+		ctx.Logger.Debug("using key from keyring", "key_dir", c.KeyDir)
 	}
 
 	format, err := fileutils.ParseFormat(c.Format)
 	if err != nil {
+		ctx.Logger.Debug("format parsing failed", "format", c.Format, "error", err)
 		return fmt.Errorf("error parsing format flag %q: %v", c.Format, err)
 	}
+	ctx.Logger.Debug("parsed format", "format_type", format)
 
 	fileName, err := processFileOrEnv(c.File, format)
 	if err != nil {
-		fmt.Errorf("error processing file or env: %v", err)
+		ctx.Logger.Debug("file/env processing failed", "input", c.File, "error", err)
+		return fmt.Errorf("error processing file or env: %v", err)
 	}
+	ctx.Logger.Debug("resolved file path", "path", fileName)
 
+	// Check if file exists
+	fileInfo, err := os.Stat(fileName)
+	if err != nil {
+		if os.IsNotExist(err) {
+			ctx.Logger.Debug("file does not exist", "path", fileName)
+			return fmt.Errorf("file does not exist: %s", fileName)
+		}
+		ctx.Logger.Debug("error checking file", "path", fileName, "error", err)
+		return fmt.Errorf("error checking file %s: %v", fileName, err)
+	}
+	ctx.Logger.Debug("file details", "path", fileName, "size", fileInfo.Size(), "mode", fileInfo.Mode())
+
+	ctx.Logger.Debug("decrypting file", "path", fileName)
 	var buf bytes.Buffer
 	data, err := esec.DecryptFile(fileName, c.KeyDir, key)
 	if err != nil {
-		return err
+		ctx.Logger.Debug("decryption failed", "path", fileName, "error", err)
+		return fmt.Errorf("error decrypting file %s: %v", fileName, err)
 	}
 
+	ctx.Logger.Debug("decryption successful", "path", fileName, "bytes", len(data))
 	buf.Read(data)
 	fmt.Println(string(data))
 	return nil
 }
 
 func processFileOrEnv(input string, defaultFileFormat fileutils.FileFormat) (filename string, err error) {
+	// This is a helper function, so we can't use the context logger directly
+	// Debug logs for this function will be handled by the calling functions
+
 	// Check if input starts with any valid format
 	isFile := false
 	for _, format := range fileutils.ValidFormats() {
@@ -168,10 +239,8 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 		return fmt.Errorf("no command specified to run")
 	}
 
-	// Only log when debug flag is active
-	if ctx.Debug {
-		fmt.Printf("Preparing to run command: %s\n", strings.Join(c.Command, " "))
-	}
+	// Use structured logging for debug information
+	ctx.Logger.Debug("preparing to run command", "command", strings.Join(c.Command, " "))
 
 	// Read the private key from stdin if requested
 	var key string
@@ -181,9 +250,7 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 			return err
 		}
 		key = strings.TrimSpace(string(data))
-		if ctx.Debug {
-			fmt.Println("Read private key from stdin")
-		}
+		ctx.Logger.Debug("read private key from stdin")
 	}
 
 	// Parse the file format
@@ -198,9 +265,7 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 		return fmt.Errorf("error processing file or env: %v", err)
 	}
 
-	if ctx.Debug {
-		fmt.Printf("Using secrets file: %s\n", fileName)
-	}
+	ctx.Logger.Debug("using secrets file", "file", fileName)
 
 	// Check if the file exists
 	if _, err := os.Stat(fileName); os.IsNotExist(err) {
@@ -208,18 +273,14 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	}
 
 	// Decrypt the file
-	if ctx.Debug {
-		fmt.Printf("Decrypting %s...\n", fileName)
-	}
+	ctx.Logger.Debug("decrypting file", "file", fileName)
 
 	data, err := esec.DecryptFile(fileName, c.KeyDir, key)
 	if err != nil {
 		return fmt.Errorf("failed to decrypt file: %v", err)
 	}
 
-	if ctx.Debug {
-		fmt.Println("Successfully decrypted secrets file")
-	}
+	ctx.Logger.Debug("successfully decrypted secrets file")
 
 	// Convert decrypted data to environment variables
 	var envVars map[string]string
@@ -256,14 +317,13 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	}
 
 	// Validate we have environment variables
-	if ctx.Debug {
-		if len(envVars) == 0 {
-			fmt.Println("Warning: No environment variables found in the decrypted file")
-		} else {
-			fmt.Printf("Loaded %d environment variables\n", len(envVars))
-		}
-		fmt.Printf("Executing: %s\n", strings.Join(c.Command, " "))
+	if len(envVars) == 0 {
+		ctx.Logger.Debug("warning: no environment variables found in the decrypted file")
+	} else {
+		ctx.Logger.Debug("loaded environment variables", "count", len(envVars))
 	}
+
+	ctx.Logger.Debug("executing command", "command", strings.Join(c.Command, " "))
 
 	// Create a command to run
 	cmd := exec.Command(c.Command[0], c.Command[1:]...)
@@ -298,9 +358,7 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 
 	// Process ID for signal handling
 	pid := cmd.Process.Pid
-	if ctx.Debug {
-		fmt.Printf("Started process with PID: %d\n", pid)
-	}
+	ctx.Logger.Debug("started process", "pid", pid)
 
 	// Set up signal handling
 	sigChan := make(chan os.Signal, 1)
@@ -320,6 +378,8 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 		// Immediately stop catching additional signals to prevent deadlock
 		signal.Stop(sigChan)
 		close(sigChan)
+
+		ctx.Logger.Debug("received signal", "signal", sig.String())
 
 		// We're running a terminal app, so just forward the signal and exit
 		// This lets the terminal handle the subprocess properly
@@ -341,17 +401,13 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 
 		if err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok {
-				if ctx.Debug {
-					fmt.Printf("Command exited with code: %d\n", exitErr.ExitCode())
-				}
+				ctx.Logger.Debug("command exited with error", "code", exitErr.ExitCode())
 				os.Exit(exitErr.ExitCode())
 			}
 			return fmt.Errorf("error running command: %v", err)
 		}
 
-		if ctx.Debug {
-			fmt.Println("Command completed successfully")
-		}
+		ctx.Logger.Debug("command completed successfully")
 		return nil
 	}
 
@@ -360,16 +416,12 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			// The program has exited with an exit code != 0
 			// Pass the exit code back to the parent
-			if ctx.Debug {
-				fmt.Printf("Command exited with code: %d\n", exitErr.ExitCode())
-			}
+			ctx.Logger.Debug("command exited with error", "code", exitErr.ExitCode())
 			os.Exit(exitErr.ExitCode())
 		}
 		return fmt.Errorf("error running command: %v", err)
 	}
 
-	if ctx.Debug {
-		fmt.Println("Command completed successfully")
-	}
+	ctx.Logger.Debug("command completed successfully")
 	return nil
 }

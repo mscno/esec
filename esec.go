@@ -637,23 +637,6 @@ func parseEnvironment(filename string) (string, error) {
 	HELPER FUNCTIONS
 */
 
-func LoadLocalEnv(fileName ...string) error {
-	if len(fileName) > 1 {
-		return fmt.Errorf("only one file can be specified")
-	}
-
-	localEnv, localEnvPath := findConfigFile(".env.local")
-	if !localEnv {
-		return nil
-	}
-
-	slog.Info("reading secrets from local .env file", "path", localEnvPath)
-	if err := godotenv.Load(localEnvPath); err != nil {
-		return fmt.Errorf("error loading .env file: %w", err)
-	}
-	return nil
-}
-
 func EjsonToEnv(payload []byte) (map[string]string, error) {
 	var data map[string]interface{}
 	err := gojson.Unmarshal(payload, &data)
@@ -666,30 +649,6 @@ func EjsonToEnv(payload []byte) (map[string]string, error) {
 
 func DotEnvToEnv(payload []byte) (map[string]string, error) {
 	return godotenv.Parse(bytes.NewBuffer(payload))
-}
-
-const maxAttempts = 10
-
-func repeatString(s string, count int) string {
-	var result string
-	for i := 0; i < count; i++ {
-		result += s
-	}
-	return result
-}
-
-func findConfigFile(fileName string) (bool, string) {
-	for i := 0; i < maxAttempts; i++ {
-		path := filepath.Join(repeatString("../", i), fileName)
-		// Check if we have a go.mod file in the directory to stop the search as we have reached the root
-		if _, err := os.Stat(path); err == nil {
-			return true, path
-		}
-		if _, err := os.Stat(filepath.Join(repeatString("../", i), "go.mod")); err == nil {
-			break
-		}
-	}
-	return false, ""
 }
 
 var errNoEnv = errors.New("environment is not set in ejson")
