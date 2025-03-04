@@ -124,19 +124,139 @@ func encryptData(data []byte, fileFormat FileFormat) ([]byte, error) {
 	return formattedData, nil
 }
 
-// DecryptFromEmbedFS retrieves and decrypts a file from an embedded filesystem.
-// It determines the environment name automatically unless an override is provided.
-// The function reads the encrypted file based on the specified format, then decrypts it
+// EnvironmentLookupFn is a function type that attempts to find an environment name
+// Returns the environment name (empty string for default environment) and any error encountered
+type EnvironmentLookupFn func() (string, error)
+
+// DecryptFromEmbedConfig defines the configuration options for DecryptFromEmbedFS
+type DecryptFromEmbedConfig struct {
+	// EnvName specifies an environment name override
+	EnvName string
+	// Format specifies the file format (defaults to FileFormatEjson if not set)
+	Format FileFormat
+	// Logger for outputting debug and info messages
+	Logger *slog.Logger
+
+	// EnvironmentLookuper is a function that finds the environment name
+	// If not provided, EnvironmentVarLookup will be used
+	EnvironmentLookuper    EnvironmentLookupFn
+	Keydir                 string
+	UserSuppliedPrivateKey string
+}
+
+// CombineLookupers creates a single environment lookup function from multiple functions
+// It tries each function in order until one returns a non-empty environment or all fail
+// If all lookupers fail, the errors are collected and returned in a combined error
+func CombineLookupers(lookupers ...EnvironmentLookupFn) EnvironmentLookupFn {
+	return func() (string, error) {
+		var errors []string
+
+		for _, lookupFn := range lookupers {
+			env, err := lookupFn()
+			if err != nil {
+				errors = append(errors, err.Error())
+				continue
+			}
+
+			// Return the first successful result
+			return env, nil
+		}
+
+		// If all lookupers failed, combine the errors
+		if len(errors) > 0 {
+			return "", fmt.Errorf("all environment lookupers failed: %s", strings.Join(errors, "; "))
+		}
+
+		// If no lookupers were provided
+		return "", fmt.Errorf("no environment lookupers were provided")
+	}
+}
+
+// EnvironmentVarLookup tries to determine the environment from environment variables
+func EnvironmentVarLookup() (string, error) {
+	logger := slog.Default()
+	return sniffEnvName(logger)
+}
+
+// KeyringLookup returns a lookup function that checks the keyring file
+func KeyringLookup(keyPath string) EnvironmentLookupFn {
+	return func() (string, error) {
+		logger := slog.Default()
+		return sniffFromKeyring(logger, keyPath, "")
+	}
+}
+
+// DecryptFromEmbedFSWithConfig retrieves and decrypts a file from an embedded filesystem.
+// It uses the provided configuration to determine the environment name and file format.
+// The function reads the encrypted file based on the configuration, then decrypts it
 // and returns the decrypted data.
 //
 // Parameters:
 //   - v: An embedded filesystem containing the encrypted files.
-//   - envOverride: An optional environment name override.
-//   - format: The format type of the encrypted file.
+//   - config: Configuration options for decryption.
 //
 // Returns:
 //   - The decrypted file content as a byte slice.
 //   - An error if any step fails (e.g., environment detection, file reading, decryption).
+func DecryptFromEmbedFSWithConfig(v embed.FS, config DecryptFromEmbedConfig) ([]byte, error) {
+	// Set defaults for unspecified options
+	if config.Format == "" {
+		config.Format = FileFormatEjson
+	}
+
+	if config.Logger == nil {
+		config.Logger = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
+			AddSource:   false,
+			Level:       slog.LevelInfo,
+			ReplaceAttr: nil,
+		}))
+	}
+
+	// Determine environment name
+	var envName string
+	var err error
+
+	if config.EnvName != "" {
+		// Use explicit environment name if provided
+		envName = config.EnvName
+		config.Logger.Info("using environment override", "env", envName)
+	} else {
+		// Use environment lookuper or default to EnvironmentVarLookup
+		lookupFn := config.EnvironmentLookuper
+		if lookupFn == nil {
+			// If no explicit lookuper is provided, use EnvironmentVarLookup
+			lookupFn = EnvironmentVarLookup
+		}
+
+		// Execute the lookup function
+		envName, err = lookupFn()
+		if err != nil {
+			return nil, fmt.Errorf("error determining environment name: %v", err)
+		}
+		config.Logger.Info("detected environment", "env", envName)
+	}
+
+	// Generate the filename based on the format and environment name
+	fileName := fileutils.GenerateFilename(fileutils.FileFormat(config.Format), envName)
+	config.Logger.Debug("reading file from vault", "file", fileName)
+
+	// Attempt to read the file from the embedded filesystem
+	data, err := v.ReadFile(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("error reading file from vault: %v", err)
+	}
+
+	// Find the private key
+	privkey, err := findPrivateKey(config.Keydir, envName, config.UserSuppliedPrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decrypt the file data and return the decrypted bytes
+	return decryptData(privkey, data, config.Format)
+}
+
+// Legacy option-based API for backward compatibility
 type DecryptFromEmbedOption func(*decryptFromEmbedOptions) error
 
 type decryptFromEmbedOptions struct {
@@ -182,7 +302,8 @@ func WithKeyringSniffer() DecryptFromEmbedOption {
 	}
 }
 
-func DecryptFromEmbedFS(v embed.FS, opts ...DecryptFromEmbedOption) ([]byte, error) {
+// Deprecated: Use the new config-based DecryptFromEmbedFS instead
+func DecryptFromEmbedFSWithOptions(v embed.FS, opts ...DecryptFromEmbedOption) ([]byte, error) {
 	// Create a new options struct and apply the provided options
 	o := &decryptFromEmbedOptions{
 		format: FileFormatEjson,
@@ -193,43 +314,29 @@ func DecryptFromEmbedFS(v embed.FS, opts ...DecryptFromEmbedOption) ([]byte, err
 		})),
 		envOverride: "",
 	}
+
 	// Apply the options
 	for _, opt := range opts {
 		if err := opt(o); err != nil {
 			return nil, err
 		}
 	}
-	// Try to determine the environment name automatically.
-	var err error
-	envName := o.envOverride
-	// If an environment override is not provided, use it instead of the detected name.
-	if envName == "" {
-		envName, err = sniffEnvName(o.logger)
-		if err != nil {
-			return nil, fmt.Errorf("error sniffing environment name: %v", err)
-		}
-		o.logger.Info("detected environment", "env", envName)
-	} else {
-		o.logger.Info("using environment override", "env", envName)
+
+	// Convert old options to new config
+	config := DecryptFromEmbedConfig{
+		EnvName: o.envOverride,
+		Format:  o.format,
+		Logger:  o.logger,
 	}
 
-	// Generate the filename based on the format and environment name.
-	fileName := fileutils.GenerateFilename(fileutils.FileFormat(o.format), envName)
-	o.logger.Debug("reading file from vault", "file", fileName)
-	// Attempt to read the file from the embedded filesystem.
-	data, err := v.ReadFile(fileName)
-	if err != nil {
-		return nil, fmt.Errorf("error reading file from vault: %v", err)
+	// Create additional lookupers based on options
+	var additionalLookupers []EnvironmentLookupFn
+	if o.keyringSniffer {
+		additionalLookupers = append(additionalLookupers, KeyringLookup(""))
 	}
 
-	// Decrypt the file data and return the decrypted bytes.
-	privkey, err := findPrivateKey("", envName, "")
-	if err != nil {
-		return nil, err
-	}
-
-	// Decrypt the file data and return the decrypted bytes.
-	return decryptData(privkey, data, o.format)
+	// Call the new implementation
+	return DecryptFromEmbedFSWithConfig(v, config)
 }
 
 // DecryptFile reads an encrypted file from disk, decrypts it, and returns the decrypted data.

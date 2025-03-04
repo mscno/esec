@@ -2,7 +2,9 @@ package esec
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/alecthomas/assert/v2"
+	"github.com/mscno/esec/testdata"
 	"io/ioutil"
 	"log/slog"
 	"os"
@@ -279,6 +281,160 @@ func TestSniffEnvName(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Import the test embedded files from testdata package
+var testFS = testdata.TestEmbed
+
+func TestDecryptFromEmbedFS(t *testing.T) {
+
+	// Set up environment variables for testing
+	originalEnv := os.Environ()
+	defer func() {
+		os.Clearenv()
+		for _, e := range originalEnv {
+			parts := splitEnvVar(e)
+			if len(parts) == 2 {
+				os.Setenv(parts[0], parts[1])
+			}
+		}
+	}()
+
+	// Test with config-based API
+	t.Run("using config with explicit env name", func(t *testing.T) {
+		// Create test configuration with explicit environment
+		config := DecryptFromEmbedConfig{
+			EnvName: "",
+			Format:  FileFormatEjson,
+			Logger:  slog.New(slog.NewTextHandler(ioutil.Discard, nil)),
+		}
+
+		// Set up private key in environment
+		os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+
+		// Call the function under test
+		_, err := DecryptFromEmbedFSWithConfig(testFS, config)
+		assert.NoError(t, err)
+	})
+
+	t.Run("using config with custom environment lookuper", func(t *testing.T) {
+		// Create a custom lookuper that always returns "test"
+		customLookuper := func() (string, error) {
+			return "test", nil
+		}
+
+		// Create test configuration with custom lookuper
+		config := DecryptFromEmbedConfig{
+			Format:              FileFormatEjson,
+			Logger:              slog.New(slog.NewTextHandler(ioutil.Discard, nil)),
+			EnvironmentLookuper: customLookuper,
+		}
+
+		// Set up private key for "test" environment in environment variables
+		os.Setenv("ESEC_PRIVATE_KEY_TEST", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+
+		// Call the function under test (this should use the custom lookuper)
+		_, err := DecryptFromEmbedFSWithConfig(testFS, config)
+		// This will fail because our test.ejson file doesn't have a test.ejson variant
+		// but that's expected - we're just checking the lookuper gets called
+		assert.Error(t, err)
+		assert.True(t, strings.Contains(err.Error(), "error reading file from vault"))
+	})
+
+	t.Run("using combined lookupers with fallback", func(t *testing.T) {
+		// Create a failing lookuper and a successful fallback
+		failingLookuper := func() (string, error) {
+			return "", fmt.Errorf("this lookuper always fails")
+		}
+
+		successLookuper := func() (string, error) {
+			return "", nil // Default environment
+		}
+
+		// Create test configuration with multiple lookupers
+		config := DecryptFromEmbedConfig{
+			Format:              FileFormatEjson,
+			Logger:              slog.New(slog.NewTextHandler(ioutil.Discard, nil)),
+			EnvironmentLookuper: CombineLookupers(failingLookuper, successLookuper),
+		}
+
+		// Set up private key in environment
+		os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+
+		// Call the function under test
+		_, err := DecryptFromEmbedFSWithConfig(testFS, config)
+		assert.NoError(t, err)
+	})
+
+	// Test for backward compatibility
+	t.Run("using legacy options API", func(t *testing.T) {
+		// Clear environment variables to prevent multiple key issues
+		os.Clearenv()
+		// Set up private key in environment
+		os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+
+		// Call the legacy function
+		_, err := DecryptFromEmbedFSWithOptions(testFS, WithFormat(FileFormatEjson))
+		assert.NoError(t, err)
+	})
+}
+
+func TestCombineLookupers(t *testing.T) {
+	t.Run("all lookupers fail", func(t *testing.T) {
+		lookuper1 := func() (string, error) {
+			return "", fmt.Errorf("error 1")
+		}
+		lookuper2 := func() (string, error) {
+			return "", fmt.Errorf("error 2")
+		}
+
+		combined := CombineLookupers(lookuper1, lookuper2)
+		env, err := combined()
+
+		assert.Error(t, err)
+		assert.True(t, strings.Contains(err.Error(), "error 1"))
+		assert.True(t, strings.Contains(err.Error(), "error 2"))
+		assert.Equal(t, "", env)
+	})
+
+	t.Run("first lookuper succeeds", func(t *testing.T) {
+		lookuper1 := func() (string, error) {
+			return "env1", nil
+		}
+		lookuper2 := func() (string, error) {
+			return "env2", nil
+		}
+
+		combined := CombineLookupers(lookuper1, lookuper2)
+		env, err := combined()
+
+		assert.NoError(t, err)
+		assert.Equal(t, "env1", env)
+	})
+
+	t.Run("second lookuper succeeds after first fails", func(t *testing.T) {
+		lookuper1 := func() (string, error) {
+			return "", fmt.Errorf("error 1")
+		}
+		lookuper2 := func() (string, error) {
+			return "env2", nil
+		}
+
+		combined := CombineLookupers(lookuper1, lookuper2)
+		env, err := combined()
+
+		assert.NoError(t, err)
+		assert.Equal(t, "env2", env)
+	})
+
+	t.Run("no lookupers provided", func(t *testing.T) {
+		combined := CombineLookupers()
+		env, err := combined()
+
+		assert.Error(t, err)
+		assert.Equal(t, "", env)
+		assert.True(t, strings.Contains(err.Error(), "no environment lookupers were provided"))
+	})
 }
 
 func TestSniffFromKeyring(t *testing.T) {

@@ -162,14 +162,16 @@ type RunCmd struct {
 }
 
 // Implement the Run method
-// Implement the Run method
 func (c *RunCmd) Run(ctx *cliCtx) error {
 	// Validate that a command is specified
 	if len(c.Command) == 0 {
 		return fmt.Errorf("no command specified to run")
 	}
 
-	fmt.Printf("Preparing to run command: %s\n", strings.Join(c.Command, " "))
+	// Only log when debug flag is active
+	if ctx.Debug {
+		fmt.Printf("Preparing to run command: %s\n", strings.Join(c.Command, " "))
+	}
 
 	// Read the private key from stdin if requested
 	var key string
@@ -179,7 +181,9 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 			return err
 		}
 		key = strings.TrimSpace(string(data))
-		fmt.Println("Read private key from stdin")
+		if ctx.Debug {
+			fmt.Println("Read private key from stdin")
+		}
 	}
 
 	// Parse the file format
@@ -193,7 +197,10 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	if err != nil {
 		return fmt.Errorf("error processing file or env: %v", err)
 	}
-	fmt.Printf("Using secrets file: %s\n", fileName)
+
+	if ctx.Debug {
+		fmt.Printf("Using secrets file: %s\n", fileName)
+	}
 
 	// Check if the file exists
 	if _, err := os.Stat(fileName); os.IsNotExist(err) {
@@ -201,12 +208,18 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	}
 
 	// Decrypt the file
-	fmt.Printf("Decrypting %s...\n", fileName)
+	if ctx.Debug {
+		fmt.Printf("Decrypting %s...\n", fileName)
+	}
+
 	data, err := esec.DecryptFile(fileName, c.KeyDir, key)
 	if err != nil {
 		return fmt.Errorf("failed to decrypt file: %v", err)
 	}
-	fmt.Println("Successfully decrypted secrets file")
+
+	if ctx.Debug {
+		fmt.Println("Successfully decrypted secrets file")
+	}
 
 	// Convert decrypted data to environment variables
 	var envVars map[string]string
@@ -243,14 +256,16 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	}
 
 	// Validate we have environment variables
-	if len(envVars) == 0 {
-		fmt.Println("Warning: No environment variables found in the decrypted file")
-	} else {
-		fmt.Printf("Loaded %d environment variables\n", len(envVars))
+	if ctx.Debug {
+		if len(envVars) == 0 {
+			fmt.Println("Warning: No environment variables found in the decrypted file")
+		} else {
+			fmt.Printf("Loaded %d environment variables\n", len(envVars))
+		}
+		fmt.Printf("Executing: %s\n", strings.Join(c.Command, " "))
 	}
 
 	// Create a command to run
-	fmt.Printf("Executing: %s\n", strings.Join(c.Command, " "))
 	cmd := exec.Command(c.Command[0], c.Command[1:]...)
 
 	// Set up environment variables
@@ -283,7 +298,9 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 
 	// Process ID for signal handling
 	pid := cmd.Process.Pid
-	fmt.Printf("Started process with PID: %d\n", pid)
+	if ctx.Debug {
+		fmt.Printf("Started process with PID: %d\n", pid)
+	}
 
 	// Set up signal handling
 	sigChan := make(chan os.Signal, 1)
@@ -324,27 +341,35 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 
 		if err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok {
-				fmt.Printf("Command exited with code: %d\n", exitErr.ExitCode())
+				if ctx.Debug {
+					fmt.Printf("Command exited with code: %d\n", exitErr.ExitCode())
+				}
 				os.Exit(exitErr.ExitCode())
 			}
 			return fmt.Errorf("error running command: %v", err)
 		}
 
-		fmt.Println("Command completed successfully")
+		if ctx.Debug {
+			fmt.Println("Command completed successfully")
+		}
 		return nil
 	}
 
-	// Wait for the command to finish
+	// Wait for the command to finish (This code is unreachable but kept for completeness)
 	if err := cmd.Wait(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			// The program has exited with an exit code != 0
 			// Pass the exit code back to the parent
-			fmt.Printf("Command exited with code: %d\n", exitErr.ExitCode())
+			if ctx.Debug {
+				fmt.Printf("Command exited with code: %d\n", exitErr.ExitCode())
+			}
 			os.Exit(exitErr.ExitCode())
 		}
 		return fmt.Errorf("error running command: %v", err)
 	}
 
-	fmt.Println("Command completed successfully")
+	if ctx.Debug {
+		fmt.Println("Command completed successfully")
+	}
 	return nil
 }
