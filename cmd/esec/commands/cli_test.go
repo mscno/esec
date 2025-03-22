@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"strings"
 	"testing"
 )
@@ -97,6 +98,77 @@ func TestDecryptCmd(t *testing.T) {
 	// Check expected output
 	assert.Equal(t, errString, "")
 	assert.Equal(t, out, "{\"_ESEC_PUBLIC_KEY\":\"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d\",\"secret\": \"hello\"}\n")
+}
+
+func TestGetCmdOk(t *testing.T) {
+	// Create a temporary file
+	tmpFile, err := os.CreateTemp("", ".ejson")
+	assert.NoError(t, err)
+	defer os.Remove(tmpFile.Name()) // Clean up after test
+	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	// Write test data
+	_, err = tmpFile.Write([]byte(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`))
+	assert.NoError(t, err)
+	tmpFile.Close()
+
+	// Create command
+	cmd := &GetCmd{File: tmpFile.Name(), Key: "secret", Format: ".ejson"}
+
+	// Run command
+	out, errString := captureOutput(func() error {
+		return cmd.Run(&cliCtx{Logger: slog.Default()})
+	})
+
+	// Check expected output
+	assert.Equal(t, errString, "")
+	assert.Equal(t, out, "hello")
+}
+
+func TestGetCmdOkWithEnv(t *testing.T) {
+	// Create a temporary file
+	tmpFile, err := os.Create(path.Join(os.TempDir(), ".ejson.production"))
+	assert.NoError(t, err)
+	defer os.Remove(tmpFile.Name()) // Clean up after test
+	os.Setenv("ESEC_PRIVATE_KEY_PRODUCTION", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	// Write test data
+	_, err = tmpFile.Write([]byte(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`))
+	assert.NoError(t, err)
+	tmpFile.Close()
+
+	// Create command
+	cmd := &GetCmd{File: tmpFile.Name(), Key: "secret", Format: ".ejson"}
+
+	// Run command
+	out, errString := captureOutput(func() error {
+		return cmd.Run(&cliCtx{Logger: slog.Default()})
+	})
+
+	// Check expected output
+	assert.Equal(t, errString, "")
+	assert.Equal(t, out, "hello")
+}
+
+func TestGetCmdMissing(t *testing.T) {
+	// Create a temporary file
+	tmpFile, err := os.CreateTemp("", ".ejson")
+	assert.NoError(t, err)
+	defer os.Remove(tmpFile.Name()) // Clean up after test
+	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	// Write test data
+	_, err = tmpFile.Write([]byte(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`))
+	assert.NoError(t, err)
+	tmpFile.Close()
+
+	// Create command
+	cmd := &GetCmd{File: tmpFile.Name(), Key: "missing", Format: ".ejson"}
+
+	// Run command
+	_, errString := captureOutput(func() error {
+		return cmd.Run(&cliCtx{Logger: slog.Default()})
+	})
+
+	// Check expected output
+	assert.Equal(t, errString, `key "missing" not found in decrypted content`)
 }
 
 func TestProcessFileOrEnv(t *testing.T) {
