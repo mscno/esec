@@ -493,7 +493,7 @@ func sniffEnvName(logger *slog.Logger) (string, error) {
 	switch len(setKeys) {
 	case 0:
 		logger.Debug("no private key found in environment variables")
-		return "", nil // Default to "" (blank env) if no key is found
+		return "", fmt.Errorf("no private key found in environment variables")
 	case 1:
 		logger.Debug("found private key in environment variables", "key", setKeys[0])
 		// Extract the environment name from the key
