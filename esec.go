@@ -656,20 +656,14 @@ var errEnvNotMap = errors.New("environment is not a map[string]interface{}")
 
 var validIdentifierPattern = regexp.MustCompile(`\A[a-zA-Z_][a-zA-Z0-9_]*\z`)
 
-func extractEnv(secrets map[string]interface{}) (map[string]string, error) {
-	rawEnv, ok := secrets["environment"]
-	if !ok {
-		return nil, errNoEnv
-	}
-
-	envMap, ok := rawEnv.(map[string]interface{})
-	if !ok {
-		return nil, errEnvNotMap
-	}
+func extractEnv(envMap map[string]interface{}) (map[string]string, error) {
 
 	envSecrets := make(map[string]string, len(envMap))
 
 	for key, rawValue := range envMap {
+		if key == EsecPublicKey {
+			continue
+		}
 		// Reject keys that would be invalid environment variable identifiers
 		if !validIdentifierPattern.MatchString(key) {
 			err := fmt.Errorf("invalid identifier as key in environment: %q", key)

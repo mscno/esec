@@ -429,24 +429,7 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	case fileutils.Ejson:
 		envVars, err = esec.EjsonToEnv(data)
 		if err != nil {
-			// For EJSON files that don't have an "environment" section, try to parse as raw key-value
-			// This is a fallback for EJSON files that don't follow the expected format
-			var rawData map[string]interface{}
-			if err := gojson.Unmarshal(data, &rawData); err == nil {
-				envVars = make(map[string]string)
-				for k, v := range rawData {
-					// Skip the public key and metadata
-					if k == "_ESEC_PUBLIC_KEY" || strings.HasPrefix(k, "_") {
-						continue
-					}
-					// Only add string values
-					if strVal, ok := v.(string); ok {
-						envVars[k] = strVal
-					}
-				}
-			} else {
-				return fmt.Errorf("error parsing decrypted EJSON: %v", err)
-			}
+			return fmt.Errorf("error parsing decrypted EJSON: %v", err)
 		}
 	default:
 		return fmt.Errorf("unsupported format for run command: %s", format)
