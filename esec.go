@@ -24,6 +24,8 @@ import (
 const (
 	EsecPublicKey  = "ESEC_PUBLIC_KEY"
 	EsecPrivateKey = "ESEC_PRIVATE_KEY"
+	// DefaultKeyringFilename is the default name for the file storing the private key.
+	DefaultKeyringFilename = ".esec-keyring"
 )
 
 func GenerateKeypair() (pub string, priv string, err error) {
@@ -343,7 +345,7 @@ func DecryptFromEmbedFSWithOptions(v embed.FS, opts ...DecryptFromEmbedOption) (
 func DecryptFile(filePath string, keydir string, userSuppliedPrivateKey string) ([]byte, error) {
 	envName, err := parseEnvironment(filePath)
 	if err != nil {
-		fmt.Errorf("error parsing env from file: %v", err)
+		return nil, fmt.Errorf("error parsing env from file: %w", err)
 	}
 
 	data, err := os.ReadFile(filePath)
@@ -442,7 +444,7 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 	}
 
 	// If not found in env vars, try reading from the keyring file.
-	keyringPath := filepath.Join(keyPath, ".esec-keyring")
+	keyringPath := filepath.Join(keyPath, DefaultKeyringFilename)
 	privateKeyFile, err := os.ReadFile(keyringPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -516,7 +518,7 @@ func sniffFromKeyring(logger *slog.Logger, keyPath string, envName string) (stri
 	}
 
 	// If not found in env vars, try reading from the keyring file.
-	keyringPath := filepath.Join(keyPath, ".esec-keyring")
+	keyringPath := filepath.Join(keyPath, DefaultKeyringFilename)
 	privateKeyFile, err := os.ReadFile(keyringPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
