@@ -80,8 +80,6 @@ func main() {
 	// --- User store ---
 	userStore := store.NewMemoryUserStore()
 
-	// ... existing code ...
-
 	// Choose store implementation
 	var s Store
 	storeType := os.Getenv("ESEC_STORE")
@@ -102,15 +100,24 @@ func main() {
 		log.Printf("Using in-memory store")
 	}
 
+	// --- Endpoints ---
+	// 1. Project creation
 	http.HandleFunc("/api/v1/projects", withGitHubAuth(func(w http.ResponseWriter, r *http.Request) {
 		handleCreateProject(w, r, s)
 	}, false)) // Project creation does not require token (for demo)
 
+	// 2. Project secrets (push/pull)
 	http.HandleFunc("/api/v1/projects/", withGitHubAuth(func(w http.ResponseWriter, r *http.Request) {
-		handleProjectKeys(w, r, s)
+		if strings.HasSuffix(r.URL.Path, "/keys-per-user") {
+			handleProjectKeysPerUser(w, r, s)
+		} else if strings.HasSuffix(r.URL.Path, "/keys") {
+			handleProjectKeys(w, r, s)
+		} else {
+			http.NotFound(w, r)
+		}
 	}, true)) // Require GitHub token for secret ops
 
-	// --- User registration endpoint ---
+	// 3. User registration
 	http.HandleFunc("/api/v1/users/register", func(w http.ResponseWriter, r *http.Request) {
 		handleUserRegister(w, r, userStore)
 	})
@@ -202,6 +209,57 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request, store Store) {
 	}
 	w.WriteHeader(http.StatusCreated)
 	fmt.Fprintf(w, "Project %s registered", req.OrgRepo)
+}
+
+// PUT/GET /api/v1/projects/{org}/{repo}/keys-per-user
+func handleProjectKeysPerUser(w http.ResponseWriter, r *http.Request, storeIface interface{}) {
+	// Path: /api/v1/projects/{org}/{repo}/keys-per-user
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
+	if len(parts) != 3 || parts[2] != "keys-per-user" {
+		http.NotFound(w, r)
+		return
+	}
+	orgRepo := parts[0] + "/" + parts[1]
+
+	switch store := storeIface.(type) {
+	case *memoryStore:
+		// In-memory store does not support per-user secrets, return not implemented
+		http.Error(w, "per-user secrets not supported in memoryStore", http.StatusNotImplemented)
+		return
+	case *store.BoltStore:
+		if !store.ProjectExists(orgRepo) {
+			http.Error(w, "project not found", http.StatusNotFound)
+			return
+		}
+		if r.Method == http.MethodPut {
+			var payload map[string]map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, "invalid JSON", http.StatusBadRequest)
+				return
+			}
+			if err := store.SetPerUserSecrets(orgRepo, payload); err != nil {
+				http.Error(w, "failed to store per-user secrets: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		} else if r.Method == http.MethodGet {
+			payload, err := store.GetPerUserSecrets(orgRepo)
+			if err != nil {
+				http.Error(w, "failed to get per-user secrets: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(payload)
+			return
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+	default:
+		http.Error(w, "unsupported store type", http.StatusInternalServerError)
+		return
+	}
 }
 
 // PUT/GET /api/v1/projects/{org}/{repo}/keys

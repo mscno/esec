@@ -535,18 +535,4 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 		ctx.Logger.Debug("command completed successfully")
 		return nil
 	}
-
-	// Wait for the command to finish (This code is unreachable but kept for completeness)
-	if err := cmd.Wait(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			// The program has exited with an exit code != 0
-			// Pass the exit code back to the parent
-			ctx.Logger.Debug("command exited with error", "code", exitErr.ExitCode())
-			os.Exit(exitErr.ExitCode())
-		}
-		return fmt.Errorf("error running command: %v", err)
-	}
-
-	ctx.Logger.Debug("command completed successfully")
-	return nil
 }
