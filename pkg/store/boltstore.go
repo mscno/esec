@@ -9,6 +9,11 @@ import (
 // BoltStore implements Store interface using BoltDB
 // Bucket: "projects" -> key: org/repo, value: JSON-encoded map[string]string
 // Bucket: "projects_per_user" -> key: org/repo, value: JSON-encoded map[string]map[string]string
+// Bucket: "project_meta" -> key: org/repo, value: JSON-encoded ProjectMeta
+
+type ProjectMeta struct {
+	Admins []string `json:"admins"`
+}
 
 type BoltStore struct {
 	db *bbolt.DB
@@ -16,6 +21,7 @@ type BoltStore struct {
 
 const bucketName = "projects"
 const perUserBucket = "projects_per_user"
+const metaBucket = "project_meta"
 
 func NewBoltStore(path string) (*BoltStore, error) {
 	db, err := bbolt.Open(path, 0600, nil)
@@ -30,6 +36,9 @@ func NewBoltStore(path string) (*BoltStore, error) {
 		if _, err := tx.CreateBucketIfNotExists([]byte(perUserBucket)); err != nil {
 			return err
 		}
+		if _, err := tx.CreateBucketIfNotExists([]byte(metaBucket)); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -39,15 +48,50 @@ func NewBoltStore(path string) (*BoltStore, error) {
 	return &BoltStore{db: db}, nil
 }
 
-func (b *BoltStore) CreateProject(orgRepo string) error {
+func (b *BoltStore) CreateProject(orgRepo string, adminID string) error {
 	return b.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte(bucketName))
+		metaB := tx.Bucket([]byte(metaBucket))
 		if bucket.Get([]byte(orgRepo)) == nil {
 			empty, _ := json.Marshal(map[string]string{})
-			return bucket.Put([]byte(orgRepo), empty)
+			if err := bucket.Put([]byte(orgRepo), empty); err != nil {
+				return err
+			}
+			meta := ProjectMeta{Admins: []string{adminID}}
+			metaBytes, _ := json.Marshal(meta)
+			return metaB.Put([]byte(orgRepo), metaBytes)
 		}
 		return nil
 	})
+}
+
+func (b *BoltStore) GetProjectAdmins(orgRepo string) ([]string, error) {
+	var meta ProjectMeta
+	err := b.db.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte(metaBucket))
+		val := bucket.Get([]byte(orgRepo))
+		if val == nil {
+			return fmt.Errorf("project not found")
+		}
+		return json.Unmarshal(val, &meta)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return append([]string{}, meta.Admins...), nil
+}
+
+func (b *BoltStore) IsProjectAdmin(orgRepo string, githubID string) bool {
+	admins, err := b.GetProjectAdmins(orgRepo)
+	if err != nil {
+		return false
+	}
+	for _, admin := range admins {
+		if admin == githubID {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *BoltStore) ProjectExists(orgRepo string) bool {

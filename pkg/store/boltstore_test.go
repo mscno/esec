@@ -2,8 +2,8 @@ package store
 
 import (
 	"os"
-	"testing"
 	"path/filepath"
+	"testing"
 )
 
 func TestBoltStore_BasicCRUD(t *testing.T) {
@@ -17,7 +17,7 @@ func TestBoltStore_BasicCRUD(t *testing.T) {
 	defer store.Close()
 
 	orgRepo := "myorg/myrepo"
-	if err := store.CreateProject(orgRepo); err != nil {
+	if err := store.CreateProject(orgRepo, "admin"); err != nil {
 		t.Fatalf("failed to create project: %v", err)
 	}
 	if !store.ProjectExists(orgRepo) {

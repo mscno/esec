@@ -17,35 +17,67 @@ import (
 // Store interface abstracts project/secret storage
 // (can be swapped for persistent implementations)
 type Store interface {
-	CreateProject(orgRepo string) error
+	CreateProject(orgRepo string, adminID string) error
 	ProjectExists(orgRepo string) bool
 	GetSecrets(orgRepo string) (map[string]string, error)
 	SetSecrets(orgRepo string, secrets map[string]string) error
-}
+	GetProjectAdmins(orgRepo string) ([]string, error)
+	IsProjectAdmin(orgRepo string, githubID string) bool
+} // now supports project admins
 
 // memoryStore implements Store using in-memory maps
 // (not safe for multi-process, but fine for demo/testing)
+type ProjectMeta struct {
+	Admins []string `json:"admins"`
+}
+
 type memoryStore struct {
 	mu       sync.RWMutex
 	projects map[string]map[string]string // key: org/repo
 	perUser  map[string]map[string]map[string]string // org/repo -> user -> key -> value
+	meta     map[string]*ProjectMeta // org/repo -> metadata (admins, etc.)
+}
+
+func (m *memoryStore) GetProjectAdmins(orgRepo string) ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	meta, exists := m.meta[orgRepo]
+	if !exists || meta == nil {
+		return nil, fmt.Errorf("project not found")
+	}
+	return append([]string{}, meta.Admins...), nil
+}
+
+func (m *memoryStore) IsProjectAdmin(orgRepo string, githubID string) bool {
+	admins, err := m.GetProjectAdmins(orgRepo)
+	if err != nil {
+		return false
+	}
+	for _, admin := range admins {
+		if admin == githubID {
+			return true
+		}
+	}
+	return false
 }
 
 func newMemoryStore() *memoryStore {
 	return &memoryStore{
 		projects: make(map[string]map[string]string),
 		perUser:  make(map[string]map[string]map[string]string),
+		meta:     make(map[string]*ProjectMeta),
 	}
-}
+} // now initializes meta
 
-func (m *memoryStore) CreateProject(orgRepo string) error {
+func (m *memoryStore) CreateProject(orgRepo string, adminID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, exists := m.projects[orgRepo]; !exists {
 		m.projects[orgRepo] = make(map[string]string)
+		m.meta[orgRepo] = &ProjectMeta{Admins: []string{adminID}}
 	}
 	return nil
-}
+} // stores creator as admin
 func (m *memoryStore) ProjectExists(orgRepo string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -189,6 +221,12 @@ func handleProjectKeys(w http.ResponseWriter, r *http.Request, store Store) {
 		return
 	}
 	if r.Method == http.MethodPut {
+		// Admin check
+		userID := getGitHubIDFromToken(token)
+		if !store.IsProjectAdmin(orgRepo, userID) {
+			http.Error(w, "only project admins may push secrets to this project", http.StatusForbidden)
+			return
+		}
 		// Push keys
 		var secrets map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&secrets); err != nil {
@@ -243,13 +281,28 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request, store Store) {
 		return
 	}
 
-	// TODO: Validate GitHub token and repo access (stub for now)
-	if err := store.CreateProject(req.OrgRepo); err != nil {
+	// Get creator's GitHub ID (stub: in real implementation, extract from token)
+	creatorID := getGitHubIDFromToken(token)
+	if creatorID == "" {
+		http.Error(w, "could not determine creator's GitHub ID", http.StatusUnauthorized)
+		return
+	}
+
+	if err := store.CreateProject(req.OrgRepo, creatorID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
 	fmt.Fprintf(w, "Project %s registered", req.OrgRepo)
+}
+
+// getGitHubIDFromToken is a stub. Replace with real GitHub API call.
+func getGitHubIDFromToken(token string) string {
+	// TODO: implement real logic
+	if token == "" {
+		return ""
+	}
+	return token // for demo/testing, treat token as GitHub ID
 }
 
 // PUT/GET /api/v1/projects/{org}/{repo}/keys-per-user
@@ -269,6 +322,13 @@ func handleProjectKeysPerUser(w http.ResponseWriter, r *http.Request, storeIface
 			return
 		}
 		if r.Method == http.MethodPut {
+			// Admin check
+			token := extractBearerToken(r.Header.Get("Authorization"))
+			userID := getGitHubIDFromToken(token)
+			if !store.IsProjectAdmin(orgRepo, userID) {
+				http.Error(w, "only project admins may share secrets for this project", http.StatusForbidden)
+				return
+			}
 			var payload map[string]map[string]string
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				http.Error(w, "invalid JSON", http.StatusBadRequest)
@@ -299,6 +359,13 @@ func handleProjectKeysPerUser(w http.ResponseWriter, r *http.Request, storeIface
 			return
 		}
 		if r.Method == http.MethodPut {
+			// Admin check
+			token := extractBearerToken(r.Header.Get("Authorization"))
+			userID := getGitHubIDFromToken(token)
+			if !store.IsProjectAdmin(orgRepo, userID) {
+				http.Error(w, "only project admins may share secrets for this project", http.StatusForbidden)
+				return
+			}
 			var payload map[string]map[string]string
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				http.Error(w, "invalid JSON", http.StatusBadRequest)
