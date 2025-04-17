@@ -9,3 +9,4 @@ local
 coverage.out
 coverage.txt
 .esec-keyring
+esec.db

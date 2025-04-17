@@ -28,10 +28,14 @@ type Store interface {
 type memoryStore struct {
 	mu       sync.RWMutex
 	projects map[string]map[string]string // key: org/repo
+	perUser  map[string]map[string]map[string]string // org/repo -> user -> key -> value
 }
 
 func newMemoryStore() *memoryStore {
-	return &memoryStore{projects: make(map[string]map[string]string)}
+	return &memoryStore{
+		projects: make(map[string]map[string]string),
+		perUser:  make(map[string]map[string]map[string]string),
+	}
 }
 
 func (m *memoryStore) CreateProject(orgRepo string) error {
@@ -73,6 +77,43 @@ func (m *memoryStore) SetSecrets(orgRepo string, secrets map[string]string) erro
 	}
 	return nil
 }
+
+// Per-user secrets for in-memory store
+func (m *memoryStore) GetPerUserSecrets(orgRepo string) (map[string]map[string]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	perUser, exists := m.perUser[orgRepo]
+	if !exists {
+		return make(map[string]map[string]string), nil
+	}
+	// Deep copy to avoid race
+	copy := make(map[string]map[string]string, len(perUser))
+	for user, secrets := range perUser {
+		secretsCopy := make(map[string]string, len(secrets))
+		for k, v := range secrets {
+			secretsCopy[k] = v
+		}
+		copy[user] = secretsCopy
+	}
+	return copy, nil
+}
+
+func (m *memoryStore) SetPerUserSecrets(orgRepo string, secrets map[string]map[string]string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Deep copy for safety
+	copy := make(map[string]map[string]string, len(secrets))
+	for user, sec := range secrets {
+		secCopy := make(map[string]string, len(sec))
+		for k, v := range sec {
+			secCopy[k] = v
+		}
+		copy[user] = secCopy
+	}
+	m.perUser[orgRepo] = copy
+	return nil
+}
+
 
 var projectFormat = regexp.MustCompile(`^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$`)
 
@@ -223,9 +264,35 @@ func handleProjectKeysPerUser(w http.ResponseWriter, r *http.Request, storeIface
 
 	switch store := storeIface.(type) {
 	case *memoryStore:
-		// In-memory store does not support per-user secrets, return not implemented
-		http.Error(w, "per-user secrets not supported in memoryStore", http.StatusNotImplemented)
-		return
+		if !store.ProjectExists(orgRepo) {
+			http.Error(w, "project not found", http.StatusNotFound)
+			return
+		}
+		if r.Method == http.MethodPut {
+			var payload map[string]map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, "invalid JSON", http.StatusBadRequest)
+				return
+			}
+			if err := store.SetPerUserSecrets(orgRepo, payload); err != nil {
+				http.Error(w, "failed to store per-user secrets: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		} else if r.Method == http.MethodGet {
+			payload, err := store.GetPerUserSecrets(orgRepo)
+			if err != nil {
+				http.Error(w, "failed to get per-user secrets: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(payload)
+			return
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 	case *store.BoltStore:
 		if !store.ProjectExists(orgRepo) {
 			http.Error(w, "project not found", http.StatusNotFound)
