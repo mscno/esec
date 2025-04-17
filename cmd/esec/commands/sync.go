@@ -9,6 +9,7 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/joho/godotenv"
 	"github.com/mscno/esec/pkg/auth"
+	"github.com/mscno/esec/pkg/dotenv"
 	"github.com/mscno/esec/pkg/project"
 	"github.com/mscno/esec/pkg/sync"
 )
@@ -106,8 +107,7 @@ func (c *SyncPullCmd) Run(_ *kong.Context) error {
 
 	// Read local file to preserve ESEC_ACTIVE_KEY/ESEC_ACTIVE_ENVIRONMENT
 	existing := map[string]string{}
-	activeLines := []string{}
-	privateLines := []string{}
+	lines := map[string]string{}
 	f, err := os.Open(keyringPath)
 	if err == nil {
 		envs, _ := godotenv.Parse(f)
@@ -115,13 +115,16 @@ func (c *SyncPullCmd) Run(_ *kong.Context) error {
 		for k, v := range envs {
 			existing[k] = v
 			if k == "ESEC_ACTIVE_KEY" || k == "ESEC_ACTIVE_ENVIRONMENT" {
-				activeLines = append(activeLines, fmt.Sprintf("%s=%s", k, v))
+				lines[k] = v
+			}
+			if strings.HasPrefix(k, "ESEC_PRIVATE_KEY") {
+				lines[k] = v
 			}
 		}
 	}
 	// If any ESEC_PRIVATE_KEY* keys exist locally, prompt for overwrite
 	overwrite := true
-	for k := range existing {
+	for k := range lines {
 		if strings.HasPrefix(k, "ESEC_PRIVATE_KEY") {
 			var resp string
 			fmt.Printf("Local private key %s exists. Overwrite with server value? [y/N]: ", k)
@@ -138,13 +141,21 @@ func (c *SyncPullCmd) Run(_ *kong.Context) error {
 	}
 	for k, v := range serverKeys {
 		if strings.HasPrefix(k, "ESEC_PRIVATE_KEY") {
-			privateLines = append(privateLines, fmt.Sprintf("%s=%s", k, v))
+			lines[k] = v
 		}
 	}
+
 	// Write new keyring: active keys first, then private keys
-	lines := append(activeLines, privateLines...)
-	content := strings.Join(lines, "\n") + "\n"
-	if err := os.WriteFile(keyringPath, []byte(content), 0600); err != nil {
+
+	// Only keep active and private keys for writing
+	filtered := map[string]string{}
+	for k, v := range lines {
+		if strings.HasPrefix(k, "ESEC_ACTIVE") || strings.HasPrefix(k, "ESEC_PRIVATE_KEY") {
+			filtered[k] = v
+		}
+	}
+	formatted := dotenv.FormatKeyringFile(filtered)
+	if err := os.WriteFile(keyringPath, []byte(formatted), 0600); err != nil {
 		return fmt.Errorf("failed to write %s: %w", keyringPath, err)
 	}
 	fmt.Println("Pulled private keys from server and updated .esec-keyring.")
