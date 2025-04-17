@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 
-
 	"github.com/mscno/esec/pkg/store"
 )
 
@@ -77,6 +76,7 @@ func (m *memoryStore) SetSecrets(orgRepo string, secrets map[string]string) erro
 var projectFormat = regexp.MustCompile(`^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$`)
 
 func main() {
+	// ... existing code ...
 
 	// Choose store implementation
 	var s Store
@@ -113,6 +113,53 @@ func main() {
 	}
 }
 
+func handleProjectKeys(w http.ResponseWriter, r *http.Request, store Store) {
+
+	// Path: /api/v1/projects/{org}/{repo}/keys
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
+	if len(parts) != 3 || parts[2] != "keys" {
+		http.NotFound(w, r)
+		return
+	}
+	orgRepo := parts[0] + "/" + parts[1]
+	token := extractBearerToken(r.Header.Get("Authorization"))
+	if !userHasRepoAccess(token, orgRepo) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if !store.ProjectExists(orgRepo) {
+		http.Error(w, "project not found", http.StatusNotFound)
+		return
+	}
+	if r.Method == http.MethodPut {
+		// Push keys
+		var secrets map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&secrets); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if err := store.SetSecrets(orgRepo, secrets); err != nil {
+			http.Error(w, "failed to store secrets: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	} else if r.Method == http.MethodGet {
+		// Pull keys
+		secrets, err := store.GetSecrets(orgRepo)
+		if err != nil {
+			http.Error(w, "failed to get secrets: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(secrets)
+		return
+	} else {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+}
+
 // POST /api/v1/projects
 func handleCreateProject(w http.ResponseWriter, r *http.Request, store Store) {
 	if r.Method != http.MethodPost {
@@ -139,7 +186,6 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request, store Store) {
 		return
 	}
 
-
 	// TODO: Validate GitHub token and repo access (stub for now)
 	if err := store.CreateProject(req.OrgRepo); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -150,45 +196,45 @@ func handleCreateProject(w http.ResponseWriter, r *http.Request, store Store) {
 }
 
 // PUT/GET /api/v1/projects/{org}/{repo}/keys
-func handleProjectKeys(w http.ResponseWriter, r *http.Request, store Store) {
-	// Path: /api/v1/projects/{org}/{repo}/keys
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) != 7 || parts[1] != "api" || parts[2] != "v1" || parts[3] != "projects" || parts[6] != "keys" {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	org, repo := parts[4], parts[5]
-	orgRepo := org + "/" + repo
-	if err := validateOrgRepo(orgRepo); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+// func handleProjectKeys(w http.ResponseWriter, r *http.Request, store Store) {
+// 	// Path: /api/v1/projects/{org}/{repo}/keys
+// 	parts := strings.Split(r.URL.Path, "/")
+// 	if len(parts) != 7 || parts[1] != "api" || parts[2] != "v1" || parts[3] != "projects" || parts[6] != "keys" {
+// 		http.Error(w, "not found", http.StatusNotFound)
+// 		return
+// 	}
+// 	org, repo := parts[4], parts[5]
+// 	orgRepo := org + "/" + repo
+// 	if err := validateOrgRepo(orgRepo); err != nil {
+// 		http.Error(w, err.Error(), http.StatusBadRequest)
+// 		return
+// 	}
 
-	switch r.Method {
-	case http.MethodPut:
-		var newSecrets map[string]string
-		if err := json.NewDecoder(r.Body).Decode(&newSecrets); err != nil {
-			http.Error(w, "invalid JSON", http.StatusBadRequest)
-			return
-		}
-		if err := store.SetSecrets(orgRepo, newSecrets); err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "Secrets updated for project %s", orgRepo)
-	case http.MethodGet:
-		secrets, err := store.GetSecrets(orgRepo)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(secrets)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
+// 	switch r.Method {
+// 	case http.MethodPut:
+// 		var newSecrets map[string]string
+// 		if err := json.NewDecoder(r.Body).Decode(&newSecrets); err != nil {
+// 			http.Error(w, "invalid JSON", http.StatusBadRequest)
+// 			return
+// 		}
+// 		if err := store.SetSecrets(orgRepo, newSecrets); err != nil {
+// 			http.Error(w, err.Error(), http.StatusNotFound)
+// 			return
+// 		}
+// 		w.WriteHeader(http.StatusOK)
+// 		fmt.Fprintf(w, "Secrets updated for project %s", orgRepo)
+// 	case http.MethodGet:
+// 		secrets, err := store.GetSecrets(orgRepo)
+// 		if err != nil {
+// 			http.Error(w, err.Error(), http.StatusNotFound)
+// 			return
+// 		}
+// 		w.Header().Set("Content-Type", "application/json")
+// 		json.NewEncoder(w).Encode(secrets)
+// 	default:
+// 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+// 	}
+// }
 
 func validateOrgRepo(orgRepo string) error {
 	if !projectFormat.MatchString(orgRepo) {

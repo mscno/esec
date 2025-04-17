@@ -33,6 +33,7 @@ type cli struct {
 	Get      GetCmd           `cmd:"" help:"Decrypt a secret and extract a specific key"`
 	Run      RunCmd           `cmd:"" help:"Decrypt a secret, set environment variables, and run a command"`
 	Auth     AuthCmd          `cmd:"" help:"Authentication commands"`
+	Sync     SyncCmd          `cmd:"" help:"Sync commands"`
 	Projects ProjectsCmd      `cmd:"" help:"Project commands"`
 	Version  kong.VersionFlag `help:"Show version"`
 	Debug    bool             `help:"Enable debug mode"`
