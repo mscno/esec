@@ -11,7 +11,8 @@ import (
 	"sync"
 
 	"github.com/mscno/esec/pkg/store"
-)
+) // unchanged, for clarity
+
 
 // Store interface abstracts project/secret storage
 // (can be swapped for persistent implementations)
@@ -76,6 +77,9 @@ func (m *memoryStore) SetSecrets(orgRepo string, secrets map[string]string) erro
 var projectFormat = regexp.MustCompile(`^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$`)
 
 func main() {
+	// --- User store ---
+	userStore := store.NewMemoryUserStore()
+
 	// ... existing code ...
 
 	// Choose store implementation
@@ -105,6 +109,11 @@ func main() {
 	http.HandleFunc("/api/v1/projects/", withGitHubAuth(func(w http.ResponseWriter, r *http.Request) {
 		handleProjectKeys(w, r, s)
 	}, true)) // Require GitHub token for secret ops
+
+	// --- User registration endpoint ---
+	http.HandleFunc("/api/v1/users/register", func(w http.ResponseWriter, r *http.Request) {
+		handleUserRegister(w, r, userStore)
+	})
 
 	addr := ":8080"
 	log.Printf("Esec Sync Server listening on %s", addr)
@@ -241,6 +250,45 @@ func validateOrgRepo(orgRepo string) error {
 		return fmt.Errorf("invalid project format: must be 'org/repo'")
 	}
 	return nil
+}
+
+// --- User Registration Handler ---
+func handleUserRegister(w http.ResponseWriter, r *http.Request, userStore store.UserStore) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	type reqBody struct {
+		GitHubID  string `json:"github_id"`
+		Username  string `json:"username"`
+		PublicKey string `json:"public_key"`
+	}
+	var req reqBody
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid JSON"))
+		return
+	}
+	if req.GitHubID == "" || req.Username == "" || req.PublicKey == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("missing fields"))
+		return
+	}
+	user := store.User{
+		GitHubID:  req.GitHubID,
+		Username:  req.Username,
+		PublicKey: req.PublicKey,
+	}
+	err := userStore.RegisterUser(user)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("failed to register user"))
+		return
+	}
+	// Always update the public key (idempotent)
+	_ = userStore.UpdateUserPublicKey(req.GitHubID, req.PublicKey)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("user registered"))
 }
 
 // --- GitHub Token Validation Middleware ---

@@ -65,9 +65,10 @@ func (c *AuthGenerateKeypairCmd) Run(_ *kong.Context) error {
 	}
 
 	// 5. Print mnemonic for user, formatted clearly
-	fmt.Println("\n============================================================")
-	fmt.Println("                    YOUR RECOVERY PHRASE")
-	fmt.Println("============================================================")
+	fmt.Print(`
+============================================================
+                    YOUR RECOVERY PHRASE
+============================================================`)
 
 	words := strings.Fields(mnemonic)
 	for i, word := range words {
@@ -78,9 +79,11 @@ func (c *AuthGenerateKeypairCmd) Run(_ *kong.Context) error {
 			fmt.Print(" ")
 		}
 	}
-	fmt.Println("\n============================================================")
-	fmt.Println("Store this phrase securely. It can be used to restore your key on another device.")
-	fmt.Println("============================================================\n")
+	fmt.Print(`
+============================================================
+Store this phrase securely. It can be used to restore your key on another device.
+============================================================
+`)
 
 	return nil
 }

@@ -1,11 +1,13 @@
 package commands
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"github.com/mscno/esec/pkg/auth"
+	"github.com/zalando/go-keyring"
 )
 
 type AuthCmd struct {
@@ -21,6 +23,7 @@ type AuthCmd struct {
 type LoginCmd struct{}
 
 func (c *LoginCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
+	// --- Existing login logic ---
 	if parent.GithubClientID == "" {
 		return fmt.Errorf("GitHub Client ID must be provided via --github-client-id flag or ESEC_GITHUB_CLIENT_ID env var")
 	}
@@ -37,6 +40,68 @@ func (c *LoginCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
 	ctx.Logger.Info("Authentication successful.")
+
+	// --- Register user and public key with server ---
+	token, err := provider.GetToken(ctx)
+	if err != nil || token == "" {
+		ctx.Logger.Error("No authentication token found. Cannot register user.")
+		return nil
+	}
+
+	// Get GitHub user info
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/user", nil)
+	if err != nil {
+		ctx.Logger.Error("Failed to create GitHub API request", "error", err)
+		return nil
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		ctx.Logger.Error("Failed to fetch GitHub user info", "error", err)
+		return nil
+	}
+	defer resp.Body.Close()
+	var ghUser githubUser
+	if err := json.NewDecoder(resp.Body).Decode(&ghUser); err != nil {
+		ctx.Logger.Error("Failed to decode GitHub user info", "error", err)
+		return nil
+	}
+	if ghUser.ID == 0 || ghUser.Login == "" {
+		ctx.Logger.Error("Invalid GitHub user info")
+		return nil
+	}
+
+	// Load public key from keyring
+	pubKey, err := keyring.Get("esec", "public-key")
+	if err != nil {
+		return fmt.Errorf("No public key found in keyring. Please run 'esec auth generate-keypair' before logging in.")
+	}
+
+	// Register with server
+	registerURL := "http://localhost:8080/api/v1/users/register"
+	registerBody := map[string]string{
+		"github_id": fmt.Sprintf("%d", ghUser.ID),
+		"username": ghUser.Login,
+		"public_key": pubKey,
+	}
+	bodyBytes, _ := json.Marshal(registerBody)
+	regReq, err := http.NewRequestWithContext(ctx, "POST", registerURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		ctx.Logger.Error("Failed to create register request", "error", err)
+		return nil
+	}
+	regReq.Header.Set("Content-Type", "application/json")
+	regResp, err := http.DefaultClient.Do(regReq)
+	if err != nil {
+		ctx.Logger.Error("Failed to register user with server", "error", err)
+		return nil
+	}
+	defer regResp.Body.Close()
+	if regResp.StatusCode != 200 {
+		ctx.Logger.Error("Server registration failed", "status", regResp.Status)
+		return nil
+	}
+	ctx.Logger.Info("User and public key registered with server.")
 	return nil
 }
 
