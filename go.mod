@@ -19,6 +19,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/zalando/go-keyring v0.2.6 // indirect
+	go.etcd.io/bbolt v1.3.8 // indirect
 	golang.org/x/oauth2 v0.29.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
 )

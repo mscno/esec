@@ -5,10 +5,12 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
+	"io"
+
 	"github.com/alecthomas/kong"
 	"github.com/mscno/esec"
 	"github.com/mscno/esec/pkg/fileutils"
-	"io"
+
 	"log/slog"
 	"os"
 	"os/exec"
@@ -25,13 +27,15 @@ type cliCtx struct {
 }
 
 type cli struct {
-	Keygen  KeygenCmd        `cmd:"" help:"Generate key"`
-	Encrypt EncryptCmd       `cmd:"" help:"Encrypt a secret"`
-	Decrypt DecryptCmd       `cmd:"" help:"Decrypt a secret"`
-	Get     GetCmd           `cmd:"" help:"Decrypt a secret and extract a specific key"`
-	Run     RunCmd           `cmd:"" help:"Decrypt a secret, set environment variables, and run a command"`
-	Version kong.VersionFlag `help:"Show version"`
-	Debug   bool             `help:"Enable debug mode"`
+	Keygen   KeygenCmd        `cmd:"" help:"Generate key"`
+	Encrypt  EncryptCmd       `cmd:"" help:"Encrypt a secret"`
+	Decrypt  DecryptCmd       `cmd:"" help:"Decrypt a secret"`
+	Get      GetCmd           `cmd:"" help:"Decrypt a secret and extract a specific key"`
+	Run      RunCmd           `cmd:"" help:"Decrypt a secret, set environment variables, and run a command"`
+	Auth     AuthCmd          `cmd:"" help:"Authentication commands"`
+	Projects ProjectsCmd      `cmd:"" help:"Project commands"`
+	Version  kong.VersionFlag `help:"Show version"`
+	Debug    bool             `help:"Enable debug mode"`
 }
 
 func Execute(version string) {
