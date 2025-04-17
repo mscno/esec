@@ -11,9 +11,9 @@ import (
 )
 
 type AuthCmd struct {
-	Login  LoginCmd    `cmd:"" help:"Authenticate with GitHub using device flow."`
-	Logout LogoutCmd   `cmd:"" help:"Remove stored authentication credentials."`
-	Info   AuthInfoCmd `cmd:"" help:"Show info about the currently logged-in user."`
+	Login           LoginCmd               `cmd:"" help:"Authenticate with GitHub using device flow."`
+	Logout          LogoutCmd              `cmd:"" help:"Remove stored authentication credentials."`
+	Info            AuthInfoCmd            `cmd:"" help:"Show info about the currently logged-in user."`
 	GenerateKeypair AuthGenerateKeypairCmd `cmd:"" help:"Generate a new keypair and print a BIP-39 recovery phrase"`
 
 	// Global flags for auth commands
@@ -80,8 +80,8 @@ func (c *LoginCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
 	// Register with server
 	registerURL := "http://localhost:8080/api/v1/users/register"
 	registerBody := map[string]string{
-		"github_id": fmt.Sprintf("%d", ghUser.ID),
-		"username": ghUser.Login,
+		"github_id":  fmt.Sprintf("%d", ghUser.ID),
+		"username":   ghUser.Login,
 		"public_key": pubKey,
 	}
 	bodyBytes, _ := json.Marshal(registerBody)
@@ -102,6 +102,8 @@ func (c *LoginCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
 		return nil
 	}
 	ctx.Logger.Info("User and public key registered with server.")
+
+	// (Key pinning removed: do not pin own key on login)
 	return nil
 }
 
