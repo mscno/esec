@@ -12,6 +12,7 @@ type AuthCmd struct {
 	Login  LoginCmd    `cmd:"" help:"Authenticate with GitHub using device flow."`
 	Logout LogoutCmd   `cmd:"" help:"Remove stored authentication credentials."`
 	Info   AuthInfoCmd `cmd:"" help:"Show info about the currently logged-in user."`
+	GenerateKeypair AuthGenerateKeypairCmd `cmd:"" help:"Generate a new keypair and print a BIP-39 recovery phrase"`
 
 	// Global flags for auth commands
 	GithubClientID string `env:"ESEC_GITHUB_CLIENT_ID" help:"GitHub OAuth App Client ID." short:"c"`

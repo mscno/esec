@@ -21,5 +21,6 @@ require (
 	github.com/danieljoos/wincred v1.2.2 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
+	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
 )
