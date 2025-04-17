@@ -34,6 +34,7 @@ type cli struct {
 	Run      RunCmd           `cmd:"" help:"Decrypt a secret, set environment variables, and run a command"`
 	Auth     AuthCmd          `cmd:"" help:"Authentication commands"`
 	Sync     SyncCmd          `cmd:"" help:"Sync commands"`
+	Share    ShareCmd         `cmd:"" help:"Share a secret key with additional users"`
 	Keys     KeysCmd          `cmd:"" help:"Key management commands"`
 	Projects ProjectsCmd      `cmd:"" help:"Project commands"`
 	Version  kong.VersionFlag `help:"Show version"`

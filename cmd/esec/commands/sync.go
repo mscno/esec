@@ -17,7 +17,7 @@ import (
 	"github.com/mscno/esec/pkg/auth"
 	"github.com/mscno/esec/pkg/crypto"
 	"github.com/mscno/esec/pkg/dotenv"
-	"github.com/mscno/esec/pkg/keys"
+
 	"github.com/mscno/esec/pkg/project"
 	"github.com/mscno/esec/pkg/sync"
 )
@@ -30,7 +30,6 @@ type SyncCmd struct {
 type SyncPushCmd struct {
 	ServerURL string   `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
 	AuthToken string   `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
-	ShareWith []string `help:"Comma-separated GitHub usernames or IDs to share secrets with" name:"share-with" sep:","`
 }
 type SyncPullCmd struct {
 	ServerURL string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
@@ -77,58 +76,7 @@ func (c *SyncPushCmd) Run(_ *kong.Context) error {
 		}
 	}
 
-	// --- Key Sharing: Recipient Key Pinning and Verification ---
-	trustedRecipients := map[string]string{} // github_id -> public_key
-	if len(c.ShareWith) > 0 {
-		for _, user := range c.ShareWith {
-			fmt.Printf("Fetching public key for %s...\n", user)
-			pubKey, githubID, username, err := client.GetUserPublicKey(context.Background(), user)
-			if err != nil {
-				fmt.Printf("Could not fetch key for %s: %v. Skipping.\n", user, err)
-				continue
-			}
-			kk, _ := keys.LoadKnownKeys()
-			changed, old := kk.PinKey(githubID, username, pubKey)
-			if changed {
-				if old.PublicKey != "" {
-					fmt.Printf("\nWARNING: Public key for %s (id: %s) has changed!\nOld fingerprint: %s\nNew fingerprint: %s\nWord phrase: %s\n",
-						username, githubID, old.Fingerprint, keys.Fingerprint(pubKey), keys.FingerprintWords(pubKey))
-					fmt.Print("Do you want to trust this new key? (y/N): ")
-					var resp string
-					fmt.Scanln(&resp)
-					if len(resp) == 0 || (resp[0] != 'y' && resp[0] != 'Y') {
-						fmt.Printf("Skipping sharing to %s\n", username)
-						continue
-					}
-				}
-				_ = keys.SaveKnownKeys(kk)
-				fmt.Printf("\nPinned public key for %s (%s).\nFingerprint: %s\nWord phrase: %s\nShare this with the user for verification.\n",
-					username, githubID, keys.Fingerprint(pubKey), keys.FingerprintWords(pubKey))
-			}
-			trustedRecipients[githubID] = pubKey
-		}
-	} else {
-		fmt.Println("No recipients specified with --share-with; will only encrypt for yourself.")
-		// Add self as recipient
-		myGitHubID, err := getGitHubIDFromToken(c.AuthToken)
-		if err != nil {
-			return fmt.Errorf("could not determine your GitHub ID: %w", err)
-		}
-		pubHex, pubErr := keyring.Get("esec", "public-key")
-		if pubErr != nil {
-			return fmt.Errorf("could not find your public key in the OS keyring. Please run 'esec auth generate-keypair' first.")
-		}
-		// Validate public key format
-		pubBytes, err := hex.DecodeString(pubHex)
-		if err != nil || len(pubBytes) != 32 {
-			return fmt.Errorf("invalid public key format in keyring")
-		}
-		trustedRecipients[myGitHubID] = pubHex
-	}
-
-	// --- Encryption logic ---
-	// Encrypt each private key for each trusted recipient using NaCl box (pkg/crypto)
-	var myKeypair *crypto.Keypair
+	// --- Recipient logic: fetch from server, fallback to self ---
 	// Load sender keypair from OS keyring
 	privHex, privErr := keyring.Get("esec", "private-key")
 	pubHex, pubErr := keyring.Get("esec", "public-key")
@@ -146,10 +94,27 @@ func (c *SyncPushCmd) Run(_ *kong.Context) error {
 	var privArr, pubArr [32]byte
 	copy(privArr[:], privBytes)
 	copy(pubArr[:], pubBytes)
-	myKeypair = &crypto.Keypair{Private: privArr, Public: pubArr}
+	myKeypair := &crypto.Keypair{Private: privArr, Public: pubArr}
+
+	getSelf := func() (myGitHubID, pubHex string, err error) {
+		myGitHubID, err = getGitHubIDFromToken(c.AuthToken)
+		if err != nil {
+			return "", "", fmt.Errorf("could not determine your GitHub ID: %w", err)
+		}
+		pubHex, pubErr := keyring.Get("esec", "public-key")
+		if pubErr != nil {
+			return "", "", fmt.Errorf("could not find your public key in the OS keyring. Please run 'esec auth generate-keypair' first.")
+		}
+		return myGitHubID, pubHex, nil
+	}
+
+	// Fetch current recipients from server
+	perUserPayloadServer, err := client.PullKeysPerUser(context.Background(), orgRepo)
+	if err != nil {
+		perUserPayloadServer = map[string]map[string]string{} // fallback to empty
+	}
 
 	EncryptForRecipient := func(pubKey, plaintext string) (string, error) {
-		// Parse recipient public key (expect hex-encoded 32 bytes)
 		pubBytes, err := hex.DecodeString(pubKey)
 		if err != nil || len(pubBytes) != 32 {
 			return "", fmt.Errorf("invalid recipient public key: %v", err)
@@ -164,11 +129,34 @@ func (c *SyncPushCmd) Run(_ *kong.Context) error {
 		return base64.StdEncoding.EncodeToString(ciphertext), nil
 	}
 
-	// Prepare nested map: secret_key -> github_id -> encrypted_blob
 	perUserPayload := map[string]map[string]string{}
+	myGitHubID, myPubHex, err := getSelf()
+	if err != nil {
+		return err
+	}
 	for keyName, secret := range privateKeys {
+		recipients := map[string]string{} // githubID -> pubKey
+		if blobs, ok := perUserPayloadServer[keyName]; ok && len(blobs) > 0 {
+			// Use existing recipient list from server
+			for githubID := range blobs {
+				// Fetch public key for recipient
+				if githubID == myGitHubID {
+					recipients[githubID] = myPubHex
+					continue
+				}
+				pubKey, gid, _, err := client.GetUserPublicKey(context.Background(), githubID)
+				if err != nil || gid == "" {
+					fmt.Printf("Warning: could not fetch public key for recipient %s: %v. Skipping.\n", githubID, err)
+					continue
+				}
+				recipients[githubID] = pubKey
+			}
+		} else {
+			// Only self
+			recipients[myGitHubID] = myPubHex
+		}
 		perUserPayload[keyName] = map[string]string{}
-		for githubID, pubKey := range trustedRecipients {
+		for githubID, pubKey := range recipients {
 			encrypted, err := EncryptForRecipient(pubKey, secret)
 			if err != nil {
 				fmt.Printf("Encryption failed for %s/%s: %v\n", keyName, githubID, err)
