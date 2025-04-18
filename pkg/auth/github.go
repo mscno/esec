@@ -46,7 +46,7 @@ func (p *GithubProvider) Login(ctx context.Context) error {
 	fmt.Printf("Please visit %s and enter the code: %s\n", deviceCode.VerificationURI, deviceCode.UserCode)
 
 	// Poll for the token
-token, err := oauthConfig.DeviceAccessToken(ctx, deviceCode)
+	token, err := oauthConfig.DeviceAccessToken(ctx, deviceCode)
 	if err != nil {
 		return fmt.Errorf("failed to get access token: %w", err)
 	}

@@ -12,6 +12,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad h1:Qk76DOWdOp+GlyDKBAG3Klr9cn7N+LcYc82AZ2S7+cA=
 github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad/go.mod h1:mPKfmRa823oBIgl2r20LeMSpTAteW5j7FLkc0vjmzyQ=
+github.com/go-michi/michi v0.0.1 h1:n0+8HVYljEZapyRZ2pfFo8GTQiiEPmGuJOfuBtmIFMQ=
+github.com/go-michi/michi v0.0.1/go.mod h1:zRfxdffGAlNXjp6ZXH9NR/T9WHlhRczkM5QHdyjC6xM=
 github.com/godbus/dbus/v5 v5.1.0 h1:4KLkAxT3aOY8Li4FRJe/KvhoNFFxo0m6fNuFUO8QJUk=
 github.com/godbus/dbus/v5 v5.1.0/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
 github.com/google/go-cmp v0.5.9 h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=

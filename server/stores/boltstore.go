@@ -53,12 +53,18 @@ func (b *BoltStore) CreateProject(orgRepo string, adminID string) error {
 		bucket := tx.Bucket([]byte(bucketName))
 		metaB := tx.Bucket([]byte(metaBucket))
 		if bucket.Get([]byte(orgRepo)) == nil {
-			empty, _ := json.Marshal(map[string]string{})
+			empty, err := json.Marshal(map[string]string{})
+			if err != nil {
+				return err
+			}
 			if err := bucket.Put([]byte(orgRepo), empty); err != nil {
 				return err
 			}
 			meta := ProjectMeta{Admins: []string{adminID}}
-			metaBytes, _ := json.Marshal(meta)
+			metaBytes, err := json.Marshal(meta)
+			if err != nil {
+				return err
+			}
 			return metaB.Put([]byte(orgRepo), metaBytes)
 		}
 		return nil
@@ -73,7 +79,10 @@ func (b *BoltStore) GetProjectAdmins(orgRepo string) ([]string, error) {
 		if val == nil {
 			return fmt.Errorf("project not found")
 		}
-		return json.Unmarshal(val, &meta)
+		if err := json.Unmarshal(val, &meta); err != nil {
+			return err
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err

@@ -2,10 +2,25 @@ package server
 
 import (
 	"log"
+	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
+
+// PanicRecoveryMiddleware recovers from panics and returns HTTP 500
+func PanicRecoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Printf("panic: %v", err)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
 
 // LoggingMiddleware logs incoming HTTP requests with method, path, status, and duration
 func LoggingMiddleware(next http.Handler) http.Handler {
@@ -16,6 +31,33 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 		duration := time.Since(start)
 		log.Printf("%s %s %d %s", r.Method, r.URL.Path, rw.status, duration)
 	})
+}
+
+// --- Simple in-memory cache for GitHub token validation and repo access ---
+type cacheEntry struct {
+	value     bool
+	expiresAt time.Time
+}
+
+var (
+	cacheMu       sync.Mutex
+	validateCache = make(map[string]cacheEntry) // key: token or token+repo
+)
+
+func cacheGet(key string) (bool, bool) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	entry, ok := validateCache[key]
+	if !ok || time.Now().After(entry.expiresAt) {
+		return false, false
+	}
+	return entry.value, true
+}
+
+func cacheSet(key string, value bool, ttl time.Duration) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	validateCache[key] = cacheEntry{value: value, expiresAt: time.Now().Add(ttl)}
 }
 
 type responseWriter struct {
@@ -61,6 +103,10 @@ func userHasRepoAccess(token, orgRepo string) bool {
 	if token == "" || orgRepo == "" {
 		return false
 	}
+	cacheKey := token + "|repo|" + orgRepo
+	if val, ok := cacheGet(cacheKey); ok {
+		return val
+	}
 	githubAPIURL := "https://api.github.com/repos/" + orgRepo
 	req, err := http.NewRequest("GET", githubAPIURL, nil)
 	if err != nil {
@@ -72,25 +118,24 @@ func userHasRepoAccess(token, orgRepo string) bool {
 		return false
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	allowed := resp.StatusCode == http.StatusOK
+	cacheSet(cacheKey, allowed, 5*time.Minute)
+	return allowed
 }
 
 // Real implementation: call GitHub API to validate token
 func validateGitHubToken(token string) bool {
+	slog.Info("validating GitHub token", "token", token)
 	if token == "" {
 		return false
 	}
-	// Make a request to GitHub API (user endpoint)
-	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
-	if err != nil {
-		return false
+	cacheKey := token + "|validate"
+	if val, ok := cacheGet(cacheKey); ok {
+		return val
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	return resp.StatusCode == 200
+	login, _, err := getUserInfo(token)
+	valid := err == nil && login != ""
+	slog.Info("validation result", "valid", valid, "login", login, "error", err)
+	cacheSet(cacheKey, valid, 5*time.Minute)
+	return valid
 }

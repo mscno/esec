@@ -3,8 +3,8 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/mscno/esec/server/stores"
 )
@@ -12,24 +12,46 @@ import (
 type Handler struct {
 	Store     stores.Store
 	userStore stores.UserStore
+	logger    *slog.Logger
 }
 
 func NewHandler(store stores.Store, userStore stores.UserStore) *Handler {
-	return &Handler{Store: store, userStore: userStore}
+	return &Handler{Store: store, userStore: userStore, logger: slog.Default()}
 }
 
 // ProjectKeysPerUser handles PUT/GET /api/v1/projects/{org}/{repo}/keys-per-user
 func (h *Handler) ProjectKeysPerUser(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/projects/"), "/")
-	if len(parts) != 3 || parts[2] != "keys-per-user" {
+	// Use Go 1.23 ServeMux path variables
+	org := r.PathValue("org")
+	repo := r.PathValue("repo")
+	// expects org/repo
+	if org == "" || repo == "" {
 		http.NotFound(w, r)
 		return
 	}
-	orgRepo := parts[0] + "/" + parts[1]
+	orgRepo := org + "/" + repo
+	if err := validateOrgRepo(orgRepo); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-	if r.Method == http.MethodPut {
+	if !h.Store.ProjectExists(orgRepo) {
+		h.logger.Error("project does not exist or you do not have access", "orgRepo", orgRepo)
+		http.Error(w, "project does not exist or you do not have access", http.StatusNotFound)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPut:
 		token := extractBearerToken(r.Header.Get("Authorization"))
-		userID := getGitHubIDFromToken(token)
+		h.logger.Info("extracted token", "token", token)
+		userID, err := getGitHubIDFromToken(token)
+		if err != nil {
+			h.logger.Error("failed to get GitHub ID from token", "error", err)
+			http.Error(w, "invalid GitHub token", http.StatusUnauthorized)
+			return
+		}
+		h.logger.Info("extracted userID", "userID", userID)
 		if !h.Store.IsProjectAdmin(orgRepo, userID) {
 			http.Error(w, "only project admins may share secrets for this project", http.StatusForbidden)
 			return
@@ -39,20 +61,14 @@ func (h *Handler) ProjectKeysPerUser(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid JSON", http.StatusBadRequest)
 			return
 		}
-		// Assume MemoryStore or BoltStore both implement SetPerUserSecrets
-		if err := h.Store.(interface {
-			SetPerUserSecrets(string, map[string]map[string]string) error
-		}).SetPerUserSecrets(orgRepo, payload); err != nil {
+		if err := h.Store.SetPerUserSecrets(orgRepo, payload); err != nil {
 			http.Error(w, "failed to store per-user secrets: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
 		return
-	} else if r.Method == http.MethodGet {
-		// Assume MemoryStore or BoltStore both implement GetPerUserSecrets
-		payload, err := h.Store.(interface {
-			GetPerUserSecrets(string) (map[string]map[string]string, error)
-		}).GetPerUserSecrets(orgRepo)
+	case http.MethodGet:
+		payload, err := h.Store.GetPerUserSecrets(orgRepo)
 		if err != nil {
 			http.Error(w, "failed to get per-user secrets: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -60,7 +76,7 @@ func (h *Handler) ProjectKeysPerUser(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(payload)
 		return
-	} else {
+	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -89,8 +105,14 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("access to %s denied", req.OrgRepo), http.StatusForbidden)
 		return
 	}
-	creatorID := getGitHubIDFromToken(token)
+	creatorID, err := getGitHubIDFromToken(token)
+	if err != nil {
+		h.logger.Error("failed to get GitHub ID from token", "error", err)
+		http.Error(w, "invalid GitHub token", http.StatusUnauthorized)
+		return
+	}
 	if creatorID == "" {
+		h.logger.Error("could not determine creator's GitHub ID", "error", err)
 		http.Error(w, "could not determine creator's GitHub ID", http.StatusUnauthorized)
 		return
 	}
@@ -148,9 +170,28 @@ func (h *Handler) HandleUserRegister(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("user registered"))
 }
 
-func getGitHubIDFromToken(token string) string {
-	if token == "" {
-		return ""
+func getGitHubIDFromToken(token string) (string, error) {
+	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+	if err != nil {
+		return "", err
 	}
-	return token // stub for demo
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+	var user struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return "", err
+	}
+	if user.ID == 0 {
+		return "", fmt.Errorf("GitHub user id not found in response")
+	}
+	return fmt.Sprintf("%d", user.ID), nil
 }

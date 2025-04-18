@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/go-michi/michi"
 	"github.com/mscno/esec/server"
 	"github.com/mscno/esec/server/stores"
 )
@@ -35,19 +36,20 @@ func main() {
 
 	h := server.NewHandler(s, userStore)
 
-	mux := http.NewServeMux()
+	mux := michi.NewRouter()
 
+	mux.Use(server.PanicRecoveryMiddleware, server.LoggingMiddleware)
 	// Project creation (POST)
-	mux.Handle("POST /api/v1/projects", server.LoggingMiddleware(server.WithGitHubAuth(http.HandlerFunc(h.CreateProject), true)))
+	mux.Handle("POST /api/v1/projects", server.WithGitHubAuth(http.HandlerFunc(h.CreateProject), true))
 
 	// Project keys-per-user (PUT)
-	mux.Handle("PUT /api/v1/projects/{project}/keys-per-user", server.LoggingMiddleware(server.WithGitHubAuth(http.HandlerFunc(h.ProjectKeysPerUser), true)))
+	mux.Handle("PUT /api/v1/projects/{org}/{repo}/keys-per-user", server.WithGitHubAuth(http.HandlerFunc(h.ProjectKeysPerUser), true))
 
 	// Project keys-per-user (GET)
-	mux.Handle("GET /api/v1/projects/{project}/keys-per-user", server.LoggingMiddleware(server.WithGitHubAuth(http.HandlerFunc(h.ProjectKeysPerUser), true)))
+	mux.Handle("GET /api/v1/projects/{org}/{repo}/keys-per-user", server.WithGitHubAuth(http.HandlerFunc(h.ProjectKeysPerUser), true))
 
 	// User registration (POST)
-	mux.Handle("POST /api/v1/users/register", server.LoggingMiddleware(http.HandlerFunc(h.HandleUserRegister)))
+	mux.Handle("POST /api/v1/users/register", server.WithGitHubAuth(http.HandlerFunc(h.HandleUserRegister), false))
 
 	addr := ":8080"
 	log.Printf("Esec Sync Server listening on %s", addr)

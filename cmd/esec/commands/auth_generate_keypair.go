@@ -68,7 +68,9 @@ func (c *AuthGenerateKeypairCmd) Run(_ *kong.Context) error {
 	fmt.Print(`
 ============================================================
                     YOUR RECOVERY PHRASE
-============================================================`)
+============================================================
+
+`)
 
 	words := strings.Fields(mnemonic)
 	for i, word := range words {

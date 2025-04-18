@@ -28,8 +28,8 @@ type SyncCmd struct {
 }
 
 type SyncPushCmd struct {
-	ServerURL string   `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
-	AuthToken string   `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
+	ServerURL string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
+	AuthToken string `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
 }
 type SyncPullCmd struct {
 	ServerURL string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
@@ -289,6 +289,15 @@ func (c *SyncPullCmd) Run(_ *kong.Context) error {
 	}
 	// Overwrite/add fetched keys
 	for k, v := range newKeyring {
+		if existing, ok := merged[k]; ok && existing != v {
+			fmt.Printf("Key %s already exists in %s with value: %s, overwrite with: %s? (y/N): ", k, keyringPath, existing, v)
+			var confirm string
+			fmt.Scanf("%s", &confirm)
+			if strings.ToLower(confirm) != "y" {
+				fmt.Printf("Skipping key %s.\n", k)
+				continue
+			}
+		}
 		merged[k] = v
 	}
 	// Write merged map using dotenv.FormatKeyringFile for proper formatting

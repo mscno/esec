@@ -85,3 +85,41 @@ func (m *MemoryStore) IsProjectAdmin(orgRepo string, githubID string) bool {
 	}
 	return false
 }
+
+// GetPerUserSecrets returns the per-user secrets for a project
+func (m *MemoryStore) GetPerUserSecrets(orgRepo string) (map[string]map[string]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	secrets, exists := m.perUser[orgRepo]
+	if !exists {
+		return nil, fmt.Errorf("project not found")
+	}
+	copy := make(map[string]map[string]string, len(secrets))
+	for user, kv := range secrets {
+		userCopy := make(map[string]string, len(kv))
+		for k, v := range kv {
+			userCopy[k] = v
+		}
+		copy[user] = userCopy
+	}
+	return copy, nil
+}
+
+// SetPerUserSecrets sets the per-user secrets for a project
+func (m *MemoryStore) SetPerUserSecrets(orgRepo string, secrets map[string]map[string]string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.projects[orgRepo]; !exists {
+		return fmt.Errorf("project not found")
+	}
+	perUserCopy := make(map[string]map[string]string, len(secrets))
+	for user, kv := range secrets {
+		userCopy := make(map[string]string, len(kv))
+		for k, v := range kv {
+			userCopy[k] = v
+		}
+		perUserCopy[user] = userCopy
+	}
+	m.perUser[orgRepo] = perUserCopy
+	return nil
+}
