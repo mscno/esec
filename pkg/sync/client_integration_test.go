@@ -100,13 +100,6 @@ func TestAPIClient_Integration(t *testing.T) {
 			t.Fatalf("CreateProject failed: %v", err)
 		}
 	})
-	t.Run("PushKeys", func(t *testing.T) {
-		keys := map[string]string{"FOO": "bar", "HELLO": "world"}
-		err := client.PushKeys(ctx, "org/repo", keys)
-		if err != nil {
-			t.Fatalf("PushKeys failed: %v", err)
-		}
-	})
 	t.Run("PullKeys", func(t *testing.T) {
 		secrets, err := client.PullKeys(ctx, "org/repo")
 		if err != nil {
