@@ -100,7 +100,23 @@ func TestAPIClient_Integration(t *testing.T) {
 			t.Fatalf("CreateProject failed: %v", err)
 		}
 	})
-	t.Run("PullKeys", func(t *testing.T) {
+	// Manually set project secrets in the mock server before pulling
+	req, err := http.NewRequestWithContext(ctx, "PUT", ts.URL+"/api/v1/projects/org/repo/keys", strings.NewReader(`{"FOO":"bar","HELLO":"world"}`))
+	if err != nil {
+		t.Fatalf("failed to create PUT request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+mockToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("failed to PUT secrets: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status from PUT secrets: %d", resp.StatusCode)
+	}
+
+t.Run("PullKeys", func(t *testing.T) {
 		secrets, err := client.PullKeys(ctx, "org/repo")
 		if err != nil {
 			t.Fatalf("PullKeys failed: %v", err)

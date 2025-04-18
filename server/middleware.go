@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"log"
 	"log/slog"
 	"net/http"
@@ -35,7 +36,8 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 
 // --- Simple in-memory cache for GitHub token validation and repo access ---
 type cacheEntry struct {
-	value     bool
+	user      githubUser
+	valid     bool
 	expiresAt time.Time
 }
 
@@ -44,20 +46,20 @@ var (
 	validateCache = make(map[string]cacheEntry) // key: token or token+repo
 )
 
-func cacheGet(key string) (bool, bool) {
+func cacheGet(key string) (githubUser, bool) {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
 	entry, ok := validateCache[key]
 	if !ok || time.Now().After(entry.expiresAt) {
-		return false, false
+		return githubUser{}, false
 	}
-	return entry.value, true
+	return entry.user, entry.valid
 }
 
-func cacheSet(key string, value bool, ttl time.Duration) {
+func cacheSet(key string, user githubUser, valid bool, ttl time.Duration) {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-	validateCache[key] = cacheEntry{value: value, expiresAt: time.Now().Add(ttl)}
+	validateCache[key] = cacheEntry{user: user, valid: valid, expiresAt: time.Now().Add(ttl)}
 }
 
 type responseWriter struct {
@@ -74,7 +76,9 @@ func (rw *responseWriter) WriteHeader(code int) {
 
 // withGitHubAuth wraps handlers with GitHub Bearer token validation.
 // If requireToken is true, rejects if token is missing or invalid.
-func WithGitHubAuth(next http.HandlerFunc, requireToken bool) http.HandlerFunc {
+type TokenValidator func(token string) (githubUser, bool)
+
+func WithGitHubAuth(next http.HandlerFunc, requireToken bool, validate TokenValidator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := extractBearerToken(r.Header.Get("Authorization"))
 		if requireToken {
@@ -82,12 +86,16 @@ func WithGitHubAuth(next http.HandlerFunc, requireToken bool) http.HandlerFunc {
 				http.Error(w, "missing or invalid Authorization header", http.StatusUnauthorized)
 				return
 			}
-			if !validateGitHubToken(token) {
+			user, valid := validate(token)
+			if !valid {
 				http.Error(w, "invalid GitHub token", http.StatusUnauthorized)
 				return
 			}
+			ctx := context.WithValue(r.Context(), "user", user)
+			next(w, r.WithContext(ctx))
+		} else {
+			next(w, r)
 		}
-		next(w, r)
 	}
 }
 
@@ -103,10 +111,7 @@ func userHasRepoAccess(token, orgRepo string) bool {
 	if token == "" || orgRepo == "" {
 		return false
 	}
-	cacheKey := token + "|repo|" + orgRepo
-	if val, ok := cacheGet(cacheKey); ok {
-		return val
-	}
+
 	githubAPIURL := "https://api.github.com/repos/" + orgRepo
 	req, err := http.NewRequest("GET", githubAPIURL, nil)
 	if err != nil {
@@ -119,23 +124,28 @@ func userHasRepoAccess(token, orgRepo string) bool {
 	}
 	defer resp.Body.Close()
 	allowed := resp.StatusCode == http.StatusOK
-	cacheSet(cacheKey, allowed, 5*time.Minute)
 	return allowed
 }
 
+type githubUser struct {
+	Login string `json:"login"`
+	ID    int    `json:"id"`
+}
+
 // Real implementation: call GitHub API to validate token
-func validateGitHubToken(token string) bool {
+func ValidateGitHubToken(token string) (githubUser, bool) {
 	slog.Info("validating GitHub token", "token", token)
 	if token == "" {
-		return false
+		return githubUser{}, false
 	}
 	cacheKey := token + "|validate"
-	if val, ok := cacheGet(cacheKey); ok {
-		return val
+	if user, valid := cacheGet(cacheKey); valid {
+		return user, true
 	}
-	login, _, err := getUserInfo(token)
+	login, id, err := getUserInfo(token)
 	valid := err == nil && login != ""
 	slog.Info("validation result", "valid", valid, "login", login, "error", err)
-	cacheSet(cacheKey, valid, 5*time.Minute)
-	return valid
+	user := githubUser{Login: login, ID: id}
+	cacheSet(cacheKey, user, valid, 5*time.Minute)
+	return user, valid
 }

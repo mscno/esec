@@ -43,16 +43,13 @@ func (h *Handler) ProjectKeysPerUser(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodPut:
-		token := extractBearerToken(r.Header.Get("Authorization"))
-		h.logger.Info("extracted token", "token", token)
-		userID, err := getGitHubIDFromToken(token)
-		if err != nil {
-			h.logger.Error("failed to get GitHub ID from token", "error", err)
-			http.Error(w, "invalid GitHub token", http.StatusUnauthorized)
+		user, ok := r.Context().Value("user").(githubUser)
+		if !ok {
+			http.Error(w, "user info missing from context", http.StatusUnauthorized)
 			return
 		}
-		h.logger.Info("extracted userID", "userID", userID)
-		if !h.Store.IsProjectAdmin(orgRepo, userID) {
+		h.logger.Info("extracted userID", "userID", user.ID)
+		if !h.Store.IsProjectAdmin(orgRepo, fmt.Sprintf("%d", user.ID)) {
 			http.Error(w, "only project admins may share secrets for this project", http.StatusForbidden)
 			return
 		}
@@ -100,19 +97,18 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	token := extractBearerToken(r.Header.Get("Authorization"))
-	if !userHasRepoAccess(token, req.OrgRepo) {
+	user, ok := r.Context().Value("user").(githubUser)
+	if !ok {
+		http.Error(w, "user info missing from context", http.StatusUnauthorized)
+		return
+	}
+	if !userHasRepoAccess(extractBearerToken(r.Header.Get("Authorization")), req.OrgRepo) {
 		http.Error(w, fmt.Sprintf("access to %s denied", req.OrgRepo), http.StatusForbidden)
 		return
 	}
-	creatorID, err := getGitHubIDFromToken(token)
-	if err != nil {
-		h.logger.Error("failed to get GitHub ID from token", "error", err)
-		http.Error(w, "invalid GitHub token", http.StatusUnauthorized)
-		return
-	}
-	if creatorID == "" {
-		h.logger.Error("could not determine creator's GitHub ID", "error", err)
+	creatorID := fmt.Sprintf("%d", user.ID)
+	if creatorID == "" || creatorID == "0" {
+		h.logger.Error("could not determine creator's GitHub ID")
 		http.Error(w, "could not determine creator's GitHub ID", http.StatusUnauthorized)
 		return
 	}
@@ -136,17 +132,13 @@ func (h *Handler) HandleUserRegister(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("missing or invalid Authorization header"))
 		return
 	}
-	username, githubID, err := getUserInfo(token)
-	if err != nil {
+	ghuser, valid := ValidateGitHubToken(token)
+	if !valid {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(err.Error()))
+		w.Write([]byte("invalid GitHub token"))
 		return
 	}
-	if username == "" || githubID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("missing fields"))
-		return
-	}
+
 	var publicKey string
 	if err := json.NewDecoder(r.Body).Decode(&publicKey); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -154,44 +146,18 @@ func (h *Handler) HandleUserRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := stores.User{
-		GitHubID:  githubID,
-		Username:  username,
+		GitHubID:  fmt.Sprintf("%d", ghuser.ID),
+		Username:  ghuser.Login,
 		PublicKey: publicKey,
 	}
-	err = h.userStore.RegisterUser(user)
+	err := h.userStore.RegisterUser(user)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("failed to register user"))
 		return
 	}
 	// Always update the public key (idempotent)
-	_ = h.userStore.UpdateUserPublicKey(githubID, publicKey)
+	_ = h.userStore.UpdateUserPublicKey(fmt.Sprintf("%d", ghuser.ID), publicKey)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("user registered"))
-}
-
-func getGitHubIDFromToken(token string) (string, error) {
-	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-	var user struct {
-		ID int64 `json:"id"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
-		return "", err
-	}
-	if user.ID == 0 {
-		return "", fmt.Errorf("GitHub user id not found in response")
-	}
-	return fmt.Sprintf("%d", user.ID), nil
 }

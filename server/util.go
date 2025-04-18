@@ -17,26 +17,26 @@ func validateOrgRepo(orgRepo string) error {
 	return nil
 }
 
-func getUserInfo(token string) (string, string, error) {
+func getUserInfo(token string) (string, int, error) {
 	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
 	if err != nil {
-		return "", "", err
+		return "", 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", "", err
+		return "", 0, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return "", "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		return "", 0, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
 	var user struct {
 		Login string `json:"login"`
 		ID    int    `json:"id"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
-		return "", "", err
+		return "", 0, err
 	}
-	return user.Login, fmt.Sprintf("%d", user.ID), nil
+	return user.Login, user.ID, nil
 }

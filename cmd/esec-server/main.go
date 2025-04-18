@@ -40,16 +40,16 @@ func main() {
 
 	mux.Use(server.PanicRecoveryMiddleware, server.LoggingMiddleware)
 	// Project creation (POST)
-	mux.Handle("POST /api/v1/projects", server.WithGitHubAuth(http.HandlerFunc(h.CreateProject), true))
+	mux.Handle("POST /api/v1/projects", server.WithGitHubAuth(http.HandlerFunc(h.CreateProject), true, server.ValidateGitHubToken))
 
 	// Project keys-per-user (PUT)
-	mux.Handle("PUT /api/v1/projects/{org}/{repo}/keys-per-user", server.WithGitHubAuth(http.HandlerFunc(h.ProjectKeysPerUser), true))
+	mux.Handle("PUT /api/v1/projects/{org}/{repo}/keys-per-user", server.WithGitHubAuth(http.HandlerFunc(h.ProjectKeysPerUser), true, server.ValidateGitHubToken))
 
 	// Project keys-per-user (GET)
-	mux.Handle("GET /api/v1/projects/{org}/{repo}/keys-per-user", server.WithGitHubAuth(http.HandlerFunc(h.ProjectKeysPerUser), true))
+	mux.Handle("GET /api/v1/projects/{org}/{repo}/keys-per-user", server.WithGitHubAuth(http.HandlerFunc(h.ProjectKeysPerUser), true, server.ValidateGitHubToken))
 
 	// User registration (POST)
-	mux.Handle("POST /api/v1/users/register", server.WithGitHubAuth(http.HandlerFunc(h.HandleUserRegister), false))
+	mux.Handle("POST /api/v1/users/register", server.WithGitHubAuth(http.HandlerFunc(h.HandleUserRegister), false, server.ValidateGitHubToken))
 
 	addr := ":8080"
 	log.Printf("Esec Sync Server listening on %s", addr)
