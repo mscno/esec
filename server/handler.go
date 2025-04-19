@@ -67,7 +67,11 @@ func (h *Handler) ProjectKeysPerUser(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		payload, err := h.Store.GetPerUserSecrets(orgRepo)
 		if err != nil {
-			http.Error(w, "failed to get per-user secrets: "+err.Error(), http.StatusInternalServerError)
+			if err.Error() == "project does not exist" {
+				http.Error(w, "project does not exist", http.StatusNotFound)
+			} else {
+				http.Error(w, "failed to get per-user secrets: "+err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
