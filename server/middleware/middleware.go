@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -17,7 +18,15 @@ func PanicRecoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Printf("panic: %v", err)
+				slog.Error("recovered from panic", "error", err)
+				fmt.Printf("panic: %v\n", err)
+				for i := 1; ; i++ {
+					_, file, line, ok := runtime.Caller(i)
+					if !ok {
+						break
+					}
+					fmt.Printf("%s:%d\n", file, line)
+				}
 				http.Error(w, "internal server error", http.StatusInternalServerError)
 			}
 		}()
@@ -80,10 +89,10 @@ func (rw *responseWriter) WriteHeader(code int) {
 // If requireToken is true, rejects if token is missing or invalid.
 type TokenValidator func(token string) (GithubUser, bool)
 
-func WithGitHubAuth(next http.HandlerFunc, requireToken bool, validate TokenValidator) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		token := ExtractBearerToken(r.Header.Get("Authorization"))
-		if requireToken {
+func WithGitHubAuth(validate TokenValidator) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token := ExtractBearerToken(r.Header.Get("Authorization"))
 			if token == "" {
 				http.Error(w, "missing or invalid Authorization header", http.StatusUnauthorized)
 				return
@@ -94,10 +103,8 @@ func WithGitHubAuth(next http.HandlerFunc, requireToken bool, validate TokenVali
 				return
 			}
 			ctx := context.WithValue(r.Context(), "user", user)
-			next(w, r.WithContext(ctx))
-		} else {
-			next(w, r)
-		}
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
 	}
 }
 

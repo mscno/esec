@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/mscno/esec/server/middleware"
+	"github.com/mscno/esec/server/stores"
 	"log/slog"
 	"net/http"
-	"os"
-
-	"github.com/mscno/esec/server/stores"
 )
 
 type UserHasRoleInRepoFunc func(token, orgRepo, role string) bool
@@ -22,7 +20,7 @@ type Handler struct {
 
 func NewHandler(store stores.Store, userStore stores.UserStore, userHasRoleInRepo UserHasRoleInRepoFunc) *Handler {
 	if userHasRoleInRepo == nil {
-		userHasRoleInRepo = userHasRoleInRepo
+		userHasRoleInRepo = defaultUserHasRoleInRepo
 	}
 	return &Handler{
 		Store:             store,
@@ -142,22 +140,34 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 }
 
 // userHasRoleInRepo checks if the given GitHub token has a role in the given org/repo.
-func userHasRoleInRepo(token, orgRepo string, role string) bool {
+func defaultUserHasRoleInRepo(token, orgRepo string, role string) bool {
 	if token == "" || orgRepo == "" || role == "" {
 		return false
 	}
 
-	githubAPIURL := "https://api.github.com/repos/" + orgRepo + "/collaborators/" + os.Getenv("GITHUB_USERNAME")
+	githubAPIURL := "https://api.github.com/repos/" + orgRepo
 	req, err := http.NewRequest("GET", githubAPIURL, nil)
 	if err != nil {
 		return false
 	}
+	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Authorization", "Bearer "+token)
+	slog.Info("checking role in repo", "orgRepo", orgRepo, "role", role)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		slog.Warn("repo not found", "orgRepo", orgRepo)
+		return false
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		slog.Warn("access to repo denied", "orgRepo", orgRepo)
+		return false
+	}
 
 	var ghResp struct {
 		Permissions struct {
@@ -192,8 +202,11 @@ func (h *Handler) HandleUserRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var publicKey string
+	var publicKey struct {
+		Key string `json:"public_key"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&publicKey); err != nil {
+		slog.Error("invalid JSON", "error", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("invalid JSON"))
 		return
@@ -201,7 +214,7 @@ func (h *Handler) HandleUserRegister(w http.ResponseWriter, r *http.Request) {
 	user := stores.User{
 		GitHubID:  fmt.Sprintf("%d", ghuser.ID),
 		Username:  ghuser.Login,
-		PublicKey: publicKey,
+		PublicKey: publicKey.Key,
 	}
 	err := h.userStore.RegisterUser(user)
 	if err != nil {
@@ -210,7 +223,7 @@ func (h *Handler) HandleUserRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Always update the public key (idempotent)
-	_ = h.userStore.UpdateUserPublicKey(fmt.Sprintf("%d", ghuser.ID), publicKey)
+	_ = h.userStore.UpdateUserPublicKey(fmt.Sprintf("%d", ghuser.ID), publicKey.Key)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("user registered"))
 }

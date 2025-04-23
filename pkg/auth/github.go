@@ -44,6 +44,7 @@ func (p *GithubProvider) Login(ctx context.Context) error {
 	}
 
 	fmt.Printf("Please visit %s and enter the code: %s\n", deviceCode.VerificationURI, deviceCode.UserCode)
+	fmt.Printf("Wait for the authentication to complete...\n")
 
 	// Poll for the token
 	token, err := oauthConfig.DeviceAccessToken(ctx, deviceCode)

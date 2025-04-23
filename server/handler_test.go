@@ -37,8 +37,8 @@ func TestCreateProject(t *testing.T) {
 	r := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(`{"orgRepo":"foo/bar"}`))
 	r.Header.Set("Authorization", "Bearer testtoken")
 	w := httptest.NewRecorder()
-	handler := middleware.WithGitHubAuth(h.CreateProject, true, mockTokenValidator)
-	handler(w, r)
+	handler := middleware.WithGitHubAuth(mockTokenValidator)
+	handler(http.HandlerFunc(h.CreateProject)).ServeHTTP(w, r)
 	resp := w.Result()
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected status 201/200, got %d", resp.StatusCode)
@@ -51,8 +51,8 @@ func TestCreateProject_InvalidOrgRepo(t *testing.T) {
 	r := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(`{"orgRepo":"invalid"}`))
 	r.Header.Set("Authorization", "Bearer testtoken")
 	w := httptest.NewRecorder()
-	handler := middleware.WithGitHubAuth(h.CreateProject, true, mockTokenValidator)
-	handler(w, r)
+	handler := middleware.WithGitHubAuth(mockTokenValidator)
+	handler(http.HandlerFunc(h.CreateProject)).ServeHTTP(w, r)
 	resp := w.Result()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d", resp.StatusCode)
@@ -67,8 +67,8 @@ func TestProjectKeysPerUser_NotFound(t *testing.T) {
 	r.SetPathValue("repo", "bar")
 	r.Header.Set("Authorization", "Bearer testtoken")
 	w := httptest.NewRecorder()
-	handler := middleware.WithGitHubAuth(h.ProjectKeysPerUser, true, mockTokenValidator)
-	handler(w, r)
+	handler := middleware.WithGitHubAuth(mockTokenValidator)
+	handler(http.HandlerFunc(h.ProjectKeysPerUser)).ServeHTTP(w, r)
 	resp := w.Result()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", resp.StatusCode)
@@ -86,8 +86,9 @@ func TestProjectKeysPerUser_PutGet(t *testing.T) {
 	r.SetPathValue("repo", "bar")
 	r.Header.Set("Authorization", "Bearer testtoken")
 	w := httptest.NewRecorder()
-	handler := middleware.WithGitHubAuth(h.ProjectKeysPerUser, true, mockTokenValidator)
-	handler(w, r)
+
+	handler := middleware.WithGitHubAuth(mockTokenValidator)
+	handler(http.HandlerFunc(h.ProjectKeysPerUser)).ServeHTTP(w, r)
 	resp := w.Result()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
@@ -98,7 +99,8 @@ func TestProjectKeysPerUser_PutGet(t *testing.T) {
 	r.SetPathValue("repo", "bar")
 	r.Header.Set("Authorization", "Bearer testtoken")
 	w = httptest.NewRecorder()
-	handler(w, r)
+	handler(http.HandlerFunc(h.ProjectKeysPerUser)).ServeHTTP(w, r)
+
 	resp = w.Result()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)

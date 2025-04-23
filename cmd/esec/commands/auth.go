@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/zalando/go-keyring"
 	"net/http"
 
 	"github.com/mscno/esec/pkg/auth"
-	"github.com/zalando/go-keyring"
 )
 
 type AuthCmd struct {
 	Login           LoginCmd               `cmd:"" help:"Authenticate with GitHub using device flow."`
 	Logout          LogoutCmd              `cmd:"" help:"Remove stored authentication credentials."`
+	Sync            AuthSyncCMd            `cmd:"" help:"Register with the sync server."`
 	Info            AuthInfoCmd            `cmd:"" help:"Show info about the currently logged-in user."`
 	GenerateKeypair AuthGenerateKeypairCmd `cmd:"" help:"Generate a new keypair and print a BIP-39 recovery phrase"`
 	RecoverKeypair  AuthRecoverKeypairCmd  `cmd:"" help:"Recover your keypair from a 24-word BIP39 mnemonic phrase"`
@@ -42,6 +43,19 @@ func (c *LoginCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
 	}
 	ctx.Logger.Info("Authentication successful.")
 
+	return nil
+}
+
+type AuthSyncCMd struct {
+}
+
+func (c *AuthSyncCMd) Run(ctx *cliCtx, parent *AuthCmd) error {
+	// Load public key from keyring
+	pubKey, err := keyring.Get("esec", "public-key")
+	if err != nil {
+		return fmt.Errorf("No public key found in keyring. Please run 'esec auth generate-keypair' before logging in.")
+	}
+	provider := auth.NewGithubProvider(auth.Config{})
 	// --- Register user and public key with server ---
 	token, err := provider.GetToken(ctx)
 	if err != nil || token == "" {
@@ -49,40 +63,9 @@ func (c *LoginCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
 		return nil
 	}
 
-	// Get GitHub user info
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/user", nil)
-	if err != nil {
-		ctx.Logger.Error("Failed to create GitHub API request", "error", err)
-		return nil
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		ctx.Logger.Error("Failed to fetch GitHub user info", "error", err)
-		return nil
-	}
-	defer resp.Body.Close()
-	var ghUser githubUser
-	if err := json.NewDecoder(resp.Body).Decode(&ghUser); err != nil {
-		ctx.Logger.Error("Failed to decode GitHub user info", "error", err)
-		return nil
-	}
-	if ghUser.ID == 0 || ghUser.Login == "" {
-		ctx.Logger.Error("Invalid GitHub user info")
-		return nil
-	}
-
-	// Load public key from keyring
-	pubKey, err := keyring.Get("esec", "public-key")
-	if err != nil {
-		return fmt.Errorf("No public key found in keyring. Please run 'esec auth generate-keypair' before logging in.")
-	}
-
 	// Register with server
 	registerURL := "http://localhost:8080/api/v1/users/register"
 	registerBody := map[string]string{
-		"github_id":  fmt.Sprintf("%d", ghUser.ID),
-		"username":   ghUser.Login,
 		"public_key": pubKey,
 	}
 	bodyBytes, _ := json.Marshal(registerBody)
@@ -91,6 +74,7 @@ func (c *LoginCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
 		ctx.Logger.Error("Failed to create register request", "error", err)
 		return nil
 	}
+	regReq.Header.Set("Authorization", "Bearer "+token)
 	regReq.Header.Set("Content-Type", "application/json")
 	regResp, err := http.DefaultClient.Do(regReq)
 	if err != nil {
