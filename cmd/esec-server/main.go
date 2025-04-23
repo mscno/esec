@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/mscno/esec/server/middleware"
 	"log"
 	"net/http"
 	"os"
@@ -34,22 +35,22 @@ func main() {
 		log.Printf("Using in-memory store")
 	}
 
-	h := server.NewHandler(s, userStore)
+	h := server.NewHandler(s, userStore, nil)
 
 	mux := michi.NewRouter()
 
-	mux.Use(server.PanicRecoveryMiddleware, server.LoggingMiddleware)
+	mux.Use(middleware.PanicRecoveryMiddleware, middleware.LoggingMiddleware)
 	// Project creation (POST)
-	mux.Handle("POST /api/v1/projects", server.WithGitHubAuth(http.HandlerFunc(h.CreateProject), true, server.ValidateGitHubToken))
+	mux.Handle("POST /api/v1/projects", middleware.WithGitHubAuth(http.HandlerFunc(h.CreateProject), true, middleware.ValidateGitHubToken))
 
 	// Project keys-per-user (PUT)
-	mux.Handle("PUT /api/v1/projects/{org}/{repo}/keys-per-user", server.WithGitHubAuth(http.HandlerFunc(h.ProjectKeysPerUser), true, server.ValidateGitHubToken))
+	mux.Handle("PUT /api/v1/projects/{org}/{repo}/keys-per-user", middleware.WithGitHubAuth(http.HandlerFunc(h.ProjectKeysPerUser), true, middleware.ValidateGitHubToken))
 
 	// Project keys-per-user (GET)
-	mux.Handle("GET /api/v1/projects/{org}/{repo}/keys-per-user", server.WithGitHubAuth(http.HandlerFunc(h.ProjectKeysPerUser), true, server.ValidateGitHubToken))
+	mux.Handle("GET /api/v1/projects/{org}/{repo}/keys-per-user", middleware.WithGitHubAuth(http.HandlerFunc(h.ProjectKeysPerUser), true, middleware.ValidateGitHubToken))
 
 	// User registration (POST)
-	mux.Handle("POST /api/v1/users/register", server.WithGitHubAuth(http.HandlerFunc(h.HandleUserRegister), false, server.ValidateGitHubToken))
+	mux.Handle("POST /api/v1/users/register", middleware.WithGitHubAuth(http.HandlerFunc(h.HandleUserRegister), false, middleware.ValidateGitHubToken))
 
 	addr := ":8080"
 	log.Printf("Esec Sync Server listening on %s", addr)

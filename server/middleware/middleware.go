@@ -1,7 +1,9 @@
-package server
+package middleware
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -36,7 +38,7 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 
 // --- Simple in-memory cache for GitHub token validation and repo access ---
 type cacheEntry struct {
-	user      githubUser
+	user      GithubUser
 	valid     bool
 	expiresAt time.Time
 }
@@ -46,17 +48,17 @@ var (
 	validateCache = make(map[string]cacheEntry) // key: token or token+repo
 )
 
-func cacheGet(key string) (githubUser, bool) {
+func cacheGet(key string) (GithubUser, bool) {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
 	entry, ok := validateCache[key]
 	if !ok || time.Now().After(entry.expiresAt) {
-		return githubUser{}, false
+		return GithubUser{}, false
 	}
 	return entry.user, entry.valid
 }
 
-func cacheSet(key string, user githubUser, valid bool, ttl time.Duration) {
+func cacheSet(key string, user GithubUser, valid bool, ttl time.Duration) {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
 	validateCache[key] = cacheEntry{user: user, valid: valid, expiresAt: time.Now().Add(ttl)}
@@ -76,11 +78,11 @@ func (rw *responseWriter) WriteHeader(code int) {
 
 // withGitHubAuth wraps handlers with GitHub Bearer token validation.
 // If requireToken is true, rejects if token is missing or invalid.
-type TokenValidator func(token string) (githubUser, bool)
+type TokenValidator func(token string) (GithubUser, bool)
 
 func WithGitHubAuth(next http.HandlerFunc, requireToken bool, validate TokenValidator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		token := extractBearerToken(r.Header.Get("Authorization"))
+		token := ExtractBearerToken(r.Header.Get("Authorization"))
 		if requireToken {
 			if token == "" {
 				http.Error(w, "missing or invalid Authorization header", http.StatusUnauthorized)
@@ -99,44 +101,23 @@ func WithGitHubAuth(next http.HandlerFunc, requireToken bool, validate TokenVali
 	}
 }
 
-func extractBearerToken(header string) string {
+func ExtractBearerToken(header string) string {
 	if !strings.HasPrefix(header, "Bearer ") {
 		return ""
 	}
 	return strings.TrimPrefix(header, "Bearer ")
 }
 
-// userHasRepoAccess checks if the given GitHub token has access to orgRepo ("org/repo").
-func userHasRepoAccess(token, orgRepo string) bool {
-	if token == "" || orgRepo == "" {
-		return false
-	}
-
-	githubAPIURL := "https://api.github.com/repos/" + orgRepo
-	req, err := http.NewRequest("GET", githubAPIURL, nil)
-	if err != nil {
-		return false
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	allowed := resp.StatusCode == http.StatusOK
-	return allowed
-}
-
-type githubUser struct {
+type GithubUser struct {
 	Login string `json:"login"`
 	ID    int    `json:"id"`
 }
 
 // Real implementation: call GitHub API to validate token
-func ValidateGitHubToken(token string) (githubUser, bool) {
+func ValidateGitHubToken(token string) (GithubUser, bool) {
 	slog.Info("validating GitHub token", "token", token)
 	if token == "" {
-		return githubUser{}, false
+		return GithubUser{}, false
 	}
 	cacheKey := token + "|validate"
 	if user, valid := cacheGet(cacheKey); valid {
@@ -145,7 +126,31 @@ func ValidateGitHubToken(token string) (githubUser, bool) {
 	login, id, err := getUserInfo(token)
 	valid := err == nil && login != ""
 	slog.Info("validation result", "valid", valid, "login", login, "error", err)
-	user := githubUser{Login: login, ID: id}
+	user := GithubUser{Login: login, ID: id}
 	cacheSet(cacheKey, user, valid, 5*time.Minute)
 	return user, valid
+}
+
+func getUserInfo(token string) (string, int, error) {
+	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+	if err != nil {
+		return "", 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", 0, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+	var user struct {
+		Login string `json:"login"`
+		ID    int    `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return "", 0, err
+	}
+	return user.Login, user.ID, nil
 }

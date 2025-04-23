@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/mscno/esec/server/middleware"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,14 +14,21 @@ import (
 func setupTestHandler() *Handler {
 	store := stores.NewMemoryStore()
 	userStore := stores.NewMemoryUserStore()
-	return NewHandler(store, userStore)
+	return NewHandler(store, userStore, mockUserHasRoleInRepo)
 }
 
-func mockTokenValidator(token string) (githubUser, bool) {
+func mockUserHasRoleInRepo(token, orgRepo, role string) bool {
 	if token == "testtoken" {
-		return githubUser{Login: "testuser", ID: 42}, true
+		return true
 	}
-	return githubUser{}, false
+	return false
+}
+
+func mockTokenValidator(token string) (middleware.GithubUser, bool) {
+	if token == "testtoken" {
+		return middleware.GithubUser{Login: "testuser", ID: 42}, true
+	}
+	return middleware.GithubUser{}, false
 }
 
 func TestCreateProject(t *testing.T) {
@@ -29,7 +37,7 @@ func TestCreateProject(t *testing.T) {
 	r := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(`{"orgRepo":"foo/bar"}`))
 	r.Header.Set("Authorization", "Bearer testtoken")
 	w := httptest.NewRecorder()
-	handler := WithGitHubAuth(h.CreateProject, true, mockTokenValidator)
+	handler := middleware.WithGitHubAuth(h.CreateProject, true, mockTokenValidator)
 	handler(w, r)
 	resp := w.Result()
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
@@ -43,7 +51,7 @@ func TestCreateProject_InvalidOrgRepo(t *testing.T) {
 	r := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(`{"orgRepo":"invalid"}`))
 	r.Header.Set("Authorization", "Bearer testtoken")
 	w := httptest.NewRecorder()
-	handler := WithGitHubAuth(h.CreateProject, true, mockTokenValidator)
+	handler := middleware.WithGitHubAuth(h.CreateProject, true, mockTokenValidator)
 	handler(w, r)
 	resp := w.Result()
 	if resp.StatusCode != http.StatusBadRequest {
@@ -59,7 +67,7 @@ func TestProjectKeysPerUser_NotFound(t *testing.T) {
 	r.SetPathValue("repo", "bar")
 	r.Header.Set("Authorization", "Bearer testtoken")
 	w := httptest.NewRecorder()
-	handler := WithGitHubAuth(h.ProjectKeysPerUser, true, mockTokenValidator)
+	handler := middleware.WithGitHubAuth(h.ProjectKeysPerUser, true, mockTokenValidator)
 	handler(w, r)
 	resp := w.Result()
 	if resp.StatusCode != http.StatusNotFound {
@@ -78,7 +86,7 @@ func TestProjectKeysPerUser_PutGet(t *testing.T) {
 	r.SetPathValue("repo", "bar")
 	r.Header.Set("Authorization", "Bearer testtoken")
 	w := httptest.NewRecorder()
-	handler := WithGitHubAuth(h.ProjectKeysPerUser, true, mockTokenValidator)
+	handler := middleware.WithGitHubAuth(h.ProjectKeysPerUser, true, mockTokenValidator)
 	handler(w, r)
 	resp := w.Result()
 	if resp.StatusCode != http.StatusOK {

@@ -3,20 +3,33 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mscno/esec/server/middleware"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/mscno/esec/server/stores"
 )
 
+type UserHasRoleInRepoFunc func(token, orgRepo, role string) bool
+
 type Handler struct {
-	Store     stores.Store
-	userStore stores.UserStore
-	logger    *slog.Logger
+	Store             stores.Store
+	userStore         stores.UserStore
+	logger            *slog.Logger
+	userHasRoleInRepo UserHasRoleInRepoFunc
 }
 
-func NewHandler(store stores.Store, userStore stores.UserStore) *Handler {
-	return &Handler{Store: store, userStore: userStore, logger: slog.Default()}
+func NewHandler(store stores.Store, userStore stores.UserStore, userHasRoleInRepo UserHasRoleInRepoFunc) *Handler {
+	if userHasRoleInRepo == nil {
+		userHasRoleInRepo = userHasRoleInRepo
+	}
+	return &Handler{
+		Store:             store,
+		userStore:         userStore,
+		logger:            slog.Default(),
+		userHasRoleInRepo: userHasRoleInRepo,
+	}
 }
 
 // ProjectKeysPerUser handles PUT/GET /api/v1/projects/{org}/{repo}/keys-per-user
@@ -43,7 +56,7 @@ func (h *Handler) ProjectKeysPerUser(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodPut:
-		user, ok := r.Context().Value("user").(githubUser)
+		user, ok := r.Context().Value("user").(middleware.GithubUser)
 		if !ok {
 			http.Error(w, "user info missing from context", http.StatusUnauthorized)
 			return
@@ -59,6 +72,7 @@ func (h *Handler) ProjectKeysPerUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := h.Store.SetPerUserSecrets(orgRepo, payload); err != nil {
+			h.logger.Error("failed to store per-user secrets", "orgRepo", orgRepo, "error", err.Error())
 			http.Error(w, "failed to store per-user secrets: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -67,9 +81,10 @@ func (h *Handler) ProjectKeysPerUser(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		payload, err := h.Store.GetPerUserSecrets(orgRepo)
 		if err != nil {
-			if err.Error() == "project does not exist" {
+			if err.Error() == "project not found" {
 				http.Error(w, "project does not exist", http.StatusNotFound)
 			} else {
+				h.logger.Error("failed to get per-user secrets", "orgRepo", orgRepo, "error", err.Error())
 				http.Error(w, "failed to get per-user secrets: "+err.Error(), http.StatusInternalServerError)
 			}
 			return
@@ -101,15 +116,17 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	user, ok := r.Context().Value("user").(githubUser)
+	user, ok := r.Context().Value("user").(middleware.GithubUser)
 	if !ok {
 		http.Error(w, "user info missing from context", http.StatusUnauthorized)
 		return
 	}
-	if !userHasRepoAccess(extractBearerToken(r.Header.Get("Authorization")), req.OrgRepo) {
+
+	if !h.userHasRoleInRepo(middleware.ExtractBearerToken(r.Header.Get("Authorization")), req.OrgRepo, "admin") {
 		http.Error(w, fmt.Sprintf("access to %s denied", req.OrgRepo), http.StatusForbidden)
 		return
 	}
+
 	creatorID := fmt.Sprintf("%d", user.ID)
 	if creatorID == "" || creatorID == "0" {
 		h.logger.Error("could not determine creator's GitHub ID")
@@ -124,22 +141,54 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Project %s registered", req.OrgRepo)
 }
 
+// userHasRoleInRepo checks if the given GitHub token has a role in the given org/repo.
+func userHasRoleInRepo(token, orgRepo string, role string) bool {
+	if token == "" || orgRepo == "" || role == "" {
+		return false
+	}
+
+	githubAPIURL := "https://api.github.com/repos/" + orgRepo + "/collaborators/" + os.Getenv("GITHUB_USERNAME")
+	req, err := http.NewRequest("GET", githubAPIURL, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	var ghResp struct {
+		Permissions struct {
+			Admin bool `json:"admin"`
+		} `json:"permissions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&ghResp); err != nil {
+		return false
+	}
+
+	switch role {
+	case "admin":
+		return ghResp.Permissions.Admin
+	case "read":
+		return resp.StatusCode == http.StatusOK
+	default:
+		return false
+	}
+}
+
 // --- User Registration Handler ---
 func (h *Handler) HandleUserRegister(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	token := extractBearerToken(r.Header.Get("Authorization"))
-	if token == "" {
+
+	ghuser, ok := r.Context().Value("user").(middleware.GithubUser)
+	if !ok {
+		slog.Error("user info missing from context")
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte("missing or invalid Authorization header"))
-		return
-	}
-	ghuser, valid := ValidateGitHubToken(token)
-	if !valid {
-		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte("invalid GitHub token"))
 		return
 	}
 
