@@ -30,8 +30,8 @@ func NewHandler(store stores.Store, userStore stores.UserStore, userHasRoleInRep
 	}
 }
 
-// ProjectKeysPerUser handles PUT/GET /api/v1/projects/{org}/{repo}/keys-per-user
-func (h *Handler) ProjectKeysPerUser(w http.ResponseWriter, r *http.Request) {
+// ProjectKeysPerUserPut handles PUT /api/v1/projects/{org}/{repo}/keys-per-user
+func (h *Handler) ProjectKeysPerUserPut(w http.ResponseWriter, r *http.Request) {
 	// Use Go 1.23 ServeMux path variables
 	org := r.PathValue("org")
 	repo := r.PathValue("repo")
@@ -52,56 +52,81 @@ func (h *Handler) ProjectKeysPerUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch r.Method {
-	case http.MethodPut:
-		user, ok := r.Context().Value("user").(middleware.GithubUser)
-		if !ok {
-			http.Error(w, "user info missing from context", http.StatusUnauthorized)
-			return
-		}
-		h.logger.Info("extracted userID", "userID", user.ID)
-		if !h.Store.IsProjectAdmin(orgRepo, fmt.Sprintf("%d", user.ID)) {
-			http.Error(w, "only project admins may share secrets for this project", http.StatusForbidden)
-			return
-		}
-		var payload map[string]map[string]string
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			http.Error(w, "invalid JSON", http.StatusBadRequest)
-			return
-		}
-		if err := h.Store.SetPerUserSecrets(orgRepo, payload); err != nil {
-			h.logger.Error("failed to store per-user secrets", "orgRepo", orgRepo, "error", err.Error())
-			http.Error(w, "failed to store per-user secrets: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
+	user, ok := r.Context().Value("user").(middleware.GithubUser)
+	if !ok {
+		http.Error(w, "user info missing from context", http.StatusUnauthorized)
 		return
-	case http.MethodGet:
-		payload, err := h.Store.GetPerUserSecrets(orgRepo)
-		if err != nil {
-			if err.Error() == "project not found" {
-				http.Error(w, "project does not exist", http.StatusNotFound)
-			} else {
-				h.logger.Error("failed to get per-user secrets", "orgRepo", orgRepo, "error", err.Error())
-				http.Error(w, "failed to get per-user secrets: "+err.Error(), http.StatusInternalServerError)
-			}
+	}
+	h.logger.Info("extracted userID", "userID", user.ID)
+	if !h.Store.IsProjectAdmin(orgRepo, fmt.Sprintf("%d", user.ID)) {
+		http.Error(w, "only project admins may share secrets for this project", http.StatusForbidden)
+		return
+	}
+	var payload map[string]map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if err := h.Store.SetPerUserSecrets(orgRepo, payload); err != nil {
+		h.logger.Error("failed to store per-user secrets", "orgRepo", orgRepo, "error", err.Error())
+		http.Error(w, "failed to store per-user secrets: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+// ProjectKeysPerUserGet handles GET /api/v1/projects/{org}/{repo}/keys-per-user
+func (h *Handler) ProjectKeysPerUserGet(w http.ResponseWriter, r *http.Request) {
+	// Use Go 1.23 ServeMux path variables
+	org := r.PathValue("org")
+	repo := r.PathValue("repo")
+	// expects org/repo
+	if org == "" || repo == "" {
+		http.NotFound(w, r)
+		return
+	}
+	orgRepo := org + "/" + repo
+	if err := validateOrgRepo(orgRepo); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if !h.Store.ProjectExists(orgRepo) {
+		h.logger.Error("project does not exist or you do not have access", "orgRepo", orgRepo)
+		http.Error(w, "project does not exist or you do not have access", http.StatusNotFound)
+		return
+	}
+
+	user, ok := r.Context().Value("user").(middleware.GithubUser)
+	if !ok {
+		http.Error(w, "user info missing from context", http.StatusUnauthorized)
+		return
+	}
+	h.logger.Info("extracted userID", "userID", user.ID)
+	if !h.Store.IsProjectAdmin(orgRepo, fmt.Sprintf("%d", user.ID)) {
+		http.Error(w, "only project admins may share secrets for this project", http.StatusForbidden)
+		return
+	}
+	secrets, err := h.Store.GetPerUserSecrets(orgRepo)
+	if err != nil {
+		if err.Error() == "project not found" {
+			http.Error(w, "project not found", http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(payload)
+		h.logger.Error("failed to get per-user secrets", "orgRepo", orgRepo, "error", err.Error())
+		http.Error(w, "failed to get per-user secrets: "+err.Error(), http.StatusInternalServerError)
 		return
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(secrets); err != nil {
+		h.logger.Error("failed to encode per-user secrets", "orgRepo", orgRepo, "error", err.Error())
+		http.Error(w, "failed to encode per-user secrets: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
 // CreateProject handles POST /api/v1/projects
 func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 	type reqBody struct {
 		OrgRepo string `json:"orgRepo"`
 	}

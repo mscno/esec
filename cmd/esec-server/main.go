@@ -45,10 +45,10 @@ func main() {
 	mux.HandleFunc("POST /api/v1/projects", h.CreateProject)
 
 	// Project keys-per-user (PUT)
-	mux.HandleFunc("PUT /api/v1/projects/{org}/{repo}/keys-per-user", h.ProjectKeysPerUser)
+	mux.HandleFunc("PUT /api/v1/projects/{org}/{repo}/keys-per-user", h.ProjectKeysPerUserPut)
 
 	// Project keys-per-user (GET)
-	mux.HandleFunc("GET /api/v1/projects/{org}/{repo}/keys-per-user", h.ProjectKeysPerUser)
+	mux.HandleFunc("GET /api/v1/projects/{org}/{repo}/keys-per-user", h.ProjectKeysPerUserGet)
 
 	// User registration (POST)
 	mux.HandleFunc("POST /api/v1/users/register", h.HandleUserRegister)
