@@ -252,3 +252,29 @@ func (h *Handler) HandleUserRegister(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("user registered"))
 }
+
+// GetUserPublicKey handles GET /api/v1/users/{github_id}/public-key
+func (h *Handler) GetUserPublicKey(w http.ResponseWriter, r *http.Request) {
+	githubID := r.PathValue("github_id")
+	if githubID == "" {
+		h.logger.Error("missing github_id in path")
+		http.Error(w, "missing github_id in path", http.StatusBadRequest)
+		return
+	}
+	user, err := h.userStore.GetUser(githubID)
+	if err != nil {
+		if err.Error() == "user not found" {
+			http.Error(w, "user not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "failed to get user: "+err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	resp := map[string]string{
+		"publicKey": user.PublicKey,
+		"githubID":  user.GitHubID,
+		"username":  user.Username,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}

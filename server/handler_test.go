@@ -111,3 +111,45 @@ func TestProjectKeysPerUser_PutGet(t *testing.T) {
 		t.Fatalf("expected secret VAL, got %v", got)
 	}
 }
+
+func TestGetUserPublicKey(t *testing.T) {
+	h := setupTestHandler()
+	// Register a user
+	user := stores.User{GitHubID: "42", Username: "testuser", PublicKey: "ssh-ed25519 AAAAC3Nza..."}
+	h.userStore.RegisterUser(user)
+
+	r := httptest.NewRequest("GET", "/api/v1/users/42/public-key", nil)
+	r.SetPathValue("github_id", "42")
+	w := httptest.NewRecorder()
+	h.GetUserPublicKey(w, r)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+	var data map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if data["publicKey"] != user.PublicKey {
+		t.Errorf("expected publicKey %q, got %q", user.PublicKey, data["publicKey"])
+	}
+	if data["githubID"] != user.GitHubID {
+		t.Errorf("expected githubID %q, got %q", user.GitHubID, data["githubID"])
+	}
+	if data["username"] != user.Username {
+		t.Errorf("expected username %q, got %q", user.Username, data["username"])
+	}
+}
+
+func TestGetUserPublicKey_NotFound(t *testing.T) {
+	h := setupTestHandler()
+	r := httptest.NewRequest("GET", "/api/v1/users/999/public-key", nil)
+	r.SetPathValue("github_id", "999")
+	w := httptest.NewRecorder()
+	h.GetUserPublicKey(w, r)
+	resp := w.Result()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing user, got %d", resp.StatusCode)
+	}
+}

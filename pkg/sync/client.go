@@ -127,40 +127,32 @@ func (c *APIClient) PullKeys(ctx context.Context, orgRepo string) (map[string]st
 
 // GetUserPublicKey fetches a user's public key by username or GitHub ID.
 func (c *APIClient) GetUserPublicKey(ctx context.Context, usernameOrID string) (publicKey, githubID, username string, err error) {
-	// Try by username first, then fallback to by-id
-	paths := []string{
-		"/api/v1/users/by-username/" + usernameOrID,
-		"/api/v1/users/by-id/" + usernameOrID,
+	endpoint := c.ServerURL.String() + "/api/v1/users/" + usernameOrID + "/public-key"
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return "", "", "", err
 	}
-	for _, path := range paths {
-		url := c.ServerURL.ResolveReference(&url.URL{Path: path})
-		req, err := http.NewRequestWithContext(ctx, "GET", url.String(), nil)
-		if err != nil {
-			continue
-		}
+	if c.AuthToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.AuthToken)
-		resp, err := c.HTTPClient.Do(req)
-		if err != nil || resp.StatusCode != http.StatusOK {
-			if resp != nil {
-				resp.Body.Close()
-			}
-			continue
-		}
-		defer resp.Body.Close()
-		var user struct {
-			GitHubID  string `json:"github_id"`
-			Username  string `json:"username"`
-			PublicKey string `json:"public_key"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
-			return "", "", "", fmt.Errorf("failed to decode user: %w", err)
-		}
-		if user.PublicKey == "" {
-			return "", "", "", fmt.Errorf("no public key found for user %s", usernameOrID)
-		}
-		return user.PublicKey, user.GitHubID, user.Username, nil
 	}
-	return "", "", "", fmt.Errorf("user %s not found", usernameOrID)
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return "", "", "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", "", "", fmt.Errorf("failed to get user public key: %s", string(body))
+	}
+	var data struct {
+		PublicKey string `json:"publicKey"`
+		GitHubID  string `json:"githubID"`
+		Username  string `json:"username"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return "", "", "", err
+	}
+	return data.PublicKey, data.GitHubID, data.Username, nil
 }
 
 // PushKeysPerUser sends per-recipient encrypted secrets to the sync server for the given project.

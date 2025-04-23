@@ -53,6 +53,9 @@ func main() {
 	// User registration (POST)
 	mux.HandleFunc("POST /api/v1/users/register", h.HandleUserRegister)
 
+	// Add route for user public key
+	mux.Handle("/api/v1/users/{github_id}/public-key", http.HandlerFunc(h.GetUserPublicKey))
+
 	addr := ":8080"
 	log.Printf("Esec Sync Server listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
