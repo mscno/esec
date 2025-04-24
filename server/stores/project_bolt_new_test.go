@@ -2,12 +2,23 @@ package stores
 
 import (
 	"context"
+	"os"
 	"testing"
+
+	"go.etcd.io/bbolt"
 )
 
-func TestInMemoryProjectStore_CRUD(t *testing.T) {
+func TestBoltProjectStore_CRUD(t *testing.T) {
 	ctx := context.Background()
-	store := NewInMemoryProjectStore()
+	dbfile := "test_bolt_project_crud.db"
+	_ = os.Remove(dbfile)
+	db, err := bbolt.Open(dbfile, 0600, nil)
+	if err != nil {
+		t.Fatalf("open bbolt: %v", err)
+	}
+	defer os.Remove(dbfile)
+	defer db.Close()
+	store := NewBoltProjectStore(db)
 
 	project := Project{
 		OrgRepo: "org/repo",
@@ -16,7 +27,7 @@ func TestInMemoryProjectStore_CRUD(t *testing.T) {
 	}
 
 	// Create
-	err := store.CreateProject(ctx, project)
+	err = store.CreateProject(ctx, project)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}

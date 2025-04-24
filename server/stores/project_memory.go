@@ -1,72 +1,76 @@
 package stores
 
-// MemoryStore implements ProjectStore interface in-memory (for testing/dev)
-type MemoryStore struct {
-	projects       map[string]*Project
-	perUserSecrets map[string]map[string]map[string]string // orgRepo -> githubID -> key -> value
+import (
+	"context"
+	"sync"
+)
+
+type InMemoryProjectStore struct {
+	mu       sync.RWMutex
+	projects map[string]Project
 }
 
-func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{
-		projects:       make(map[string]*Project),
-		perUserSecrets: make(map[string]map[string]map[string]string),
+func NewInMemoryProjectStore() *InMemoryProjectStore {
+	return &InMemoryProjectStore{
+		projects: make(map[string]Project),
 	}
 }
 
-func (m *MemoryStore) CreateProject(orgRepo string, adminID string) error {
-	if _, exists := m.projects[orgRepo]; exists {
+func (s *InMemoryProjectStore) CreateProject(ctx context.Context, project Project) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.projects[project.OrgRepo]; exists {
 		return ErrProjectExists
 	}
-	m.projects[orgRepo] = &Project{
-		Admins: []string{adminID},
-	}
+	s.projects[project.OrgRepo] = project
 	return nil
 }
 
-func (m *MemoryStore) ProjectExists(orgRepo string) bool {
-	_, ok := m.projects[orgRepo]
-	return ok
+func (s *InMemoryProjectStore) GetProject(ctx context.Context, orgRepo string) (Project, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	p, ok := s.projects[orgRepo]
+	if !ok {
+		return Project{}, ErrProjectNotFound
+	}
+	return p, nil
 }
 
-func (m *MemoryStore) GetProjectAdmins(orgRepo string) ([]string, error) {
-	p, ok := m.projects[orgRepo]
+func (s *InMemoryProjectStore) UpdateProject(ctx context.Context, orgRepo string, updateFn func(project Project) (Project, error)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	project, ok := s.projects[orgRepo]
 	if !ok {
-		return nil, ErrProjectNotFound
+		return ErrProjectNotFound
 	}
-	return p.Admins, nil
+
+	project, err := updateFn(project)
+	if err != nil {
+		return err
+	}
+	s.projects[project.OrgRepo] = project
+	return nil
 }
 
-func (m *MemoryStore) IsProjectAdmin(orgRepo string, githubID string) bool {
-	p, ok := m.projects[orgRepo]
-	if !ok {
-		return false
-	}
-	for _, admin := range p.Admins {
-		if admin == githubID {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *MemoryStore) GetPerUserSecrets(orgRepo string) (map[string]map[string]string, error) {
-	pu, ok := m.perUserSecrets[orgRepo]
-	if !ok {
-		return nil, ErrProjectNotFound
-	}
-	result := make(map[string]map[string]string)
-	for k, v := range pu {
-		result[k] = v
+func (s *InMemoryProjectStore) ListProjects(ctx context.Context) ([]Project, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var result []Project
+	for _, p := range s.projects {
+		result = append(result, p)
 	}
 	return result, nil
 }
 
-func (m *MemoryStore) SetPerUserSecrets(orgRepo string, secrets map[string]map[string]string) error {
-	if _, ok := m.projects[orgRepo]; !ok {
+func (s *InMemoryProjectStore) DeleteProject(ctx context.Context, orgRepo string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.projects[orgRepo]; !ok {
 		return ErrProjectNotFound
 	}
-	m.perUserSecrets[orgRepo] = secrets
+	delete(s.projects, orgRepo)
 	return nil
 }
 
-var _ ProjectStore = (*MemoryStore)(nil)
+var _ NewProjectStore = (*InMemoryProjectStore)(nil)

@@ -1,120 +1,111 @@
 package stores
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
+
 	"go.etcd.io/bbolt"
 )
 
-type BoltStore struct {
+type BoltProjectStore struct {
 	db *bbolt.DB
 }
 
-var (
-	projectsBucket       = []byte("projects")
-	perUserSecretsBucket = []byte("per_user_secrets")
-)
-
-func NewBoltStore(db *bbolt.DB) (*BoltStore, error) {
-	if db == nil {
-		return nil, fmt.Errorf("db cannot be nil")
-	}
-	err := db.Update(func(tx *bbolt.Tx) error {
-		if _, err := tx.CreateBucketIfNotExists(projectsBucket); err != nil {
-			return err
-		}
-		if _, err := tx.CreateBucketIfNotExists(perUserSecretsBucket); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &BoltStore{db: db}, nil
+func NewBoltProjectStore(db *bbolt.DB) *BoltProjectStore {
+	return &BoltProjectStore{db: db}
 }
 
-func (b *BoltStore) CreateProject(orgRepo string, adminID string) error {
-	return b.db.Update(func(tx *bbolt.Tx) error {
-		bucket := tx.Bucket(projectsBucket)
-		if bucket.Get([]byte(orgRepo)) != nil {
+func (s *BoltProjectStore) CreateProject(ctx context.Context, project Project) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		bucket, err := tx.CreateBucketIfNotExists([]byte("projects"))
+		if err != nil {
+			return err
+		}
+		if bucket.Get([]byte(project.OrgRepo)) != nil {
 			return ErrProjectExists
 		}
-		pd := Project{
-			Admins: []string{adminID},
-		}
-		val, err := json.Marshal(pd)
+		data, err := json.Marshal(project)
 		if err != nil {
 			return err
 		}
-		return bucket.Put([]byte(orgRepo), val)
+		return bucket.Put([]byte(project.OrgRepo), data)
 	})
 }
 
-func (b *BoltStore) ProjectExists(orgRepo string) bool {
-	var exists bool
-	b.db.View(func(tx *bbolt.Tx) error {
-		bucket := tx.Bucket(projectsBucket)
-		exists = bucket.Get([]byte(orgRepo)) != nil
-		return nil
-	})
-	return exists
-}
-
-func (b *BoltStore) GetProjectAdmins(orgRepo string) ([]string, error) {
-	var pd Project
-	err := b.db.View(func(tx *bbolt.Tx) error {
-		bucket := tx.Bucket(projectsBucket)
+func (s *BoltProjectStore) GetProject(ctx context.Context, orgRepo string) (Project, error) {
+	var project Project
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte("projects"))
+		if bucket == nil {
+			return ErrProjectNotFound
+		}
 		val := bucket.Get([]byte(orgRepo))
 		if val == nil {
 			return ErrProjectNotFound
 		}
-		return json.Unmarshal(val, &pd)
+		return json.Unmarshal(val, &project)
 	})
-	if err != nil {
-		return nil, err
-	}
-	return pd.Admins, nil
+	return project, err
 }
 
-func (b *BoltStore) IsProjectAdmin(orgRepo string, githubID string) bool {
-	admins, err := b.GetProjectAdmins(orgRepo)
-	if err != nil {
-		return false
-	}
-	for _, admin := range admins {
-		if admin == githubID {
-			return true
-		}
-	}
-	return false
-}
+func (s *BoltProjectStore) UpdateProject(ctx context.Context, orgRepo string, updateFn func(project Project) (Project, error)) error {
 
-func (b *BoltStore) GetPerUserSecrets(orgRepo string) (map[string]map[string]string, error) {
-	var result map[string]map[string]string
-	err := b.db.View(func(tx *bbolt.Tx) error {
-		bucket := tx.Bucket(perUserSecretsBucket)
-		val := bucket.Get([]byte(orgRepo))
-		if val == nil {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte("projects"))
+		if bucket == nil {
 			return ErrProjectNotFound
 		}
-		return json.Unmarshal(val, &result)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
+		projectBytes := bucket.Get([]byte(orgRepo))
+		if projectBytes == nil {
+			return ErrProjectNotFound
+		}
 
-func (b *BoltStore) SetPerUserSecrets(orgRepo string, secrets map[string]map[string]string) error {
-	return b.db.Update(func(tx *bbolt.Tx) error {
-		bucket := tx.Bucket(perUserSecretsBucket)
-		val, err := json.Marshal(secrets)
+		var project Project
+		if err := json.Unmarshal(projectBytes, &project); err != nil {
+			return err
+		}
+		project, err := updateFn(project)
 		if err != nil {
 			return err
 		}
-		return bucket.Put([]byte(orgRepo), val)
+		data, err := json.Marshal(project)
+		if err != nil {
+			return err
+		}
+		return bucket.Put([]byte(project.OrgRepo), data)
 	})
 }
 
-var _ ProjectStore = (*BoltStore)(nil)
+func (s *BoltProjectStore) ListProjects(ctx context.Context) ([]Project, error) {
+	var projects []Project
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte("projects"))
+		if bucket == nil {
+			return nil
+		}
+		return bucket.ForEach(func(k, v []byte) error {
+			var p Project
+			if err := json.Unmarshal(v, &p); err != nil {
+				return err
+			}
+			projects = append(projects, p)
+			return nil
+		})
+	})
+	return projects, err
+}
+
+func (s *BoltProjectStore) DeleteProject(ctx context.Context, orgRepo string) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte("projects"))
+		if bucket == nil {
+			return ErrProjectNotFound
+		}
+		if bucket.Get([]byte(orgRepo)) == nil {
+			return ErrProjectNotFound
+		}
+		return bucket.Delete([]byte(orgRepo))
+	})
+}
+
+var _ NewProjectStore = (*BoltProjectStore)(nil)
