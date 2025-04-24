@@ -63,7 +63,12 @@ func main() {
 	connectSrv.Use(append(globalMiddleware(logger), middleware.WithGitHubAuth(middleware.ValidateGitHubToken))...)
 	connectSrv.Handle(path, h)
 
-	addr := ":8080"
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	addr := fmt.Sprintf(":%s", port)
 	logger.Info(fmt.Sprintf("Esec Sync Server listening on %s", addr))
 	if err := http.ListenAndServe(addr, connectSrv); err != nil {
 		log.Fatalf("server error: %v", err)

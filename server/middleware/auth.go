@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -47,14 +46,11 @@ type GithubUser struct {
 
 // Real implementation: call GitHub API to validate token
 func ValidateGitHubToken(token string) (GithubUser, bool) {
-	slog.Info("validating GitHub token", "token", token)
 	if token == "" {
 		return GithubUser{}, false
 	}
-
 	login, id, err := getUserInfo(token)
 	valid := err == nil && login != ""
-	slog.Info("validation result", "valid", valid, "login", login, "error", err)
 	user := GithubUser{Login: login, ID: id, Token: token}
 	return user, valid
 }

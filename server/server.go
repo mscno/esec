@@ -199,7 +199,6 @@ func defaultUserHasRoleInRepo(token, orgRepo string, role string) bool {
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Authorization", "Bearer "+token)
-	slog.Info("checking role in repo", "orgRepo", orgRepo, "role", role)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false
