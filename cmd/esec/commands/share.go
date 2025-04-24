@@ -7,26 +7,26 @@ import (
 	"os"
 
 	"github.com/alecthomas/kong"
-	"github.com/mscno/esec/pkg/crypto"
-	"github.com/mscno/esec/pkg/sync"
-	"github.com/mscno/esec/pkg/auth"
-	"github.com/mscno/esec/pkg/project"
 	"github.com/joho/godotenv"
+	"github.com/mscno/esec/pkg/auth"
+	"github.com/mscno/esec/pkg/client"
+	"github.com/mscno/esec/pkg/crypto"
+	"github.com/mscno/esec/pkg/projectfile"
 	"github.com/zalando/go-keyring"
 )
 
 type ShareCmd struct {
-	KeyName string   `arg:"" help:"Key to share (e.g. ESEC_PRIVATE_KEY_PROD)"`
-	Users   []string `help:"Comma-separated GitHub usernames or IDs to share with" name:"users" sep:","`
-	ServerURL string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
-	AuthToken string `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
+	KeyName   string   `arg:"" help:"Key to share (e.g. ESEC_PRIVATE_KEY_PROD)"`
+	Users     []string `help:"Comma-separated GitHub usernames or IDs to share with" name:"users" sep:","`
+	ServerURL string   `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
+	AuthToken string   `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
 }
 
 func (c *ShareCmd) Run(_ *kong.Context) error {
 	if c.KeyName == "" || len(c.Users) == 0 {
 		return fmt.Errorf("must provide key name and at least one user")
 	}
-	orgRepo, err := project.ReadProjectFile(".")
+	orgRepo, err := projectfile.ReadProjectFile(".")
 	if err != nil {
 		return fmt.Errorf("failed to read .esec-project: %w", err)
 	}
@@ -38,13 +38,10 @@ func (c *ShareCmd) Run(_ *kong.Context) error {
 		}
 		c.AuthToken = token
 	}
-	client, err := sync.NewAPIClient(sync.ClientConfig{
+	client := client.NewConnectClient(client.ClientConfig{
 		ServerURL: c.ServerURL,
 		AuthToken: c.AuthToken,
 	})
-	if err != nil {
-		return fmt.Errorf("failed to create sync client: %w", err)
-	}
 	ctx := context.Background()
 	// Fetch current recipients for the key
 	perUserPayload, err := client.PullKeysPerUser(ctx, orgRepo)

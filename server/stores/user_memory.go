@@ -1,21 +1,7 @@
 package stores
 
-import "fmt"
-
-type User struct {
-	GitHubID  string
-	Username  string
-	PublicKey string
-}
-
-type UserStore interface {
-	RegisterUser(user User) error
-	UpdateUserPublicKey(githubID, publicKey string) error
-	GetUser(githubID string) (*User, error)
-}
-
 type memoryUserStore struct {
-	users map[string]*User // githubID -> User
+	users map[string]*User
 }
 
 func NewMemoryUserStore() *memoryUserStore {
@@ -24,7 +10,7 @@ func NewMemoryUserStore() *memoryUserStore {
 
 func (s *memoryUserStore) RegisterUser(user User) error {
 	if _, exists := s.users[user.GitHubID]; exists {
-		return nil // Already exists
+		return ErrUserExists
 	}
 	s.users[user.GitHubID] = &user
 	return nil
@@ -47,4 +33,4 @@ func (s *memoryUserStore) GetUser(githubID string) (*User, error) {
 	return u, nil
 }
 
-var ErrUserNotFound = fmt.Errorf("user not found")
+var _ UserStore = (*memoryUserStore)(nil)

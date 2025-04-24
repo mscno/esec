@@ -1,4 +1,4 @@
-package project
+package projectfile
 
 import (
 	"bufio"

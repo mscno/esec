@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/alecthomas/kong"
-	"github.com/mscno/esec/pkg/sync"
 	"github.com/mscno/esec/pkg/auth"
-	"github.com/mscno/esec/pkg/project"
+	"github.com/mscno/esec/pkg/client"
+	"github.com/mscno/esec/pkg/projectfile"
 )
 
 type ProjectsCmd struct {
@@ -21,13 +21,12 @@ type ProjectsCreateCmd struct {
 	AuthToken string `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
 }
 
-
 func (c *ProjectsCreateCmd) Run(_ *kong.Context) error {
 	if c.OrgRepo == "" {
 		return fmt.Errorf("missing required argument: org/repo")
 	}
 	// Check if a valid .esec-project file already exists in the current directory
-	if _, err := project.ReadProjectFile("."); err == nil {
+	if _, err := projectfile.ReadProjectFile("."); err == nil {
 		return fmt.Errorf(".esec-project file already exists and is valid")
 	}
 	// Retrieve token from keyring if not provided
@@ -39,20 +38,18 @@ func (c *ProjectsCreateCmd) Run(_ *kong.Context) error {
 		}
 		c.AuthToken = token
 	}
-	client, err := sync.NewAPIClient(sync.ClientConfig{
+	client := client.NewConnectClient(client.ClientConfig{
 		ServerURL: c.ServerURL,
 		AuthToken: c.AuthToken,
 	})
-	if err != nil {
-		return fmt.Errorf("failed to create sync client: %w", err)
-	}
+
 	ctx := context.Background()
-	err = client.CreateProject(ctx, c.OrgRepo)
+	err := client.CreateProject(ctx, c.OrgRepo)
 	if err != nil {
 		return fmt.Errorf("failed to create project: %w", err)
 	}
 	// Write the new project file after successful creation
-	if err := project.WriteProjectFile(".", c.OrgRepo); err != nil {
+	if err := projectfile.WriteProjectFile(".", c.OrgRepo); err != nil {
 		return fmt.Errorf("project created, but failed to write .esec-project file: %w", err)
 	}
 	fmt.Printf("Successfully created project '%s' on %s\n", c.OrgRepo, c.ServerURL)
@@ -78,15 +75,12 @@ func (c *ProjectsInfoCmd) Run(_ *kong.Context) error {
 		}
 		c.AuthToken = token
 	}
-	client, err := sync.NewAPIClient(sync.ClientConfig{
+	client := client.NewConnectClient(client.ClientConfig{
 		ServerURL: c.ServerURL,
 		AuthToken: c.AuthToken,
 	})
-	if err != nil {
-		return fmt.Errorf("failed to create sync client: %w", err)
-	}
 	ctx := context.Background()
-	secrets, err := client.PullKeys(ctx, c.OrgRepo)
+	secrets, err := client.PullKeysPerUser(ctx, c.OrgRepo)
 	if err != nil {
 		return fmt.Errorf("failed to fetch project info: %w", err)
 	}

@@ -6,6 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/mscno/esec/pkg/client"
+	keyring2 "github.com/mscno/esec/pkg/keyring"
+	"github.com/mscno/esec/pkg/projectfile"
 	"net/http"
 	"os"
 	"strings"
@@ -16,10 +19,6 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/mscno/esec/pkg/auth"
 	"github.com/mscno/esec/pkg/crypto"
-	"github.com/mscno/esec/pkg/dotenv"
-
-	"github.com/mscno/esec/pkg/project"
-	"github.com/mscno/esec/pkg/sync"
 )
 
 type SyncCmd struct {
@@ -38,7 +37,7 @@ type SyncPullCmd struct {
 
 func (c *SyncPushCmd) Run(_ *kong.Context) error {
 	// Read org/repo from .esec-project
-	orgRepo, err := project.ReadProjectFile(".")
+	orgRepo, err := projectfile.ReadProjectFile(".")
 	if err != nil {
 		return fmt.Errorf("failed to read .esec-project: %w", err)
 	}
@@ -51,13 +50,10 @@ func (c *SyncPushCmd) Run(_ *kong.Context) error {
 		}
 		c.AuthToken = token
 	}
-	client, err := sync.NewAPIClient(sync.ClientConfig{
+	client := client.NewConnectClient(client.ClientConfig{
 		ServerURL: c.ServerURL,
 		AuthToken: c.AuthToken,
 	})
-	if err != nil {
-		return fmt.Errorf("failed to create sync client: %w", err)
-	}
 
 	keyringPath := ".esec-keyring"
 	f, err := os.Open(keyringPath)
@@ -204,7 +200,7 @@ func getGitHubIDFromToken(token string) (string, error) {
 func (c *SyncPullCmd) Run(_ *kong.Context) error {
 	keyringPath := ".esec-keyring"
 	// Read org/repo from .esec-project
-	orgRepo, err := project.ReadProjectFile(".")
+	orgRepo, err := projectfile.ReadProjectFile(".")
 	if err != nil {
 		return fmt.Errorf("failed to read .esec-project: %w", err)
 	}
@@ -217,13 +213,10 @@ func (c *SyncPullCmd) Run(_ *kong.Context) error {
 		}
 		c.AuthToken = token
 	}
-	client, err := sync.NewAPIClient(sync.ClientConfig{
+	client := client.NewConnectClient(client.ClientConfig{
 		ServerURL: c.ServerURL,
 		AuthToken: c.AuthToken,
 	})
-	if err != nil {
-		return fmt.Errorf("failed to create sync client: %w", err)
-	}
 	ctx := context.Background()
 	// Fetch per-user encrypted blobs
 	perUserPayload, err := client.PullKeysPerUser(ctx, orgRepo)
@@ -301,7 +294,7 @@ func (c *SyncPullCmd) Run(_ *kong.Context) error {
 		merged[k] = v
 	}
 	// Write merged map using dotenv.FormatKeyringFile for proper formatting
-	formatted := dotenv.FormatKeyringFile(merged)
+	formatted := keyring2.FormatKeyringFile(merged)
 	err = os.WriteFile(keyringPath, []byte(formatted), 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write %s: %w", keyringPath, err)

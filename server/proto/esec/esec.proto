@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package esec;
+
+option go_package = "github.com/mscno/esec/gen/proto/go/esec;esecpb";
+
+// ESEC main service
+service EsecService {
+  // Project management
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
+
+  // User registration
+  rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse);
+
+  // Public key retrieval
+  rpc GetUserPublicKey(GetUserPublicKeyRequest) returns (GetUserPublicKeyResponse);
+
+  // Per-user secrets
+  rpc SetPerUserSecrets(SetPerUserSecretsRequest) returns (SetPerUserSecretsResponse);
+  rpc GetPerUserSecrets(GetPerUserSecretsRequest) returns (GetPerUserSecretsResponse);
+}
+
+// Project information
+message Project {
+  string org = 1;
+  string repo = 2;
+  string org_repo = 3; // e.g., "org/repo"
+}
+
+// User information
+message User {
+  string github_id = 1;
+  string username = 2;
+  string public_key = 3;
+}
+
+// Request/response for creating a project
+message CreateProjectRequest {
+  string org_repo = 1;
+}
+
+message CreateProjectResponse {
+  string status = 1;
+  string project = 2;
+}
+
+// Request/response for registering a user
+message RegisterUserRequest {
+  string public_key = 3;
+}
+
+message RegisterUserResponse {
+  string status = 1;
+}
+
+// Request/response for getting a user's public key
+message GetUserPublicKeyRequest {
+  string github_id = 1;
+}
+
+message GetUserPublicKeyResponse {
+  string github_id = 1;
+  string username = 2;
+  string public_key = 3;
+}
+
+// Per-user secrets for a project
+message PerUserSecrets {
+  string org_repo = 1;
+  map<string, SecretMap> secrets = 2; // github_id -> SecretMap
+}
+
+message SecretMap {
+  map<string, string> secrets = 1;
+}
+
+// Request/response for setting per-user secrets
+message SetPerUserSecretsRequest {
+  string org_repo = 1;
+  map<string, SecretMap> secrets = 2;
+}
+
+message SetPerUserSecretsResponse {
+  string status = 1;
+}
+
+// Request/response for getting per-user secrets
+message GetPerUserSecretsRequest {
+  string org_repo = 1;
+}
+
+message GetPerUserSecretsResponse {
+  map<string, SecretMap> secrets = 1;
+}
+

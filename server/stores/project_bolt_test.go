@@ -1,6 +1,7 @@
 package stores
 
 import (
+	"go.etcd.io/bbolt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,11 +11,16 @@ func TestBoltStore_BasicCRUD(t *testing.T) {
 	dbPath := filepath.Join(os.TempDir(), "boltstore_test.db")
 	defer os.Remove(dbPath)
 
-	store, err := NewBoltStore(dbPath)
+	db, err := bbolt.Open(dbPath, 0600, nil)
+	if err != nil {
+		t.Fatalf("failed to open BoltDB: %v", err)
+	}
+	defer db.Close()
+
+	store, err := NewBoltStore(db)
 	if err != nil {
 		t.Fatalf("failed to create BoltStore: %v", err)
 	}
-	defer store.Close()
 
 	orgRepo := "myorg/myrepo"
 	if err := store.CreateProject(orgRepo, "admin"); err != nil {

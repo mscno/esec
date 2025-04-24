@@ -11,3 +11,6 @@ install:
 build:
     go build -ldflags "-X 'main.VERSION=0.0.6'" -o esec ./cmd/esec
     ./esec --version
+
+buf:
+    buf generate server/proto --template server/proto/buf.go.yaml

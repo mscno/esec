@@ -1,9 +1,10 @@
 package commands
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mscno/esec/pkg/client"
 	"github.com/zalando/go-keyring"
 	"net/http"
 
@@ -13,7 +14,7 @@ import (
 type AuthCmd struct {
 	Login           LoginCmd               `cmd:"" help:"Authenticate with GitHub using device flow."`
 	Logout          LogoutCmd              `cmd:"" help:"Remove stored authentication credentials."`
-	Sync            AuthSyncCMd            `cmd:"" help:"Register with the sync server."`
+	Sync            AuthSyncCmd            `cmd:"" help:"Register with the sync server."`
 	Info            AuthInfoCmd            `cmd:"" help:"Show info about the currently logged-in user."`
 	GenerateKeypair AuthGenerateKeypairCmd `cmd:"" help:"Generate a new keypair and print a BIP-39 recovery phrase"`
 	RecoverKeypair  AuthRecoverKeypairCmd  `cmd:"" help:"Recover your keypair from a 24-word BIP39 mnemonic phrase"`
@@ -46,45 +47,36 @@ func (c *LoginCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
 	return nil
 }
 
-type AuthSyncCMd struct {
+type AuthSyncCmd struct {
+	ServerURL string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
+	AuthToken string `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
 }
 
-func (c *AuthSyncCMd) Run(ctx *cliCtx, parent *AuthCmd) error {
+func (c *AuthSyncCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
 	// Load public key from keyring
 	pubKey, err := keyring.Get("esec", "public-key")
 	if err != nil {
 		return fmt.Errorf("No public key found in keyring. Please run 'esec auth generate-keypair' before logging in.")
 	}
-	provider := auth.NewGithubProvider(auth.Config{})
-	// --- Register user and public key with server ---
-	token, err := provider.GetToken(ctx)
-	if err != nil || token == "" {
-		ctx.Logger.Error("No authentication token found. Cannot register user.")
-		return nil
+	// Retrieve token from keyring if not provided
+	if c.AuthToken == "" {
+		provider := auth.NewGithubProvider(auth.Config{})
+		token, err := provider.GetToken(context.Background())
+		if err != nil || token == "" {
+			return fmt.Errorf("authentication token required for CreateProject (login with 'esec auth login')")
+		}
+		c.AuthToken = token
 	}
+	client := client.NewConnectClient(client.ClientConfig{
+		ServerURL: c.ServerURL,
+		AuthToken: c.AuthToken,
+	})
 
-	// Register with server
-	registerURL := "http://localhost:8080/api/v1/users/register"
-	registerBody := map[string]string{
-		"public_key": pubKey,
-	}
-	bodyBytes, _ := json.Marshal(registerBody)
-	regReq, err := http.NewRequestWithContext(ctx, "POST", registerURL, bytes.NewReader(bodyBytes))
+	ctx.Logger.Info("Registering user and public key with server...")
+	err = client.SyncUser(ctx, pubKey)
 	if err != nil {
-		ctx.Logger.Error("Failed to create register request", "error", err)
-		return nil
-	}
-	regReq.Header.Set("Authorization", "Bearer "+token)
-	regReq.Header.Set("Content-Type", "application/json")
-	regResp, err := http.DefaultClient.Do(regReq)
-	if err != nil {
-		ctx.Logger.Error("Failed to register user with server", "error", err)
-		return nil
-	}
-	defer regResp.Body.Close()
-	if regResp.StatusCode != 200 {
-		ctx.Logger.Error("Server registration failed", "status", regResp.Status)
-		return nil
+		ctx.Logger.Error("Registration failed", "error", err)
+		return fmt.Errorf("registration failed: %w", err)
 	}
 	ctx.Logger.Info("User and public key registered with server.")
 

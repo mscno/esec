@@ -1,4 +1,4 @@
-package dotenv
+package keyring
 
 import (
 	"fmt"
