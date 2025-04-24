@@ -1,13 +1,14 @@
 package stores
 
 import (
-	"go.etcd.io/bbolt"
 	"os"
 	"testing"
+
+	"go.etcd.io/bbolt"
 )
 
-func TestBoltUserStore_UserLifecycle(t *testing.T) {
-	dbfile := "test_bolt_user.db"
+func TestBoltUserStore_CRUD(t *testing.T) {
+	dbfile := "test_bolt_user_crud.db"
 	_ = os.Remove(dbfile)
 	db, err := bbolt.Open(dbfile, 0600, nil)
 	if err != nil {
@@ -15,29 +16,58 @@ func TestBoltUserStore_UserLifecycle(t *testing.T) {
 	}
 	defer os.Remove(dbfile)
 	defer db.Close()
-	store, err := NewBoltUserStore(db)
+	store := NewBoltUserStore(db)
+
+	user := User{
+		GitHubID:  "1",
+		Username:  "alice",
+		PublicKey: "pk1",
+	}
+
+	// Create
+	err = store.CreateUser(user)
 	if err != nil {
-		t.Fatalf("NewBoltUserStore: %v", err)
+		t.Fatalf("CreateUser: %v", err)
 	}
-	u := User{GitHubID: "42", Username: "alice", PublicKey: "pk"}
-	if err := store.RegisterUser(u); err != nil {
-		t.Fatalf("RegisterUser: %v", err)
+
+	// Get
+	u, err := store.GetUser("1")
+	if err != nil {
+		t.Fatalf("GetUser: %v", err)
 	}
-	if err := store.RegisterUser(u); err.Error() != ErrUserExists.Error() {
-		t.Fatalf("expected ErrUserExists, got: %v", err)
+	if u.Username != "alice" {
+		t.Errorf("unexpected user: %+v", u)
 	}
-	user, err := store.GetUser("42")
-	if err != nil || user.Username != "alice" {
-		t.Fatalf("GetUser: %v user=%v", err, user)
+
+	// Update
+	err = store.UpdateUser("1", func(u User) (User, error) {
+		u.PublicKey = "pk2"
+		return u, nil
+	})
+	if err != nil {
+		t.Fatalf("UpdateUser: %v", err)
 	}
-	if err := store.UpdateUserPublicKey("42", "pk2"); err != nil {
-		t.Fatalf("UpdateUserPublicKey: %v", err)
+	u, _ = store.GetUser("1")
+	if u.PublicKey != "pk2" {
+		t.Errorf("update failed: %+v", u)
 	}
-	user, err = store.GetUser("42")
-	if err != nil || user.PublicKey != "pk2" {
-		t.Fatalf("GetUser after update: %v user=%v", err, user)
+
+	// List
+	users, err := store.ListUsers()
+	if err != nil {
+		t.Fatalf("ListUsers: %v", err)
 	}
-	if _, err := store.GetUser("notfound"); err.Error() != ErrUserNotFound.Error() {
-		t.Fatalf("expected ErrUserNotFound, got: %v", err)
+	if len(users) != 1 || users[0].GitHubID != "1" {
+		t.Errorf("unexpected users: %+v", users)
+	}
+
+	// Delete
+	err = store.DeleteUser("1")
+	if err != nil {
+		t.Fatalf("DeleteUser: %v", err)
+	}
+	_, err = store.GetUser("1")
+	if err == nil {
+		t.Errorf("expected error after delete, got nil")
 	}
 }

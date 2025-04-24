@@ -2,8 +2,6 @@ package stores
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"go.etcd.io/bbolt"
 )
 
@@ -11,66 +9,39 @@ type BoltUserStore struct {
 	db *bbolt.DB
 }
 
-var userBucket = []byte("users")
-
-func NewBoltUserStore(db *bbolt.DB) (*BoltUserStore, error) {
-	if db == nil {
-		return nil, errors.New("db cannot be nil")
-	}
-	// Ensure bucket exists
-	err := db.Update(func(tx *bbolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists(userBucket)
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &BoltUserStore{db: db}, nil
+func NewBoltUserStore(db *bbolt.DB) *BoltUserStore {
+	return &BoltUserStore{db: db}
 }
 
-func (s *BoltUserStore) RegisterUser(user User) error {
+var usersBucket = []byte("users")
+
+func (s *BoltUserStore) CreateUser(user User) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(userBucket)
-		key := []byte(user.GitHubID)
-		if b.Get(key) != nil {
-			return fmt.Errorf("user already exists")
-		}
-		val, err := json.Marshal(user)
+		bucket, err := tx.CreateBucketIfNotExists(usersBucket)
 		if err != nil {
 			return err
 		}
-		return b.Put(key, val)
-	})
-}
-
-func (s *BoltUserStore) UpdateUserPublicKey(githubID, publicKey string) error {
-	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(userBucket)
-		key := []byte(githubID)
-		val := b.Get(key)
-		if val == nil {
-			return fmt.Errorf("user not found")
+		if bucket.Get([]byte(user.GitHubID)) != nil {
+			return ErrUserExists
 		}
-		var user User
-		if err := json.Unmarshal(val, &user); err != nil {
-			return err
-		}
-		user.PublicKey = publicKey
-		newVal, err := json.Marshal(user)
+		data, err := json.Marshal(user)
 		if err != nil {
 			return err
 		}
-		return b.Put(key, newVal)
+		return bucket.Put([]byte(user.GitHubID), data)
 	})
 }
 
 func (s *BoltUserStore) GetUser(githubID string) (*User, error) {
 	var user User
 	err := s.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(userBucket)
-		val := b.Get([]byte(githubID))
+		bucket := tx.Bucket(usersBucket)
+		if bucket == nil {
+			return ErrUserNotFound
+		}
+		val := bucket.Get([]byte(githubID))
 		if val == nil {
-			return fmt.Errorf("user not found")
+			return ErrUserNotFound
 		}
 		return json.Unmarshal(val, &user)
 	})
@@ -80,4 +51,62 @@ func (s *BoltUserStore) GetUser(githubID string) (*User, error) {
 	return &user, nil
 }
 
-var _ UserStore = (*BoltUserStore)(nil)
+func (s *BoltUserStore) UpdateUser(githubID string, updateFn func(User) (User, error)) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(usersBucket)
+		if bucket == nil {
+			return ErrUserNotFound
+		}
+		val := bucket.Get([]byte(githubID))
+		if val == nil {
+			return ErrUserNotFound
+		}
+		var user User
+		if err := json.Unmarshal(val, &user); err != nil {
+			return err
+		}
+		updated, err := updateFn(user)
+		if err != nil {
+			return err
+		}
+		data, err := json.Marshal(updated)
+		if err != nil {
+			return err
+		}
+		return bucket.Put([]byte(githubID), data)
+	})
+}
+
+func (s *BoltUserStore) DeleteUser(githubID string) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(usersBucket)
+		if bucket == nil {
+			return ErrUserNotFound
+		}
+		if bucket.Get([]byte(githubID)) == nil {
+			return ErrUserNotFound
+		}
+		return bucket.Delete([]byte(githubID))
+	})
+}
+
+func (s *BoltUserStore) ListUsers() ([]User, error) {
+	var users []User
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(usersBucket)
+		if bucket == nil {
+			return nil
+		}
+		return bucket.ForEach(func(k, v []byte) error {
+			var u User
+			if err := json.Unmarshal(v, &u); err != nil {
+				return err
+			}
+			users = append(users, u)
+			return nil
+		})
+	})
+	return users, err
+}
+
+var _ NewUserStore = (*BoltUserStore)(nil)

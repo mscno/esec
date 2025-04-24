@@ -19,14 +19,14 @@ import (
 // Add dependencies as in Handler
 type Server struct {
 	Store             stores.NewProjectStore
-	UserStore         stores.UserStore
+	UserStore         stores.NewUserStore
 	Logger            *slog.Logger
 	userHasRoleInRepo UserHasRoleInRepoFunc
 }
 
 type UserHasRoleInRepoFunc func(token, orgRepo, role string) bool
 
-func NewServer(store stores.NewProjectStore, userStore stores.UserStore, logger *slog.Logger, userHasRoleInRepo UserHasRoleInRepoFunc) *Server {
+func NewServer(store stores.NewProjectStore, userStore stores.NewUserStore, logger *slog.Logger, userHasRoleInRepo UserHasRoleInRepoFunc) *Server {
 	if userHasRoleInRepo == nil {
 		userHasRoleInRepo = defaultUserHasRoleInRepo
 	}
@@ -97,11 +97,10 @@ func (s *Server) RegisterUser(ctx context.Context, request *connect.Request[esec
 	if _, err := s.UserStore.GetUser(user.GitHubID); err == nil {
 		return nil, connect.NewError(connect.CodeAlreadyExists, err)
 	}
-	if err := s.UserStore.RegisterUser(user); err != nil {
+	if err := s.UserStore.CreateUser(user); err != nil {
 		s.Logger.Error("failed to register user", "github_id", user.GitHubID, "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to register user: %w", err))
 	}
-	_ = s.UserStore.UpdateUserPublicKey(user.GitHubID, user.PublicKey)
 	return connect.NewResponse(&esecpb.RegisterUserResponse{
 		Status: "user registered",
 	}), nil
@@ -114,7 +113,7 @@ func (s *Server) GetUserPublicKey(ctx context.Context, request *connect.Request[
 	}
 	user, err := s.UserStore.GetUser(githubID)
 	if err != nil {
-		if err.Error() == "user not found" {
+		if errors.Is(err, stores.ErrUserNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("user not found"))
 		}
 		s.Logger.Error("failed to get user", "github_id", githubID, "error", err)

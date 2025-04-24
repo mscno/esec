@@ -22,7 +22,7 @@ func main() {
 
 	// Choose store implementation
 	var projectStore stores.NewProjectStore
-	var userStore stores.UserStore
+	var userStore stores.NewUserStore
 	storeType := os.Getenv("ESEC_STORE")
 	if storeType == "bolt" {
 		boltPath := os.Getenv("ESEC_BOLT_PATH")
@@ -39,16 +39,13 @@ func main() {
 		projectStore = boltProjectStore
 		logger.Info(fmt.Sprintf("Using BoltDB store at %s", boltPath))
 
-		boltUserStore, err := stores.NewBoltUserStore(db)
-		if err != nil {
-			log.Fatalf("failed to open BoltDB: %v", err)
-		}
+		boltUserStore := stores.NewBoltUserStore(db)
 
 		userStore = boltUserStore
 
 	} else {
 		projectStore = stores.NewInMemoryProjectStore()
-		userStore = stores.NewMemoryUserStore()
+		userStore = stores.NewInMemoryUserStore()
 		logger.Info("Using in-memory store")
 	}
 

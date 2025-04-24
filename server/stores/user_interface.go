@@ -14,5 +14,13 @@ type UserStore interface {
 	GetUser(githubID string) (*User, error)
 }
 
+type NewUserStore interface {
+	CreateUser(user User) error
+	GetUser(githubID string) (*User, error)
+	UpdateUser(githubID string, updateFn func(User) (User, error)) error
+	DeleteUser(githubID string) error
+	ListUsers() ([]User, error)
+}
+
 var ErrUserExists = errors.New("user already exists")
 var ErrUserNotFound = errors.New("user not found")

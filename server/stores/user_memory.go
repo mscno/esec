@@ -1,36 +1,56 @@
 package stores
 
-type memoryUserStore struct {
-	users map[string]*User
+type InMemoryUserStore struct {
+	users map[string]User
 }
 
-func NewMemoryUserStore() *memoryUserStore {
-	return &memoryUserStore{users: make(map[string]*User)}
+func NewInMemoryUserStore() *InMemoryUserStore {
+	return &InMemoryUserStore{users: make(map[string]User)}
 }
 
-func (s *memoryUserStore) RegisterUser(user User) error {
+func (s *InMemoryUserStore) CreateUser(user User) error {
 	if _, exists := s.users[user.GitHubID]; exists {
 		return ErrUserExists
 	}
-	s.users[user.GitHubID] = &user
+	s.users[user.GitHubID] = user
 	return nil
 }
 
-func (s *memoryUserStore) UpdateUserPublicKey(githubID, publicKey string) error {
-	u, ok := s.users[githubID]
-	if !ok {
-		return ErrUserNotFound
-	}
-	u.PublicKey = publicKey
-	return nil
-}
-
-func (s *memoryUserStore) GetUser(githubID string) (*User, error) {
+func (s *InMemoryUserStore) GetUser(githubID string) (*User, error) {
 	u, ok := s.users[githubID]
 	if !ok {
 		return nil, ErrUserNotFound
 	}
-	return u, nil
+	return &u, nil
 }
 
-var _ UserStore = (*memoryUserStore)(nil)
+func (s *InMemoryUserStore) UpdateUser(githubID string, updateFn func(User) (User, error)) error {
+	u, ok := s.users[githubID]
+	if !ok {
+		return ErrUserNotFound
+	}
+	updated, err := updateFn(u)
+	if err != nil {
+		return err
+	}
+	s.users[githubID] = updated
+	return nil
+}
+
+func (s *InMemoryUserStore) DeleteUser(githubID string) error {
+	if _, ok := s.users[githubID]; !ok {
+		return ErrUserNotFound
+	}
+	delete(s.users, githubID)
+	return nil
+}
+
+func (s *InMemoryUserStore) ListUsers() ([]User, error) {
+	var out []User
+	for _, u := range s.users {
+		out = append(out, u)
+	}
+	return out, nil
+}
+
+var _ NewUserStore = (*InMemoryUserStore)(nil)

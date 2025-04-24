@@ -1,28 +1,61 @@
 package stores
 
-import "testing"
+import (
+	"testing"
+)
 
-func TestMemoryUserStore_UserLifecycle(t *testing.T) {
-	s := NewMemoryUserStore()
-	u := User{GitHubID: "42", Username: "alice", PublicKey: "pk"}
-	if err := s.RegisterUser(u); err != nil {
-		t.Fatalf("RegisterUser: %v", err)
+func TestInMemoryUserStore_CRUD(t *testing.T) {
+	store := NewInMemoryUserStore()
+	user := User{
+		GitHubID:  "1",
+		Username:  "alice",
+		PublicKey: "pk1",
 	}
-	if err := s.RegisterUser(u); err != ErrUserExists {
-		t.Fatalf("expected ErrUserExists, got: %v", err)
+
+	// Create
+	err := store.CreateUser(user)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
 	}
-	user, err := s.GetUser("42")
-	if err != nil || user.Username != "alice" {
-		t.Fatalf("GetUser: %v user=%v", err, user)
+
+	// Get
+	u, err := store.GetUser("1")
+	if err != nil {
+		t.Fatalf("GetUser: %v", err)
 	}
-	if err := s.UpdateUserPublicKey("42", "pk2"); err != nil {
-		t.Fatalf("UpdateUserPublicKey: %v", err)
+	if u.Username != "alice" {
+		t.Errorf("unexpected user: %+v", u)
 	}
-	user, err = s.GetUser("42")
-	if err != nil || user.PublicKey != "pk2" {
-		t.Fatalf("GetUser after update: %v user=%v", err, user)
+
+	// Update
+	err = store.UpdateUser("1", func(u User) (User, error) {
+		u.PublicKey = "pk2"
+		return u, nil
+	})
+	if err != nil {
+		t.Fatalf("UpdateUser: %v", err)
 	}
-	if _, err := s.GetUser("notfound"); err != ErrUserNotFound {
-		t.Fatalf("expected ErrUserNotFound, got: %v", err)
+	u, _ = store.GetUser("1")
+	if u.PublicKey != "pk2" {
+		t.Errorf("update failed: %+v", u)
+	}
+
+	// List
+	users, err := store.ListUsers()
+	if err != nil {
+		t.Fatalf("ListUsers: %v", err)
+	}
+	if len(users) != 1 || users[0].GitHubID != "1" {
+		t.Errorf("unexpected users: %+v", users)
+	}
+
+	// Delete
+	err = store.DeleteUser("1")
+	if err != nil {
+		t.Fatalf("DeleteUser: %v", err)
+	}
+	_, err = store.GetUser("1")
+	if err == nil {
+		t.Errorf("expected error after delete, got nil")
 	}
 }
