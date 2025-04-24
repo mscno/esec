@@ -21,7 +21,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	// Choose store implementation
-	var projectStore stores.ProjectStore
+	var projectStore stores.NewProjectStore
 	var userStore stores.UserStore
 	storeType := os.Getenv("ESEC_STORE")
 	if storeType == "bolt" {
@@ -34,10 +34,7 @@ func main() {
 			log.Fatalf("failed to open BoltDB: %v", err)
 		}
 		defer db.Close()
-		boltProjectStore, err := stores.NewBoltStore(db)
-		if err != nil {
-			log.Fatalf("failed to open BoltDB: %v", err)
-		}
+		boltProjectStore := stores.NewBoltProjectStore(db)
 
 		projectStore = boltProjectStore
 		logger.Info(fmt.Sprintf("Using BoltDB store at %s", boltPath))
@@ -50,7 +47,7 @@ func main() {
 		userStore = boltUserStore
 
 	} else {
-		projectStore = stores.NewMemoryStore()
+		projectStore = stores.NewInMemoryProjectStore()
 		userStore = stores.NewMemoryUserStore()
 		logger.Info("Using in-memory store")
 	}

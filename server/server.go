@@ -18,7 +18,7 @@ import (
 // It adapts the Handler logic for gRPC/protobuf
 // Add dependencies as in Handler
 type Server struct {
-	Store             stores.ProjectStore
+	Store             stores.NewProjectStore
 	UserStore         stores.UserStore
 	Logger            *slog.Logger
 	userHasRoleInRepo UserHasRoleInRepoFunc
@@ -26,7 +26,7 @@ type Server struct {
 
 type UserHasRoleInRepoFunc func(token, orgRepo, role string) bool
 
-func NewServer(store stores.ProjectStore, userStore stores.UserStore, logger *slog.Logger, userHasRoleInRepo UserHasRoleInRepoFunc) *Server {
+func NewServer(store stores.NewProjectStore, userStore stores.UserStore, logger *slog.Logger, userHasRoleInRepo UserHasRoleInRepoFunc) *Server {
 	if userHasRoleInRepo == nil {
 		userHasRoleInRepo = defaultUserHasRoleInRepo
 	}
@@ -62,7 +62,12 @@ func (s *Server) CreateProject(ctx context.Context, request *connect.Request[ese
 	if !s.userHasRoleInRepo(ghuser.Token, request.Msg.OrgRepo, "admin") {
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("access to %s denied", request.Msg.OrgRepo))
 	}
-	if err := s.Store.CreateProject(orgRepo, creatorID); err != nil {
+	project := stores.Project{
+		OrgRepo: orgRepo,
+		Admins:  []string{creatorID},
+		Secrets: map[string]map[string]string{},
+	}
+	if err := s.Store.CreateProject(ctx, project); err != nil {
 		if errors.Is(err, stores.ErrProjectExists) {
 			return nil, connect.NewError(connect.CodeAlreadyExists, err)
 		}
@@ -134,18 +139,23 @@ func (s *Server) SetPerUserSecrets(ctx context.Context, request *connect.Request
 	if err := validateOrgRepo(orgRepo); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid org_repo: %w", err))
 	}
-	if !s.Store.ProjectExists(orgRepo) {
-		s.Logger.Error("project does not exist or you do not have access", "orgRepo", orgRepo)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project does not exist or you do not have access"))
+	proj, err := s.Store.GetProject(ctx, orgRepo)
+	if err != nil {
+		s.Logger.Error("project not found", "orgRepo", orgRepo, "error", err)
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found: %w", err))
 	}
-	if !s.Store.IsProjectAdmin(orgRepo, fmt.Sprintf("%d", ghuser.ID)) {
+	if !contains(proj.Admins, fmt.Sprintf("%d", ghuser.ID)) {
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("only project admins may share secrets for this project"))
 	}
 	secrets := make(map[string]map[string]string)
 	for userID, secretMap := range request.Msg.GetSecrets() {
 		secrets[userID] = secretMap.Secrets
 	}
-	if err := s.Store.SetPerUserSecrets(orgRepo, secrets); err != nil {
+
+	if err := s.Store.UpdateProject(ctx, proj.OrgRepo, func(project stores.Project) (stores.Project, error) {
+		proj.Secrets = secrets
+		return proj, nil
+	}); err != nil {
 		s.Logger.Error("failed to store per-user secrets", "orgRepo", orgRepo, "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to store per-user secrets: %w", err))
 	}
@@ -164,26 +174,28 @@ func (s *Server) GetPerUserSecrets(ctx context.Context, request *connect.Request
 	if err := validateOrgRepo(orgRepo); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid org_repo: %w", err))
 	}
-	if !s.Store.ProjectExists(orgRepo) {
-		s.Logger.Error("project does not exist or you do not have access", "orgRepo", orgRepo)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project does not exist or you do not have access"))
+	proj, err := s.Store.GetProject(ctx, orgRepo)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found: %w", err))
 	}
-	if !s.Store.IsProjectAdmin(orgRepo, fmt.Sprintf("%d", ghuser.ID)) {
+	if !contains(proj.Admins, fmt.Sprintf("%d", ghuser.ID)) {
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("only project admins may share secrets for this project"))
 	}
-	secrets, err := s.Store.GetPerUserSecrets(orgRepo)
-	if err != nil {
-		if err.Error() == "project not found" {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
-		}
-		s.Logger.Error("failed to get per-user secrets", "orgRepo", orgRepo, "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get per-user secrets: %w", err))
-	}
+	secrets := proj.Secrets
 	resp := &esecpb.GetPerUserSecretsResponse{Secrets: map[string]*esecpb.SecretMap{}}
 	for userID, secretMap := range secrets {
 		resp.Secrets[userID] = &esecpb.SecretMap{Secrets: secretMap}
 	}
 	return connect.NewResponse(resp), nil
+}
+
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }
 
 // userHasRoleInRepo checks if the given GitHub token has a role in the given org/repo.

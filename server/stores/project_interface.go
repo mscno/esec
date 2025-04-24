@@ -1,9 +1,14 @@
 package stores
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 type Project struct {
-	Admins []string
+	OrgRepo string
+	Admins  []string
+	Secrets map[string]map[string]string
 }
 
 type ProjectStore interface {
@@ -13,6 +18,14 @@ type ProjectStore interface {
 	IsProjectAdmin(orgRepo string, githubID string) bool
 	GetPerUserSecrets(orgRepo string) (map[string]map[string]string, error)
 	SetPerUserSecrets(orgRepo string, secrets map[string]map[string]string) error
+}
+
+type NewProjectStore interface {
+	CreateProject(ctx context.Context, project Project) error
+	GetProject(ctx context.Context, orgRepo string) (Project, error)
+	UpdateProject(ctx context.Context, orgRepo string, updateFn func(project Project) (Project, error)) error
+	ListProjects(ctx context.Context) ([]Project, error)
+	DeleteProject(ctx context.Context, orgRepo string) error
 }
 
 var ErrProjectExists = errors.New("project already exists")

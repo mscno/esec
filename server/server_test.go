@@ -27,7 +27,7 @@ func mockTokenValidator(token string) (middleware.GithubUser, bool) {
 	return middleware.GithubUser{}, false
 }
 func setupTestServer() *Server {
-	store := stores.NewMemoryStore()
+	store := stores.NewInMemoryProjectStore()
 	userStore := stores.NewMemoryUserStore()
 	logger := slog.Default()
 	return NewServer(store, userStore, logger, mockUserHasRoleInRepo)
