@@ -34,7 +34,8 @@ type cli struct {
 	Run      RunCmd           `cmd:"" help:"Decrypt a secret, set environment variables, and run a command"`
 	Auth     AuthCmd          `cmd:"" help:"Authentication commands"`
 	Sync     SyncCmd          `cmd:"" help:"Sync commands"`
-	Share    ShareCmd         `cmd:"" help:"Share a secret key with additional users"`
+	Share    ShareCmd         `cmd:"" help:"Share a secret key with other users"`
+	Unshare  UnshareCmd       `cmd:"" help:"Unshare a secret key with other users"`
 	Keys     KeysCmd          `cmd:"" help:"Key management commands"`
 	Projects ProjectsCmd      `cmd:"" help:"Project commands"`
 	Version  kong.VersionFlag `help:"Show version"`
@@ -44,7 +45,7 @@ type cli struct {
 func Execute(version string) {
 	var cli cli
 	ctx := kong.Parse(&cli,
-		kong.UsageOnError(),
+		kong.ShortUsageOnError(),
 		kong.Name("esec"),
 		kong.Description("esec is a tool for encrypting secrets"),
 		kong.Vars{"version": version},

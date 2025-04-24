@@ -40,9 +40,8 @@ func (b *BoltStore) CreateProject(orgRepo string, adminID string) error {
 		if bucket.Get([]byte(orgRepo)) != nil {
 			return ErrProjectExists
 		}
-		pd := projectData{
-			Admins:  []string{adminID},
-			Secrets: map[string]string{},
+		pd := Project{
+			Admins: []string{adminID},
 		}
 		val, err := json.Marshal(pd)
 		if err != nil {
@@ -63,7 +62,7 @@ func (b *BoltStore) ProjectExists(orgRepo string) bool {
 }
 
 func (b *BoltStore) GetProjectAdmins(orgRepo string) ([]string, error) {
-	var pd projectData
+	var pd Project
 	err := b.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(projectsBucket)
 		val := bucket.Get([]byte(orgRepo))
@@ -89,42 +88,6 @@ func (b *BoltStore) IsProjectAdmin(orgRepo string, githubID string) bool {
 		}
 	}
 	return false
-}
-
-func (b *BoltStore) GetSecrets(orgRepo string) (map[string]string, error) {
-	var pd projectData
-	err := b.db.View(func(tx *bbolt.Tx) error {
-		bucket := tx.Bucket(projectsBucket)
-		val := bucket.Get([]byte(orgRepo))
-		if val == nil {
-			return ErrProjectNotFound
-		}
-		return json.Unmarshal(val, &pd)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return pd.Secrets, nil
-}
-
-func (b *BoltStore) SetSecrets(orgRepo string, secrets map[string]string) error {
-	return b.db.Update(func(tx *bbolt.Tx) error {
-		bucket := tx.Bucket(projectsBucket)
-		val := bucket.Get([]byte(orgRepo))
-		if val == nil {
-			return ErrProjectNotFound
-		}
-		var pd projectData
-		if err := json.Unmarshal(val, &pd); err != nil {
-			return err
-		}
-		pd.Secrets = secrets
-		newVal, err := json.Marshal(pd)
-		if err != nil {
-			return err
-		}
-		return bucket.Put([]byte(orgRepo), newVal)
-	})
 }
 
 func (b *BoltStore) GetPerUserSecrets(orgRepo string) (map[string]map[string]string, error) {

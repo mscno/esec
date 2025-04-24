@@ -2,18 +2,13 @@ package stores
 
 // MemoryStore implements ProjectStore interface in-memory (for testing/dev)
 type MemoryStore struct {
-	projects       map[string]*projectData
+	projects       map[string]*Project
 	perUserSecrets map[string]map[string]map[string]string // orgRepo -> githubID -> key -> value
-}
-
-type projectData struct {
-	Admins  []string
-	Secrets map[string]string
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		projects:       make(map[string]*projectData),
+		projects:       make(map[string]*Project),
 		perUserSecrets: make(map[string]map[string]map[string]string),
 	}
 }
@@ -22,9 +17,8 @@ func (m *MemoryStore) CreateProject(orgRepo string, adminID string) error {
 	if _, exists := m.projects[orgRepo]; exists {
 		return ErrProjectExists
 	}
-	m.projects[orgRepo] = &projectData{
-		Admins:  []string{adminID},
-		Secrets: map[string]string{},
+	m.projects[orgRepo] = &Project{
+		Admins: []string{adminID},
 	}
 	return nil
 }
@@ -53,23 +47,6 @@ func (m *MemoryStore) IsProjectAdmin(orgRepo string, githubID string) bool {
 		}
 	}
 	return false
-}
-
-func (m *MemoryStore) GetSecrets(orgRepo string) (map[string]string, error) {
-	p, ok := m.projects[orgRepo]
-	if !ok {
-		return nil, ErrProjectNotFound
-	}
-	return p.Secrets, nil
-}
-
-func (m *MemoryStore) SetSecrets(orgRepo string, secrets map[string]string) error {
-	p, ok := m.projects[orgRepo]
-	if !ok {
-		return ErrProjectNotFound
-	}
-	p.Secrets = secrets
-	return nil
 }
 
 func (m *MemoryStore) GetPerUserSecrets(orgRepo string) (map[string]map[string]string, error) {
