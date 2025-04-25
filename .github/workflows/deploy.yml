@@ -1,0 +1,67 @@
+name: Build and Deploy to Cloud Run
+
+on:
+  push:
+    branches: [ "master" ]
+
+env:
+  PROJECT_ID: esec-prod
+  SERVICE_NAME: esec-api
+  REGION: europe-west1
+  KO_DOCKER_REPO: europe-west1-docker.pkg.dev/esec-prod/images/esec-server
+
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Needed for Workload Identity Federation
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+
+    - name: Google Auth with Workload Identity Federation
+      id: auth
+      uses: 'google-github-actions/auth@v2'
+      with:
+        project_id: 'esec-prod'
+        workload_identity_provider: 'projects/1072520634286/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider'
+        service_account: github-actions-sa@esec-prod.iam.gserviceaccount.com
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: gcloud Auth Docker
+      run: |
+        gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+    - name: gcloud info
+      run: gcloud info
+
+    - name: Install ko
+      uses: ko-build/setup-ko@v0.8
+
+    - name: Build and Push Image
+      run: |
+        IMAGE_URL=$(ko build --base-import-paths --tags=latest,sha-$(git rev-parse --short HEAD) ./cmd/esec-server)
+        echo "IMAGE_URL=${IMAGE_URL}" >> $GITHUB_ENV
+
+    - name: Deploy to Cloud Run
+      id: deploy
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: ${{ env.SERVICE_NAME }}
+        region: ${{ env.REGION }}
+        image: ${{ env.IMAGE_URL }}
+
+    - name: Show URL
+      run: |
+        echo "Service URL: ${{ steps.deploy.outputs.url }}"
