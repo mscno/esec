@@ -96,13 +96,14 @@ func (c *ConnectClient) PullKeysPerUser(ctx context.Context, orgRepo string) (ma
 	}
 	result := make(map[UserId]map[PrivateKeyName]string)
 	for userID, secmap := range resp.Msg.Secrets {
-		for _, secret := range secmap.Secrets {
+		for keyName, secret := range secmap.Secrets {
 			userIdTyped := UserId(userID)
+			keyTyped := PrivateKeyName(keyName)
 			if _, ok := result[userIdTyped]; ok {
-				result[userIdTyped][PrivateKeyName(secret)] = secret
+				result[userIdTyped][keyTyped] = secret
 			} else {
 				result[userIdTyped] = map[PrivateKeyName]string{
-					PrivateKeyName(secret): secret,
+					keyTyped: secret,
 				}
 			}
 		}

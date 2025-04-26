@@ -126,6 +126,7 @@ func (c *SyncPushCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	for keyName, secret := range privateKeys {
 		typedKey := client.PrivateKeyName(keyName)
 		recipients := map[client.UserId]string{} // githubID -> pubKey
+		recipients[client.UserId(myGitHubID)] = myPubHex
 		for githubID, blobs := range perUserPayloadServer {
 			// Fetch public key for recipient
 			if githubID.String() == myGitHubID {
@@ -142,11 +143,9 @@ func (c *SyncPushCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 				}
 				recipients[githubID] = pubKey
 
-			} else {
-				// Only self
-				recipients[client.UserId(myGitHubID)] = myPubHex
 			}
 		}
+
 		for githubID, pubKey := range recipients {
 			if perUserPayload[githubID] == nil {
 				perUserPayload[githubID] = map[client.PrivateKeyName]string{}
@@ -224,6 +223,7 @@ func (c *SyncPullCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	if err != nil {
 		return fmt.Errorf("failed to pull per-user secrets: %w", err)
 	}
+	ctx.Logger.Debug("per-user secrets", "perUserPayload", perUserPayload)
 
 	// Load our own GitHub ID (from env or token)
 	myGitHubID := os.Getenv("ESEC_GITHUB_ID")
@@ -251,10 +251,13 @@ func (c *SyncPullCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	// Prepare new keyring map
 	newKeyring := map[string]string{}
 	for userId, userBlobs := range perUserPayload {
+
 		if userId.String() != myGitHubID {
 			continue
 		}
+		ctx.Logger.Debug("Reading user blobs", "userId", userId)
 		for keyName, blob := range userBlobs {
+			ctx.Logger.Debug("Reading key", "keyName", keyName)
 			ciphertext, err := base64.StdEncoding.DecodeString(blob)
 			if err != nil {
 				fmt.Printf("Failed to decode ciphertext for %s: %v\n", keyName, err)
@@ -269,6 +272,7 @@ func (c *SyncPullCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 			newKeyring[keyName.String()] = string(plaintext)
 		}
 	}
+	ctx.Logger.Debug("Writing new keyring", "newKeyring", newKeyring)
 	// Merge with existing keyring
 	merged := map[string]string{}
 	// Parse existing file if present
