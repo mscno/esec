@@ -5,10 +5,13 @@ on:
     branches: [ "master" ]
 
 env:
-  PROJECT_ID: esec-prod
-  SERVICE_NAME: esec-api
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  PROJECT_NUMBER: ${{ secrets.GCP_PROJECT_NUMBER }}
+  SERVICE_NAME: esec-server
   REGION: europe-west1
-  KO_DOCKER_REPO: europe-west1-docker.pkg.dev/esec-prod/images/esec-server
+  KO_DOCKER_REPO: europe-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/images/esec-server
+  SERVICE_ACCOUNT: github-actions-sa@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+  WORKLOAD_IDENTITY_PROVIDER: 'projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider'
 
 jobs:
   deploy:
@@ -32,9 +35,9 @@ jobs:
       id: auth
       uses: 'google-github-actions/auth@v2'
       with:
-        project_id: 'esec-prod'
-        workload_identity_provider: 'projects/1072520634286/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider'
-        service_account: github-actions-sa@esec-prod.iam.gserviceaccount.com
+        project_id: ${{ env.PROJECT_ID }}
+        workload_identity_provider:  ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ env.SERVICE_ACCOUNT }}
 
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@v2

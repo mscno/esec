@@ -15,7 +15,7 @@ import (
 func TestUserSecretsDataStore(t *testing.T) {
 	testUserSecrets(t, func() ProjectStore {
 		ctx := context.Background()
-		projectID := "esec-prod"
+		projectID := os.Getenv("TEST_DATASTORE_PROJECT")
 		client, err := datastore.NewClientWithDatabase(ctx, projectID, "esec-test")
 		assert.NoError(t, err)
 		store := NewProjectDataStore(ctx, client)
