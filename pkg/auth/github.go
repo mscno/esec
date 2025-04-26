@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/zalando/go-keyring"
+	// Import the consolidated keyring service
+	"github.com/mscno/esec/pkg/oskeyring"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
 )
@@ -14,12 +15,16 @@ var ErrTokenNotFound = errors.New("authentication token not found in keyring")
 
 // GithubProvider implements the Provider interface for GitHub authentication.
 type GithubProvider struct {
-	Config Config
+	Config  Config
+	keyring oskeyring.Service
 }
 
 // NewGithubProvider creates a new GithubProvider.
-func NewGithubProvider(cfg Config) *GithubProvider {
-	return &GithubProvider{Config: cfg}
+func NewGithubProvider(cfg Config, keyring oskeyring.Service) *GithubProvider {
+	return &GithubProvider{
+		Config:  cfg,
+		keyring: keyring,
+	}
 }
 
 func (p *GithubProvider) getOAuthConfig() *oauth2.Config {
@@ -53,7 +58,7 @@ func (p *GithubProvider) Login(ctx context.Context) error {
 	}
 
 	// Store the token in the keyring
-	if err := keyring.Set(ServiceName, AccountName, token.AccessToken); err != nil {
+	if err := p.keyring.Set(ServiceName, AccountName, token.AccessToken); err != nil {
 		return fmt.Errorf("failed to store token in keyring: %w", err)
 	}
 
@@ -61,11 +66,11 @@ func (p *GithubProvider) Login(ctx context.Context) error {
 	return nil
 }
 
-// GetToken retrieves the stored GitHub token from the keyring.
+// GetToken retrieves the stored GitHub token using the injected KeyringService.
 func (p *GithubProvider) GetToken(ctx context.Context) (string, error) {
-	token, err := keyring.Get(ServiceName, AccountName)
+	token, err := p.keyring.Get(ServiceName, AccountName)
 	if err != nil {
-		if errors.Is(err, keyring.ErrNotFound) {
+		if errors.Is(err, oskeyring.ErrNotFound) {
 			return "", ErrTokenNotFound
 		}
 		return "", fmt.Errorf("failed to get token from keyring: %w", err)
@@ -73,10 +78,10 @@ func (p *GithubProvider) GetToken(ctx context.Context) (string, error) {
 	return token, nil
 }
 
-// Logout removes the stored GitHub token from the keyring.
+// Logout removes the stored GitHub token using the injected KeyringService.
 func (p *GithubProvider) Logout(ctx context.Context) error {
-	err := keyring.Delete(ServiceName, AccountName)
-	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
+	err := p.keyring.Delete(ServiceName, AccountName)
+	if err != nil {
 		return fmt.Errorf("failed to delete token from keyring: %w", err)
 	}
 	fmt.Println("Successfully logged out and removed token.")

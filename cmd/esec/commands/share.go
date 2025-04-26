@@ -1,51 +1,39 @@
 package commands
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path"
 
-	"github.com/alecthomas/kong"
 	"github.com/joho/godotenv"
-	"github.com/mscno/esec/pkg/auth"
-	"github.com/mscno/esec/pkg/client"
 	"github.com/mscno/esec/pkg/crypto"
 	"github.com/mscno/esec/pkg/projectfile"
-	"github.com/zalando/go-keyring"
 )
 
 type ShareCmd struct {
-	KeyName   string   `arg:"" help:"Key to share (e.g. ESEC_PRIVATE_KEY_PROD)"`
-	Users     []string `help:"Comma-separated GitHub usernames or IDs to share with" name:"users" sep:","`
-	ServerURL string   `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
-	AuthToken string   `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
+	KeyName string   `arg:"" help:"Key to share (e.g. ESEC_PRIVATE_KEY_PROD)"`
+	Users   []string `help:"Comma-separated GitHub usernames or IDs to share with" name:"users" sep:","`
 }
 
-func (c *ShareCmd) Run(_ *kong.Context) error {
+func (c *ShareCmd) Run(ctx *cliCtx, parent *CloudCmd) error {
 	if c.KeyName == "" || len(c.Users) == 0 {
 		return fmt.Errorf("must provide key name and at least one user")
 	}
-	orgRepo, err := projectfile.ReadProjectFile(".")
+	orgRepo, err := projectfile.ReadProjectFile(parent.ProjectDir)
 	if err != nil {
 		return fmt.Errorf("failed to read .esec-project: %w", err)
 	}
-	if c.AuthToken == "" {
-		provider := auth.NewGithubProvider(auth.Config{})
-		token, err := provider.GetToken(context.Background())
-		if err != nil || token == "" {
-			return fmt.Errorf("authentication token required (login with 'esec auth login')")
-		}
-		c.AuthToken = token
+
+	// Setup client using the helper function
+	connectClient, err := setupConnectClient(ctx, parent)
+	if err != nil {
+		return err
 	}
-	client := client.NewConnectClient(client.ClientConfig{
-		ServerURL: c.ServerURL,
-		AuthToken: c.AuthToken,
-	})
-	ctx := context.Background()
+
 	// Fetch current recipients for the key
-	perUserPayload, err := client.PullKeysPerUser(ctx, orgRepo)
+	perUserPayload, err := connectClient.PullKeysPerUser(ctx, orgRepo)
 	if err != nil {
 		return fmt.Errorf("failed to pull current sharing state: %w", err)
 	}
@@ -61,7 +49,7 @@ func (c *ShareCmd) Run(_ *kong.Context) error {
 			continue // already shared
 		}
 		// Fetch public key for user
-		pubKey, githubID, _, err := client.GetUserPublicKey(ctx, user)
+		pubKey, githubID, _, err := connectClient.GetUserPublicKey(ctx, user)
 		if err != nil {
 			fmt.Printf("Could not fetch key for %s: %v. Skipping.\n", user, err)
 			continue
@@ -72,7 +60,9 @@ func (c *ShareCmd) Run(_ *kong.Context) error {
 		return fmt.Errorf("no valid users to share with")
 	}
 	// Load secret value from local keyring
-	f, err := os.Open(".esec-keyring")
+	keyringPath := path.Join(parent.ProjectDir, ".esec-keyring")
+
+	f, err := os.Open(keyringPath)
 	if err != nil {
 		return fmt.Errorf("failed to open .esec-keyring: %w", err)
 	}
@@ -86,7 +76,7 @@ func (c *ShareCmd) Run(_ *kong.Context) error {
 		return fmt.Errorf("key %s not found in .esec-keyring", c.KeyName)
 	}
 	// Encrypt for each new user
-	myPrivHex, err := keyring.Get("esec", "private-key")
+	myPrivHex, err := ctx.OSKeyring.Get("esec", "private-key")
 	if err != nil {
 		return fmt.Errorf("could not get your private key from keyring: %w", err)
 	}
@@ -126,7 +116,7 @@ func (c *ShareCmd) Run(_ *kong.Context) error {
 		for k, v := range newBlobs {
 			perUserPayload[c.KeyName][k] = v
 		}
-		if err := client.PushKeysPerUser(ctx, orgRepo, perUserPayload); err != nil {
+		if err := connectClient.PushKeysPerUser(ctx, orgRepo, perUserPayload); err != nil {
 			return fmt.Errorf("failed to push updated sharing: %w", err)
 		}
 		fmt.Println("Shared secret updated for new users.")

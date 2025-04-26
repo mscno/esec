@@ -1,44 +1,32 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/alecthomas/kong"
-	"github.com/mscno/esec/pkg/auth"
-	"github.com/mscno/esec/pkg/client"
 	"github.com/mscno/esec/pkg/projectfile"
 )
 
 type UnshareCmd struct {
-	KeyName   string   `arg:"" help:"Key to unshare (e.g. ESEC_PRIVATE_KEY_PROD)"`
-	Users     []string `help:"Comma-separated GitHub usernames or IDs to unshare from" name:"users" sep:","`
-	ServerURL string   `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
-	AuthToken string   `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
+	KeyName string   `arg:"" help:"Key to unshare (e.g. ESEC_PRIVATE_KEY_PROD)"`
+	Users   []string `help:"Comma-separated GitHub usernames or IDs to unshare from" name:"users" sep:","`
 }
 
-func (c *UnshareCmd) Run(_ *kong.Context) error {
+func (c *UnshareCmd) Run(ctx *cliCtx, parent *CloudCmd) error {
 	if c.KeyName == "" || len(c.Users) == 0 {
 		return fmt.Errorf("must provide key name and at least one user to unshare")
 	}
-	orgRepo, err := projectfile.ReadProjectFile(".")
+	orgRepo, err := projectfile.ReadProjectFile(parent.ProjectDir)
 	if err != nil {
 		return fmt.Errorf("failed to read .esec-project: %w", err)
 	}
-	if c.AuthToken == "" {
-		provider := auth.NewGithubProvider(auth.Config{})
-		token, err := provider.GetToken(context.Background())
-		if err != nil || token == "" {
-			return fmt.Errorf("authentication token required (login with 'esec auth login')")
-		}
-		c.AuthToken = token
+
+	// Setup client using the helper function
+	connectClient, err := setupConnectClient(ctx, parent)
+	if err != nil {
+		return err
 	}
-	client := client.NewConnectClient(client.ClientConfig{
-		ServerURL: c.ServerURL,
-		AuthToken: c.AuthToken,
-	})
-	ctx := context.Background()
-	perUserPayload, err := client.PullKeysPerUser(ctx, orgRepo)
+
+	perUserPayload, err := connectClient.PullKeysPerUser(ctx, orgRepo)
 	if err != nil {
 		return fmt.Errorf("failed to pull current sharing state: %w", err)
 	}
@@ -52,7 +40,7 @@ func (c *UnshareCmd) Run(_ *kong.Context) error {
 		return fmt.Errorf("no such key shared: %s", c.KeyName)
 	}
 	// Push updated sharing state
-	if err := client.PushKeysPerUser(ctx, orgRepo, perUserPayload); err != nil {
+	if err := connectClient.PushKeysPerUser(ctx, orgRepo, perUserPayload); err != nil {
 		return fmt.Errorf("failed to update sharing state: %w", err)
 	}
 	fmt.Printf("Unshared %s from users: %v\n", c.KeyName, c.Users)

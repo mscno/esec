@@ -8,15 +8,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/alecthomas/kong"
 	"github.com/tyler-smith/go-bip39"
-	"github.com/zalando/go-keyring"
 	"golang.org/x/crypto/nacl/box"
 )
 
 type AuthRecoverKeypairCmd struct{}
 
-func (c *AuthRecoverKeypairCmd) Run(_ *kong.Context) error {
+func (c *AuthRecoverKeypairCmd) Run(ctx *cliCtx) error {
 	fmt.Println("Paste your 24-word BIP39 recovery phrase (separated by spaces):")
 	reader := bufio.NewReader(os.Stdin)
 	mnemonic, err := reader.ReadString('\n')
@@ -46,8 +44,8 @@ func (c *AuthRecoverKeypairCmd) Run(_ *kong.Context) error {
 		return fmt.Errorf("failed to deterministically generate keypair: %w", err)
 	}
 	// Check for existing keypair in keyring
-	_, privErr := keyring.Get("esec", "private-key")
-	_, pubErr := keyring.Get("esec", "public-key")
+	_, privErr := ctx.OSKeyring.Get("esec", "private-key")
+	_, pubErr := ctx.OSKeyring.Get("esec", "public-key")
 	if privErr == nil || pubErr == nil {
 		var resp string
 		fmt.Print("A keypair already exists in the keyring. Overwrite? [y/N]: ")
@@ -57,11 +55,16 @@ func (c *AuthRecoverKeypairCmd) Run(_ *kong.Context) error {
 			return nil
 		}
 	}
-	if err := keyring.Set("esec", "private-key", hex.EncodeToString(priv[:])); err != nil {
-		return fmt.Errorf("failed to store private key: %w", err)
+	privHex := hex.EncodeToString(priv[:])
+	pubHex := hex.EncodeToString(pub[:])
+	err = ctx.OSKeyring.Set("esec", "private-key", privHex)
+	if err != nil {
+		return fmt.Errorf("failed to save private key to keyring: %w", err)
 	}
-	if err := keyring.Set("esec", "public-key", hex.EncodeToString(pub[:])); err != nil {
-		return fmt.Errorf("failed to store public key: %w", err)
+	err = ctx.OSKeyring.Set("esec", "public-key", pubHex)
+	if err != nil {
+		_ = ctx.OSKeyring.Delete("esec", "private-key")
+		return fmt.Errorf("failed to save public key to keyring: %w", err)
 	}
 	fmt.Println("Keypair successfully recovered and stored in keyring.")
 	return nil

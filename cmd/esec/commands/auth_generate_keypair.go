@@ -6,19 +6,17 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/alecthomas/kong"
 	"github.com/mscno/esec/pkg/crypto"
 	"github.com/tyler-smith/go-bip39"
-	"github.com/zalando/go-keyring"
 	"golang.org/x/crypto/nacl/box"
 )
 
 type AuthGenerateKeypairCmd struct{}
 
-func (c *AuthGenerateKeypairCmd) Run(_ *kong.Context) error {
+func (c *AuthGenerateKeypairCmd) Run(ctx *cliCtx) error {
 	// Check for existing keypair in keyring
-	_, privErr := keyring.Get("esec", "private-key")
-	_, pubErr := keyring.Get("esec", "public-key")
+	_, privErr := ctx.OSKeyring.Get("esec", "private-key")
+	_, pubErr := ctx.OSKeyring.Get("esec", "public-key")
 	if privErr == nil || pubErr == nil {
 		var resp string
 		fmt.Print("A keypair already exists in the keyring. Overwrite? [y/N]: ")
@@ -55,13 +53,17 @@ func (c *AuthGenerateKeypairCmd) Run(_ *kong.Context) error {
 	kp.Private = *priv
 
 	// 4. Store private and public key in keyring
-	err = keyring.Set("esec", "private-key", hex.EncodeToString(kp.Private[:]))
+	privHex := hex.EncodeToString(kp.Private[:])
+	pubHex := hex.EncodeToString(kp.Public[:])
+	err = ctx.OSKeyring.Set("esec", "private-key", privHex)
 	if err != nil {
-		return fmt.Errorf("failed to store private key: %w", err)
+		return fmt.Errorf("failed to save private key to keyring: %w", err)
 	}
-	err = keyring.Set("esec", "public-key", hex.EncodeToString(kp.Public[:]))
+	err = ctx.OSKeyring.Set("esec", "public-key", pubHex)
 	if err != nil {
-		return fmt.Errorf("failed to store public key: %w", err)
+		// Attempt to remove private key if public key saving failed
+		_ = ctx.OSKeyring.Delete("esec", "private-key")
+		return fmt.Errorf("failed to save public key to keyring: %w", err)
 	}
 
 	// 5. Print mnemonic for user, formatted clearly

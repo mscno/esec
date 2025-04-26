@@ -1,23 +1,19 @@
 package commands
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/mscno/esec/pkg/client"
-	keyring2 "github.com/mscno/esec/pkg/keyring"
-	"github.com/mscno/esec/pkg/projectfile"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 
-	"github.com/zalando/go-keyring"
+	eseckeyring "github.com/mscno/esec/pkg/keyring"
+	"github.com/mscno/esec/pkg/projectfile"
 
-	"github.com/alecthomas/kong"
 	"github.com/joho/godotenv"
-	"github.com/mscno/esec/pkg/auth"
 	"github.com/mscno/esec/pkg/crypto"
 )
 
@@ -27,35 +23,24 @@ type SyncCmd struct {
 }
 
 type SyncPushCmd struct {
-	ServerURL string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
-	AuthToken string `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
 }
 type SyncPullCmd struct {
-	ServerURL string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
-	AuthToken string `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
 }
 
-func (c *SyncPushCmd) Run(_ *kong.Context) error {
+func (c *SyncPushCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
+	keyringPath := path.Join(cloud.ProjectDir, ".esec-keyring")
+
 	// Read org/repo from .esec-project
-	orgRepo, err := projectfile.ReadProjectFile(".")
+	orgRepo, err := projectfile.ReadProjectFile(cloud.ProjectDir)
 	if err != nil {
 		return fmt.Errorf("failed to read .esec-project: %w", err)
 	}
-	// Retrieve token from keyring if not provided
-	if c.AuthToken == "" {
-		provider := auth.NewGithubProvider(auth.Config{})
-		token, err := provider.GetToken(context.Background())
-		if err != nil || token == "" {
-			return fmt.Errorf("authentication token required for CreateProject (login with 'esec auth login')")
-		}
-		c.AuthToken = token
-	}
-	client := client.NewConnectClient(client.ClientConfig{
-		ServerURL: c.ServerURL,
-		AuthToken: c.AuthToken,
-	})
 
-	keyringPath := ".esec-keyring"
+	// Setup client using the helper function
+	connectClient, err := setupConnectClient(ctx, cloud)
+	if err != nil {
+		return err
+	}
 	f, err := os.Open(keyringPath)
 	if err != nil {
 		return fmt.Errorf("failed to open %s: %w", keyringPath, err)
@@ -73,9 +58,9 @@ func (c *SyncPushCmd) Run(_ *kong.Context) error {
 	}
 
 	// --- Recipient logic: fetch from server, fallback to self ---
-	// Load sender keypair from OS keyring
-	privHex, privErr := keyring.Get("esec", "private-key")
-	pubHex, pubErr := keyring.Get("esec", "public-key")
+	// Load sender keypair from OS keyring using injected service
+	privHex, privErr := ctx.OSKeyring.Get("esec", "private-key")
+	pubHex, pubErr := ctx.OSKeyring.Get("esec", "public-key")
 	if privErr != nil || pubErr != nil {
 		return fmt.Errorf("could not find your keypair in the OS keyring. Please run 'esec auth generate-keypair' first.")
 	}
@@ -93,11 +78,11 @@ func (c *SyncPushCmd) Run(_ *kong.Context) error {
 	myKeypair := &crypto.Keypair{Private: privArr, Public: pubArr}
 
 	getSelf := func() (myGitHubID, pubHex string, err error) {
-		myGitHubID, err = getGitHubIDFromToken(c.AuthToken)
+		myGitHubID, err = getGitHubIDFromToken(cloud.AuthToken)
 		if err != nil {
 			return "", "", fmt.Errorf("could not determine your GitHub ID: %w", err)
 		}
-		pubHex, pubErr := keyring.Get("esec", "public-key")
+		pubHex, pubErr := ctx.OSKeyring.Get("esec", "public-key")
 		if pubErr != nil {
 			return "", "", fmt.Errorf("could not find your public key in the OS keyring. Please run 'esec auth generate-keypair' first.")
 		}
@@ -105,7 +90,7 @@ func (c *SyncPushCmd) Run(_ *kong.Context) error {
 	}
 
 	// Fetch current recipients from server
-	perUserPayloadServer, err := client.PullKeysPerUser(context.Background(), orgRepo)
+	perUserPayloadServer, err := connectClient.PullKeysPerUser(ctx, orgRepo)
 	if err != nil {
 		perUserPayloadServer = map[string]map[string]string{} // fallback to empty
 	}
@@ -140,7 +125,7 @@ func (c *SyncPushCmd) Run(_ *kong.Context) error {
 					recipients[githubID] = myPubHex
 					continue
 				}
-				pubKey, gid, _, err := client.GetUserPublicKey(context.Background(), githubID)
+				pubKey, gid, _, err := connectClient.GetUserPublicKey(ctx, githubID)
 				if err != nil || gid == "" {
 					fmt.Printf("Warning: could not fetch public key for recipient %s: %v. Skipping.\n", githubID, err)
 					continue
@@ -163,8 +148,7 @@ func (c *SyncPushCmd) Run(_ *kong.Context) error {
 	}
 	fmt.Printf("Prepared encrypted payload: %+v\n", perUserPayload)
 	// Push perUserPayload to server with new API
-	ctx := context.Background()
-	if err := client.PushKeysPerUser(ctx, orgRepo, perUserPayload); err != nil {
+	if err := connectClient.PushKeysPerUser(ctx, orgRepo, perUserPayload); err != nil {
 		return fmt.Errorf("failed to push secrets: %w", err)
 	}
 	fmt.Println("Pushed encrypted secrets to server.")
@@ -197,29 +181,22 @@ func getGitHubIDFromToken(token string) (string, error) {
 	return fmt.Sprintf("%d", user.ID), nil
 }
 
-func (c *SyncPullCmd) Run(_ *kong.Context) error {
-	keyringPath := ".esec-keyring"
+func (c *SyncPullCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
+	keyringPath := path.Join(cloud.ProjectDir, ".esec-keyring")
 	// Read org/repo from .esec-project
-	orgRepo, err := projectfile.ReadProjectFile(".")
+	orgRepo, err := projectfile.ReadProjectFile(cloud.ProjectDir)
 	if err != nil {
 		return fmt.Errorf("failed to read .esec-project: %w", err)
 	}
-	// Retrieve token from keyring if not provided
-	if c.AuthToken == "" {
-		provider := auth.NewGithubProvider(auth.Config{})
-		token, err := provider.GetToken(context.Background())
-		if err != nil || token == "" {
-			return fmt.Errorf("authentication token required for CreateProject (login with 'esec auth login')")
-		}
-		c.AuthToken = token
+
+	// Setup client using the helper function
+	connectClient, err := setupConnectClient(ctx, cloud)
+	if err != nil {
+		return err
 	}
-	client := client.NewConnectClient(client.ClientConfig{
-		ServerURL: c.ServerURL,
-		AuthToken: c.AuthToken,
-	})
-	ctx := context.Background()
+
 	// Fetch per-user encrypted blobs
-	perUserPayload, err := client.PullKeysPerUser(ctx, orgRepo)
+	perUserPayload, err := connectClient.PullKeysPerUser(ctx, orgRepo)
 	if err != nil {
 		return fmt.Errorf("failed to pull per-user secrets: %w", err)
 	}
@@ -228,14 +205,14 @@ func (c *SyncPullCmd) Run(_ *kong.Context) error {
 	myGitHubID := os.Getenv("ESEC_GITHUB_ID")
 	if myGitHubID == "" {
 		// Try to fetch from GitHub API using token
-		id, err := getGitHubIDFromToken(c.AuthToken)
+		id, err := getGitHubIDFromToken(cloud.AuthToken)
 		if err != nil {
 			return fmt.Errorf("could not determine GitHub ID from token: %w", err)
 		}
 		myGitHubID = id
 	}
-	// Load our private key from OS keyring
-	privHex, privErr := keyring.Get("esec", "private-key")
+	// Load our private key from OS keyring using injected service
+	privHex, privErr := ctx.OSKeyring.Get("esec", "private-key")
 	if privErr != nil {
 		return fmt.Errorf("could not find your private key in the OS keyring. Please run 'esec auth generate-keypair' first.")
 	}
@@ -294,7 +271,7 @@ func (c *SyncPullCmd) Run(_ *kong.Context) error {
 		merged[k] = v
 	}
 	// Write merged map using dotenv.FormatKeyringFile for proper formatting
-	formatted := keyring2.FormatKeyringFile(merged)
+	formatted := eseckeyring.FormatKeyringFile(merged)
 	err = os.WriteFile(keyringPath, []byte(formatted), 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write %s: %w", keyringPath, err)

@@ -2,8 +2,8 @@ package commands
 
 import (
 	"fmt"
+
 	"github.com/mscno/esec/pkg/keys"
-	"github.com/zalando/go-keyring"
 )
 
 type KeysCmd struct {
@@ -14,7 +14,7 @@ type KeysCmd struct {
 
 type KeysListCmd struct{}
 
-type KeysVerifyCmd struct{
+type KeysVerifyCmd struct {
 	User string `arg:"" help:"GitHub username or ID to verify."`
 }
 
@@ -48,8 +48,8 @@ func (c *KeysVerifyCmd) Run(ctx *cliCtx, parent *KeysCmd) error {
 type KeysFingerprintCmd struct{}
 
 func (c *KeysFingerprintCmd) Run(ctx *cliCtx, parent *KeysCmd) error {
-	// Load public key from keyring
-	pubKey, err := keyring.Get("esec", "public-key")
+	// Load public key from keyring using the injected service
+	pubKey, err := ctx.OSKeyring.Get("esec", "public-key")
 	if err != nil {
 		return fmt.Errorf("No public key found in keyring. Please run 'esec auth generate-keypair' first.")
 	}

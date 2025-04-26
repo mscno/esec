@@ -1,11 +1,8 @@
 package commands
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/mscno/esec/pkg/client"
-	"github.com/zalando/go-keyring"
 	"net/http"
 
 	"github.com/mscno/esec/pkg/auth"
@@ -34,7 +31,7 @@ func (c *LoginCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
 	authCfg := auth.Config{
 		GithubClientID: parent.GithubClientID,
 	}
-	provider := auth.NewGithubProvider(authCfg)
+	provider := auth.NewGithubProvider(authCfg, ctx.OSKeyring)
 
 	ctx.Logger.Info("Starting GitHub device login flow...")
 	err := provider.Login(ctx)
@@ -48,32 +45,25 @@ func (c *LoginCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
 }
 
 type AuthSyncCmd struct {
-	ServerURL string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
-	AuthToken string `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
+	// ServerURL string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"` // Removed
+	// AuthToken string `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"` // Removed
 }
 
-func (c *AuthSyncCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
-	// Load public key from keyring
-	pubKey, err := keyring.Get("esec", "public-key")
+func (c *AuthSyncCmd) Run(ctx *cliCtx, parent *AuthCmd, cloud *CloudCmd) error {
+	// Load public key from keyring using the injected service
+	pubKey, err := ctx.OSKeyring.Get("esec", "public-key")
 	if err != nil {
 		return fmt.Errorf("No public key found in keyring. Please run 'esec auth generate-keypair' before logging in.")
 	}
-	// Retrieve token from keyring if not provided
-	if c.AuthToken == "" {
-		provider := auth.NewGithubProvider(auth.Config{})
-		token, err := provider.GetToken(context.Background())
-		if err != nil || token == "" {
-			return fmt.Errorf("authentication token required for CreateProject (login with 'esec auth login')")
-		}
-		c.AuthToken = token
+
+	// Setup client, retrieving token if necessary via the helper
+	connectClient, err := setupConnectClient(ctx, cloud)
+	if err != nil {
+		return err
 	}
-	client := client.NewConnectClient(client.ClientConfig{
-		ServerURL: c.ServerURL,
-		AuthToken: c.AuthToken,
-	})
 
 	ctx.Logger.Info("Registering user and public key with server...")
-	err = client.SyncUser(ctx, pubKey)
+	err = connectClient.SyncUser(ctx, pubKey)
 	if err != nil {
 		ctx.Logger.Error("Registration failed", "error", err)
 		return fmt.Errorf("registration failed: %w", err)
@@ -90,7 +80,7 @@ func (c *LogoutCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
 	// Note: Logout doesn't strictly need the client ID, but provider creation might.
 	// We instantiate it similarly for consistency, even if cfg is empty here.
 	authCfg := auth.Config{}
-	provider := auth.NewGithubProvider(authCfg)
+	provider := auth.NewGithubProvider(authCfg, ctx.OSKeyring)
 
 	ctx.Logger.Info("Logging out and removing stored token...")
 	err := provider.Logout(ctx)
@@ -100,7 +90,6 @@ func (c *LogoutCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
 	}
 	ctx.Logger.Info("Logout successful.")
 	return nil
-
 }
 
 type AuthInfoCmd struct{}
@@ -112,9 +101,9 @@ type githubUser struct {
 	ID    int    `json:"id"`
 }
 
-func (c *AuthInfoCmd) Run(ctx *cliCtx, parent *AuthCmd) error {
+func (c *AuthInfoCmd) Run(ctx *cliCtx, parent *AuthCmd, cloud *CloudCmd) error {
 	authCfg := auth.Config{GithubClientID: parent.GithubClientID}
-	provider := auth.NewGithubProvider(authCfg)
+	provider := auth.NewGithubProvider(authCfg, ctx.OSKeyring)
 	token, err := provider.GetToken(ctx)
 	if err != nil || token == "" {
 		ctx.Logger.Error("No authentication token found. Please login first.")

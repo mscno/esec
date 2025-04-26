@@ -35,9 +35,7 @@ func NewConnectClient(config ClientConfig) *ConnectClient {
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
-	//if httpClient == nil {
-	//	httpClient = http.DefaultClient
-	//}
+
 	httpClient := &http.Client{Timeout: 15 * time.Second}
 	client := esecpbconnect.NewEsecServiceClient(httpClient, config.ServerURL,
 		connect.WithClientOptions(connect.WithInterceptors(authIntercepter(config.AuthToken))))

@@ -1,12 +1,8 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/alecthomas/kong"
-	"github.com/mscno/esec/pkg/auth"
-	"github.com/mscno/esec/pkg/client"
 	"github.com/mscno/esec/pkg/projectfile"
 )
 
@@ -16,35 +12,26 @@ type ProjectsCmd struct {
 }
 
 type ProjectsCreateCmd struct {
-	OrgRepo   string `arg:"" name:"org/repo" help:"GitHub repository identifier (e.g., 'my-org/my-repo')."`
-	ServerURL string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
-	AuthToken string `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
+	OrgRepo string `arg:"" name:"org/repo" help:"GitHub repository identifier (e.g., 'my-org/my-repo')."`
 }
 
-func (c *ProjectsCreateCmd) Run(_ *kong.Context) error {
+func (c *ProjectsCreateCmd) Run(ctx *cliCtx, cloud *CloudCmd) error {
 	if c.OrgRepo == "" {
 		return fmt.Errorf("missing required argument: org/repo")
 	}
 	// Check if a valid .esec-project file already exists in the current directory
-	if _, err := projectfile.ReadProjectFile("."); err == nil {
+	if _, err := projectfile.ReadProjectFile(cloud.ProjectDir); err == nil {
 		return fmt.Errorf(".esec-project file already exists and is valid")
 	}
-	// Retrieve token from keyring if not provided
-	if c.AuthToken == "" {
-		provider := auth.NewGithubProvider(auth.Config{})
-		token, err := provider.GetToken(context.Background())
-		if err != nil || token == "" {
-			return fmt.Errorf("authentication token required for CreateProject (login with 'esec auth login')")
-		}
-		c.AuthToken = token
-	}
-	client := client.NewConnectClient(client.ClientConfig{
-		ServerURL: c.ServerURL,
-		AuthToken: c.AuthToken,
-	})
 
-	ctx := context.Background()
-	err := client.CreateProject(ctx, c.OrgRepo)
+	// Setup client using the helper function
+	connectClient, err := setupConnectClient(ctx, cloud)
+	if err != nil {
+		return err // Error already formatted by helper
+	}
+
+	// Use the initialized client
+	err = connectClient.CreateProject(ctx, c.OrgRepo)
 	if err != nil {
 		return fmt.Errorf("failed to create project: %w", err)
 	}
@@ -52,35 +39,27 @@ func (c *ProjectsCreateCmd) Run(_ *kong.Context) error {
 	if err := projectfile.WriteProjectFile(".", c.OrgRepo); err != nil {
 		return fmt.Errorf("project created, but failed to write .esec-project file: %w", err)
 	}
-	fmt.Printf("Successfully created project '%s' on %s\n", c.OrgRepo, c.ServerURL)
+	fmt.Printf("Successfully created project '%s' on %s\n", c.OrgRepo, cloud.ServerURL)
 	return nil
 }
 
 type ProjectsInfoCmd struct {
-	OrgRepo   string `arg:"" name:"org/repo" help:"GitHub repository identifier (e.g., 'my-org/my-repo')."`
-	ServerURL string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080"`
-	AuthToken string `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN"`
+	OrgRepo string `arg:"" name:"org/repo" help:"GitHub repository identifier (e.g., 'my-org/my-repo')."`
 }
 
-func (c *ProjectsInfoCmd) Run(_ *kong.Context) error {
+func (c *ProjectsInfoCmd) Run(ctx *cliCtx, cloud *CloudCmd) error {
 	if c.OrgRepo == "" {
 		return fmt.Errorf("missing required argument: org/repo")
 	}
-	// Retrieve token from keyring if not provided
-	if c.AuthToken == "" {
-		provider := auth.NewGithubProvider(auth.Config{})
-		token, err := provider.GetToken(context.Background())
-		if err != nil || token == "" {
-			return fmt.Errorf("authentication token required for project info (login with 'esec auth login')")
-		}
-		c.AuthToken = token
+
+	// Setup client using the helper function
+	connectClient, err := setupConnectClient(ctx, cloud)
+	if err != nil {
+		return err // Error already formatted by helper
 	}
-	client := client.NewConnectClient(client.ClientConfig{
-		ServerURL: c.ServerURL,
-		AuthToken: c.AuthToken,
-	})
-	ctx := context.Background()
-	secrets, err := client.PullKeysPerUser(ctx, c.OrgRepo)
+
+	// Use the initialized client
+	secrets, err := connectClient.PullKeysPerUser(ctx, c.OrgRepo)
 	if err != nil {
 		return fmt.Errorf("failed to fetch project info: %w", err)
 	}
