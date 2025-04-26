@@ -1,6 +1,7 @@
 package stores
 
 import (
+	"context"
 	"encoding/json"
 	"go.etcd.io/bbolt"
 )
@@ -15,7 +16,7 @@ func NewBoltUserStore(db *bbolt.DB) *BoltUserStore {
 
 var usersBucket = []byte("users")
 
-func (s *BoltUserStore) CreateUser(user User) error {
+func (s *BoltUserStore) CreateUser(ctx context.Context, user User) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists(usersBucket)
 		if err != nil {
@@ -32,7 +33,7 @@ func (s *BoltUserStore) CreateUser(user User) error {
 	})
 }
 
-func (s *BoltUserStore) GetUser(githubID string) (*User, error) {
+func (s *BoltUserStore) GetUser(ctx context.Context, githubID string) (*User, error) {
 	var user User
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(usersBucket)
@@ -51,7 +52,7 @@ func (s *BoltUserStore) GetUser(githubID string) (*User, error) {
 	return &user, nil
 }
 
-func (s *BoltUserStore) UpdateUser(githubID string, updateFn func(User) (User, error)) error {
+func (s *BoltUserStore) UpdateUser(ctx context.Context, githubID string, updateFn func(User) (User, error)) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(usersBucket)
 		if bucket == nil {
@@ -77,7 +78,7 @@ func (s *BoltUserStore) UpdateUser(githubID string, updateFn func(User) (User, e
 	})
 }
 
-func (s *BoltUserStore) DeleteUser(githubID string) error {
+func (s *BoltUserStore) DeleteUser(ctx context.Context, githubID string) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(usersBucket)
 		if bucket == nil {
@@ -90,7 +91,7 @@ func (s *BoltUserStore) DeleteUser(githubID string) error {
 	})
 }
 
-func (s *BoltUserStore) ListUsers() ([]User, error) {
+func (s *BoltUserStore) ListUsers(ctx context.Context) ([]User, error) {
 	var users []User
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(usersBucket)
@@ -109,4 +110,4 @@ func (s *BoltUserStore) ListUsers() ([]User, error) {
 	return users, err
 }
 
-var _ NewUserStore = (*BoltUserStore)(nil)
+var _ UserStore = (*BoltUserStore)(nil)

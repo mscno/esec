@@ -23,7 +23,6 @@ func TestBoltProjectStore_CRUD(t *testing.T) {
 	project := Project{
 		OrgRepo: "org/repo",
 		Admins:  []string{"admin"},
-		Secrets: map[string]map[string]string{"admin": {"k1": "v1"}},
 	}
 
 	// Create
@@ -44,7 +43,6 @@ func TestBoltProjectStore_CRUD(t *testing.T) {
 	// Update
 	err = store.UpdateProject(ctx, "org/repo", func(p Project) (Project, error) {
 		p.Admins = append(p.Admins, "admin2")
-		p.Secrets["admin2"] = map[string]string{"k2": "v2"}
 		return p, nil
 	})
 	if err != nil {
@@ -54,7 +52,7 @@ func TestBoltProjectStore_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProject after update: %v", err)
 	}
-	if len(got.Admins) != 2 || got.Admins[1] != "admin2" || got.Secrets["admin2"]["k2"] != "v2" {
+	if len(got.Admins) != 2 || got.Admins[1] != "admin2" {
 		t.Errorf("update failed: %+v", got)
 	}
 

@@ -18,15 +18,15 @@ import (
 // It adapts the Handler logic for gRPC/protobuf
 // Add dependencies as in Handler
 type Server struct {
-	Store             stores.NewProjectStore
-	UserStore         stores.NewUserStore
+	Store             stores.ProjectStore
+	UserStore         stores.UserStore
 	Logger            *slog.Logger
 	userHasRoleInRepo UserHasRoleInRepoFunc
 }
 
 type UserHasRoleInRepoFunc func(token, orgRepo, role string) bool
 
-func NewServer(store stores.NewProjectStore, userStore stores.NewUserStore, logger *slog.Logger, userHasRoleInRepo UserHasRoleInRepoFunc) *Server {
+func NewServer(store stores.ProjectStore, userStore stores.UserStore, logger *slog.Logger, userHasRoleInRepo UserHasRoleInRepoFunc) *Server {
 	if userHasRoleInRepo == nil {
 		userHasRoleInRepo = defaultUserHasRoleInRepo
 	}
@@ -65,7 +65,6 @@ func (s *Server) CreateProject(ctx context.Context, request *connect.Request[ese
 	project := stores.Project{
 		OrgRepo: orgRepo,
 		Admins:  []string{creatorID},
-		Secrets: map[string]map[string]string{},
 	}
 	if err := s.Store.CreateProject(ctx, project); err != nil {
 		if errors.Is(err, stores.ErrProjectExists) {
@@ -94,10 +93,10 @@ func (s *Server) RegisterUser(ctx context.Context, request *connect.Request[esec
 	if user.GitHubID == "" || user.Username == "" || user.PublicKey == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing user fields"))
 	}
-	if _, err := s.UserStore.GetUser(user.GitHubID); err == nil {
+	if _, err := s.UserStore.GetUser(ctx, user.GitHubID); err == nil {
 		return nil, connect.NewError(connect.CodeAlreadyExists, err)
 	}
-	if err := s.UserStore.CreateUser(user); err != nil {
+	if err := s.UserStore.CreateUser(ctx, user); err != nil {
 		s.Logger.Error("failed to register user", "github_id", user.GitHubID, "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to register user: %w", err))
 	}
@@ -111,7 +110,7 @@ func (s *Server) GetUserPublicKey(ctx context.Context, request *connect.Request[
 	if githubID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing github_id"))
 	}
-	user, err := s.UserStore.GetUser(githubID)
+	user, err := s.UserStore.GetUser(ctx, githubID)
 	if err != nil {
 		if errors.Is(err, stores.ErrUserNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("user not found"))
@@ -151,13 +150,13 @@ func (s *Server) SetPerUserSecrets(ctx context.Context, request *connect.Request
 		secrets[userID] = secretMap.Secrets
 	}
 
-	if err := s.Store.UpdateProject(ctx, proj.OrgRepo, func(project stores.Project) (stores.Project, error) {
-		proj.Secrets = secrets
-		return proj, nil
-	}); err != nil {
-		s.Logger.Error("failed to store per-user secrets", "orgRepo", orgRepo, "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to store per-user secrets: %w", err))
+	for userId, userSecrets := range secrets {
+		err := s.Store.SetProjectUserSecrets(ctx, orgRepo, userId, userSecrets)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to set project user secrets: %w", err))
+		}
 	}
+
 	return connect.NewResponse(&esecpb.SetPerUserSecretsResponse{Status: "ok"}), nil
 }
 
@@ -180,7 +179,10 @@ func (s *Server) GetPerUserSecrets(ctx context.Context, request *connect.Request
 	if !contains(proj.Admins, fmt.Sprintf("%d", ghuser.ID)) {
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("only project admins may share secrets for this project"))
 	}
-	secrets := proj.Secrets
+	secrets, err := s.Store.GetAllProjectUserSecrets(ctx, orgRepo)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to store per-user secrets: %w", err))
+	}
 	resp := &esecpb.GetPerUserSecretsResponse{Secrets: map[string]*esecpb.SecretMap{}}
 	for userID, secretMap := range secrets {
 		resp.Secrets[userID] = &esecpb.SecretMap{Secrets: secretMap}

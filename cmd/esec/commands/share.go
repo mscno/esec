@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -115,7 +116,7 @@ func (c *ShareCmd) Run(_ *kong.Context) error {
 			fmt.Printf("Encryption failed for %s: %v\n", githubID, err)
 			continue
 		}
-		newBlobs[githubID] = hex.EncodeToString(ciphertext)
+		newBlobs[githubID] = base64.StdEncoding.EncodeToString(ciphertext)
 	}
 	// Push updated payload
 	if len(newBlobs) > 0 {

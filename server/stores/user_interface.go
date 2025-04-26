@@ -1,6 +1,9 @@
 package stores
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 type User struct {
 	GitHubID  string `json:"github_id"`
@@ -9,17 +12,11 @@ type User struct {
 }
 
 type UserStore interface {
-	RegisterUser(user User) error
-	UpdateUserPublicKey(githubID, publicKey string) error
-	GetUser(githubID string) (*User, error)
-}
-
-type NewUserStore interface {
-	CreateUser(user User) error
-	GetUser(githubID string) (*User, error)
-	UpdateUser(githubID string, updateFn func(User) (User, error)) error
-	DeleteUser(githubID string) error
-	ListUsers() ([]User, error)
+	CreateUser(ctx context.Context, user User) error
+	GetUser(ctx context.Context, githubID string) (*User, error)
+	UpdateUser(ctx context.Context, githubID string, updateFn func(User) (User, error)) error
+	DeleteUser(ctx context.Context, githubID string) error
+	ListUsers(ctx context.Context) ([]User, error)
 }
 
 var ErrUserExists = errors.New("user already exists")

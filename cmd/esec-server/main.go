@@ -21,8 +21,8 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	// Choose store implementation
-	var projectStore stores.NewProjectStore
-	var userStore stores.NewUserStore
+	var projectStore stores.ProjectStore
+	var userStore stores.UserStore
 	storeType := os.Getenv("ESEC_STORE")
 	if storeType == "bolt" {
 		boltPath := os.Getenv("ESEC_BOLT_PATH")

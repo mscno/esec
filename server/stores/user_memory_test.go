@@ -1,6 +1,7 @@
 package stores
 
 import (
+	"context"
 	"testing"
 )
 
@@ -11,15 +12,15 @@ func TestInMemoryUserStore_CRUD(t *testing.T) {
 		Username:  "alice",
 		PublicKey: "pk1",
 	}
-
+	ctx := context.Background()
 	// Create
-	err := store.CreateUser(user)
+	err := store.CreateUser(ctx, user)
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
 	// Get
-	u, err := store.GetUser("1")
+	u, err := store.GetUser(ctx, "1")
 	if err != nil {
 		t.Fatalf("GetUser: %v", err)
 	}
@@ -28,20 +29,20 @@ func TestInMemoryUserStore_CRUD(t *testing.T) {
 	}
 
 	// Update
-	err = store.UpdateUser("1", func(u User) (User, error) {
+	err = store.UpdateUser(ctx, "1", func(u User) (User, error) {
 		u.PublicKey = "pk2"
 		return u, nil
 	})
 	if err != nil {
 		t.Fatalf("UpdateUser: %v", err)
 	}
-	u, _ = store.GetUser("1")
+	u, _ = store.GetUser(ctx, "1")
 	if u.PublicKey != "pk2" {
 		t.Errorf("update failed: %+v", u)
 	}
 
 	// List
-	users, err := store.ListUsers()
+	users, err := store.ListUsers(ctx)
 	if err != nil {
 		t.Fatalf("ListUsers: %v", err)
 	}
@@ -50,11 +51,11 @@ func TestInMemoryUserStore_CRUD(t *testing.T) {
 	}
 
 	// Delete
-	err = store.DeleteUser("1")
+	err = store.DeleteUser(ctx, "1")
 	if err != nil {
 		t.Fatalf("DeleteUser: %v", err)
 	}
-	_, err = store.GetUser("1")
+	_, err = store.GetUser(ctx, "1")
 	if err == nil {
 		t.Errorf("expected error after delete, got nil")
 	}

@@ -1,5 +1,7 @@
 package stores
 
+import "context"
+
 type InMemoryUserStore struct {
 	users map[string]User
 }
@@ -8,7 +10,7 @@ func NewInMemoryUserStore() *InMemoryUserStore {
 	return &InMemoryUserStore{users: make(map[string]User)}
 }
 
-func (s *InMemoryUserStore) CreateUser(user User) error {
+func (s *InMemoryUserStore) CreateUser(ctx context.Context, user User) error {
 	if _, exists := s.users[user.GitHubID]; exists {
 		return ErrUserExists
 	}
@@ -16,7 +18,7 @@ func (s *InMemoryUserStore) CreateUser(user User) error {
 	return nil
 }
 
-func (s *InMemoryUserStore) GetUser(githubID string) (*User, error) {
+func (s *InMemoryUserStore) GetUser(ctx context.Context, githubID string) (*User, error) {
 	u, ok := s.users[githubID]
 	if !ok {
 		return nil, ErrUserNotFound
@@ -24,7 +26,7 @@ func (s *InMemoryUserStore) GetUser(githubID string) (*User, error) {
 	return &u, nil
 }
 
-func (s *InMemoryUserStore) UpdateUser(githubID string, updateFn func(User) (User, error)) error {
+func (s *InMemoryUserStore) UpdateUser(ctx context.Context, githubID string, updateFn func(User) (User, error)) error {
 	u, ok := s.users[githubID]
 	if !ok {
 		return ErrUserNotFound
@@ -37,7 +39,7 @@ func (s *InMemoryUserStore) UpdateUser(githubID string, updateFn func(User) (Use
 	return nil
 }
 
-func (s *InMemoryUserStore) DeleteUser(githubID string) error {
+func (s *InMemoryUserStore) DeleteUser(ctx context.Context, githubID string) error {
 	if _, ok := s.users[githubID]; !ok {
 		return ErrUserNotFound
 	}
@@ -45,7 +47,7 @@ func (s *InMemoryUserStore) DeleteUser(githubID string) error {
 	return nil
 }
 
-func (s *InMemoryUserStore) ListUsers() ([]User, error) {
+func (s *InMemoryUserStore) ListUsers(ctx context.Context) ([]User, error) {
 	var out []User
 	for _, u := range s.users {
 		out = append(out, u)
@@ -53,4 +55,4 @@ func (s *InMemoryUserStore) ListUsers() ([]User, error) {
 	return out, nil
 }
 
-var _ NewUserStore = (*InMemoryUserStore)(nil)
+var _ UserStore = (*InMemoryUserStore)(nil)

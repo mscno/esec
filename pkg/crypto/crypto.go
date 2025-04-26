@@ -12,6 +12,7 @@ package crypto
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -63,12 +64,12 @@ func (k *Keypair) Generate() (err error) {
 
 // PublicString returns the public key in the canonical hex-encoded printable form.
 func (k *Keypair) PublicString() string {
-	return fmt.Sprintf("%x", k.Public)
+	return hex.EncodeToString(k.Public[:])
 }
 
 // PrivateString returns the private key in the canonical hex-encoded printable form.
 func (k *Keypair) PrivateString() string {
-	return fmt.Sprintf("%x", k.Private)
+	return hex.EncodeToString(k.Private[:])
 }
 
 // Encrypter returns an Encrypter instance, given a public key, to encrypt
