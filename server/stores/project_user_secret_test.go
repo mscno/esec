@@ -194,8 +194,8 @@ func TestSecretPairsConversion(t *testing.T) {
 		assert.Len(t, pairs, len(originalMap))
 		keyFound := make(map[string]bool)
 		for _, pair := range pairs {
-			assert.Equal(t, originalMap[pair.Key], pair.Value)
-			keyFound[pair.Key] = true
+			assert.Equal(t, originalMap[pair.UserId], pair.Value)
+			keyFound[pair.UserId] = true
 		}
 
 		// Verify all keys were found in pairs
@@ -236,9 +236,9 @@ func TestSecretPairsConversion(t *testing.T) {
 	t.Run("duplicate keys", func(t *testing.T) {
 		// Create pairs with duplicate keys (invalid state but should be handled)
 		pairs := []SecretPair{
-			{Key: "API_KEY", Value: "value1"},
-			{Key: "DB_PASS", Value: "value2"},
-			{Key: "API_KEY", Value: "value3"}, // Duplicate
+			{UserId: "API_KEY", Value: "value1"},
+			{UserId: "DB_PASS", Value: "value2"},
+			{UserId: "API_KEY", Value: "value3"}, // Duplicate
 		}
 
 		// Convert to map - last value should win

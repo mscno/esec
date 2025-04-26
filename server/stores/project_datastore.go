@@ -151,7 +151,7 @@ func (s *ProjectDataStore) DeleteProject(ctx context.Context, orgRepo string) er
 func mapToSecretPairs(m map[string]string) []SecretPair {
 	pairs := make([]SecretPair, 0, len(m))
 	for k, v := range m {
-		pairs = append(pairs, SecretPair{Key: k, Value: v})
+		pairs = append(pairs, SecretPair{UserId: k, Value: v})
 	}
 	return pairs
 }
@@ -160,7 +160,7 @@ func mapToSecretPairs(m map[string]string) []SecretPair {
 func secretPairsToMap(pairs []SecretPair) map[string]string {
 	m := make(map[string]string, len(pairs))
 	for _, pair := range pairs {
-		m[pair.Key] = pair.Value
+		m[pair.UserId] = pair.Value
 	}
 	return m
 }
@@ -175,9 +175,9 @@ func (s *ProjectDataStore) SetProjectUserSecrets(ctx context.Context, orgRepo st
 
 	key := s.userSecretsKey(orgRepo, userID)
 	userSecrets := ProjectUserSecrets{
-		ProjectID: orgRepo,
-		UserID:    userID,
-		Secrets:   mapToSecretPairs(secrets),
+		ProjectID:      orgRepo,
+		PrivateKeyName: userID,
+		Secrets:        mapToSecretPairs(secrets),
 	}
 
 	_, err = s.client.Put(ctx, key, &userSecrets)
@@ -223,7 +223,7 @@ func (s *ProjectDataStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo
 	// Build the result map
 	result := make(map[string]map[string]string)
 	for _, us := range userSecrets {
-		result[us.UserID] = secretPairsToMap(us.Secrets)
+		result[us.PrivateKeyName] = secretPairsToMap(us.Secrets)
 	}
 	return result, nil
 }

@@ -13,15 +13,15 @@ type Project struct {
 
 // SecretPair represents a key-value pair for a secret
 type SecretPair struct {
-	Key   string `datastore:"key"`
-	Value string `datastore:"value,noindex"`
+	UserId string `datastore:"userid"`
+	Value  string `datastore:"value,noindex"`
 }
 
 // ProjectUserSecrets represents secrets for a specific user in a project
 type ProjectUserSecrets struct {
-	ProjectID string       `datastore:"project_id"` // OrgRepo
-	UserID    string       `datastore:"user_id"`
-	Secrets   []SecretPair `datastore:"secrets,noindex"`
+	ProjectID      string       `datastore:"project_id"` // OrgRepo
+	PrivateKeyName string       `datastore:"private_key_name"`
+	Secrets        []SecretPair `datastore:"secrets,noindex"`
 }
 
 type ProjectStore interface {
@@ -32,8 +32,8 @@ type ProjectStore interface {
 	DeleteProject(ctx context.Context, orgRepo string) error
 
 	// New methods for handling secrets
-	SetProjectUserSecrets(ctx context.Context, orgRepo string, userID string, secrets map[string]string) error
-	GetProjectUserSecrets(ctx context.Context, orgRepo string, userID string) (map[string]string, error)
+	SetProjectUserSecrets(ctx context.Context, orgRepo string, privateKeyName string, secrets map[string]string) error
+	GetProjectUserSecrets(ctx context.Context, orgRepo string, privateKeyName string) (map[string]string, error)
 	GetAllProjectUserSecrets(ctx context.Context, orgRepo string) (map[string]map[string]string, error)
 	DeleteProjectUserSecrets(ctx context.Context, orgRepo string, userID string) error
 	DeleteAllProjectUserSecrets(ctx context.Context, orgRepo string) error

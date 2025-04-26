@@ -146,12 +146,12 @@ func (s *Server) SetPerUserSecrets(ctx context.Context, request *connect.Request
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("only project admins may share secrets for this project"))
 	}
 	secrets := make(map[string]map[string]string)
-	for userID, secretMap := range request.Msg.GetSecrets() {
-		secrets[userID] = secretMap.Secrets
+	for key, secretMap := range request.Msg.GetSecrets() {
+		secrets[key] = secretMap.Secrets
 	}
 
-	for userId, userSecrets := range secrets {
-		err := s.Store.SetProjectUserSecrets(ctx, orgRepo, userId, userSecrets)
+	for key, userSecrets := range secrets {
+		err := s.Store.SetProjectUserSecrets(ctx, orgRepo, key, userSecrets)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to set project user secrets: %w", err))
 		}

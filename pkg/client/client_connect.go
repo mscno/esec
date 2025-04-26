@@ -71,8 +71,8 @@ func (c *ConnectClient) GetUserPublicKey(ctx context.Context, usernameOrID strin
 
 func (c *ConnectClient) PushKeysPerUser(ctx context.Context, orgRepo string, perUserPayload map[string]map[string]string) error {
 	secrets := map[string]*esecpb.SecretMap{}
-	for userID, secmap := range perUserPayload {
-		secrets[userID] = &esecpb.SecretMap{Secrets: secmap}
+	for key, secmap := range perUserPayload {
+		secrets[key] = &esecpb.SecretMap{Secrets: secmap}
 	}
 	req := connect.NewRequest(&esecpb.SetPerUserSecretsRequest{
 		OrgRepo: orgRepo,

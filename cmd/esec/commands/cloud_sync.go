@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/mscno/esec"
+	"github.com/mscno/esec/pkg/auth"
 	"net/http"
 	"os"
 	"path"
@@ -35,6 +37,10 @@ func (c *SyncPushCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	if err != nil {
 		return fmt.Errorf("failed to read .esec-project: %w", err)
 	}
+	token, err := ctx.OSKeyring.Get(auth.ServiceName, auth.AccountName)
+	if err != nil {
+		return fmt.Errorf("failed to get service account token: %w", err)
+	}
 
 	// Setup client using the helper function
 	connectClient, err := setupConnectClient(ctx, cloud)
@@ -52,7 +58,7 @@ func (c *SyncPushCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	}
 	privateKeys := map[string]string{}
 	for k, v := range envs {
-		if strings.HasPrefix(k, "ESEC_PRIVATE_KEY") {
+		if strings.HasPrefix(k, esec.EsecPrivateKey) {
 			privateKeys[k] = v
 		}
 	}
@@ -78,7 +84,7 @@ func (c *SyncPushCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	myKeypair := &crypto.Keypair{Private: privArr, Public: pubArr}
 
 	getSelf := func() (myGitHubID, pubHex string, err error) {
-		myGitHubID, err = getGitHubIDFromToken(cloud.AuthToken)
+		myGitHubID, err = getGitHubIDFromToken(token)
 		if err != nil {
 			return "", "", fmt.Errorf("could not determine your GitHub ID: %w", err)
 		}
@@ -115,6 +121,7 @@ func (c *SyncPushCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	if err != nil {
 		return err
 	}
+
 	for keyName, secret := range privateKeys {
 		recipients := map[string]string{} // githubID -> pubKey
 		if blobs, ok := perUserPayloadServer[keyName]; ok && len(blobs) > 0 {
@@ -151,6 +158,13 @@ func (c *SyncPushCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	if err := connectClient.PushKeysPerUser(ctx, orgRepo, perUserPayload); err != nil {
 		return fmt.Errorf("failed to push secrets: %w", err)
 	}
+
+	formatted := eseckeyring.FormatKeyringFile(envs)
+	err = os.WriteFile(keyringPath, []byte(formatted), 0600)
+	if err != nil {
+		return fmt.Errorf("failed to write %s: %w", keyringPath, err)
+	}
+
 	fmt.Println("Pushed encrypted secrets to server.")
 	return nil
 }
@@ -188,7 +202,10 @@ func (c *SyncPullCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	if err != nil {
 		return fmt.Errorf("failed to read .esec-project: %w", err)
 	}
-
+	token, err := ctx.OSKeyring.Get(auth.ServiceName, auth.AccountName)
+	if err != nil {
+		return fmt.Errorf("failed to get service account token: %w", err)
+	}
 	// Setup client using the helper function
 	connectClient, err := setupConnectClient(ctx, cloud)
 	if err != nil {
@@ -205,7 +222,7 @@ func (c *SyncPullCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	myGitHubID := os.Getenv("ESEC_GITHUB_ID")
 	if myGitHubID == "" {
 		// Try to fetch from GitHub API using token
-		id, err := getGitHubIDFromToken(cloud.AuthToken)
+		id, err := getGitHubIDFromToken(token)
 		if err != nil {
 			return fmt.Errorf("could not determine GitHub ID from token: %w", err)
 		}
@@ -260,7 +277,7 @@ func (c *SyncPullCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	// Overwrite/add fetched keys
 	for k, v := range newKeyring {
 		if existing, ok := merged[k]; ok && existing != v {
-			fmt.Printf("Key %s already exists in %s with value: %s, overwrite with: %s? (y/N): ", k, keyringPath, existing, v)
+			fmt.Printf("Key %q already exists in %q with value: %q, overwrite with: %q? (y/N): ", k, keyringPath, existing, v)
 			var confirm string
 			fmt.Scanf("%s", &confirm)
 			if strings.ToLower(confirm) != "y" {
