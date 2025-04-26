@@ -13,8 +13,8 @@ type UserDataStore struct {
 	client *datastore.Client
 }
 
-func NewUserDataStore(ctx context.Context, client *datastore.Client) (*UserDataStore, error) {
-	return &UserDataStore{client: client}, nil
+func NewUserDataStore(ctx context.Context, client *datastore.Client) *UserDataStore {
+	return &UserDataStore{client: client}
 }
 
 // Close closes the underlying datastore client.

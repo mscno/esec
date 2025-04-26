@@ -19,8 +19,8 @@ type ProjectDataStore struct {
 }
 
 // NewProjectDataStore creates a new ProjectDataStore with the given client
-func NewProjectDataStore(ctx context.Context, client *datastore.Client) (*ProjectDataStore, error) {
-	return &ProjectDataStore{client: client}, nil
+func NewProjectDataStore(ctx context.Context, client *datastore.Client) *ProjectDataStore {
+	return &ProjectDataStore{client: client}
 }
 
 // Close closes the underlying datastore client

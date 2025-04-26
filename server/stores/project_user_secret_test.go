@@ -18,8 +18,7 @@ func TestUserSecretsDataStore(t *testing.T) {
 		projectID := "esec-prod"
 		client, err := datastore.NewClientWithDatabase(ctx, projectID, "esec-test")
 		assert.NoError(t, err)
-		store, err := NewProjectDataStore(ctx, client)
-		assert.NoError(t, err, "Failed to create ProjectDataStore for testing")
+		store := NewProjectDataStore(ctx, client)
 
 		return store
 	})

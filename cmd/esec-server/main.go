@@ -1,6 +1,8 @@
 package main
 
 import (
+	"cloud.google.com/go/datastore"
+	"context"
 	"flag"
 	"fmt"
 	"github.com/mscno/esec/gen/proto/go/esec/esecpbconnect"
@@ -18,6 +20,7 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	// Choose store implementation
@@ -42,6 +45,17 @@ func main() {
 		boltUserStore := stores.NewBoltUserStore(db)
 
 		userStore = boltUserStore
+
+	} else if storeType == "datastore" {
+		datastoreProject := os.Getenv("ESEC_DATASTORE_PROJECT")
+		datastoreDatabase := os.Getenv("ESEC_DATASTORE_DATABASE")
+
+		dsClient, err := datastore.NewClientWithDatabase(ctx, datastoreProject, datastoreDatabase)
+		if err != nil {
+			log.Fatalf("failed to create datastore client: %v", err)
+		}
+		projectStore = stores.NewProjectDataStore(ctx, dsClient)
+		userStore = stores.NewUserDataStore(ctx, dsClient)
 
 	} else {
 		projectStore = stores.NewInMemoryProjectStore()

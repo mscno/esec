@@ -27,8 +27,7 @@ func setupUserDataStore(t *testing.T) (*UserDataStore, context.Context) {
 	projectID := "test-project-users"
 	client, err := datastore.NewClient(ctx, projectID, option.WithEndpoint(host))
 	assert.NoError(t, err)
-	store, err := NewUserDataStore(ctx, client)
-	require.NoError(t, err, "Failed to create UserDataStore for testing")
+	store := NewUserDataStore(ctx, client)
 
 	// Clear all data before each test run (optional, but good practice)
 	q := datastore.NewQuery(userKind).KeysOnly()

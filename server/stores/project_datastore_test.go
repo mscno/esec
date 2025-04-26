@@ -3,6 +3,7 @@ package stores
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"cloud.google.com/go/datastore"
@@ -17,11 +18,10 @@ func setupProjectDataStore(t *testing.T) (*ProjectDataStore, context.Context) {
 
 	// Use a unique project ID for testing to avoid conflicts
 	// The actual project ID doesn't matter when using the emulator
-	projectID := "esec-prod"
+	projectID := os.Getenv("TEST_DATASTORE_PROJECT")
 	client, err := datastore.NewClientWithDatabase(ctx, projectID, "esec-test")
 	assert.NoError(t, err)
-	store, err := NewProjectDataStore(ctx, client)
-	assert.NoError(t, err, "Failed to create ProjectDataStore for testing")
+	store := NewProjectDataStore(ctx, client)
 
 	// Clear all data before each test run
 	q := datastore.NewQuery(projectKind).KeysOnly()
