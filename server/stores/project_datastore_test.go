@@ -3,6 +3,9 @@ package stores
 import (
 	"context"
 	"errors"
+	"github.com/joho/godotenv"
+	"github.com/mscno/esec/pkg/cloudmodel"
+	"github.com/mscno/esec/server"
 	"os"
 	"testing"
 
@@ -15,7 +18,7 @@ import (
 func setupProjectDataStore(t *testing.T) (*ProjectDataStore, context.Context) {
 	t.Helper()
 	ctx := context.Background()
-
+	godotenv.Load("../../.env.test")
 	// Use a unique project ID for testing to avoid conflicts
 	// The actual project ID doesn't matter when using the emulator
 	projectID := os.Getenv("TEST_DATASTORE_PROJECT")
@@ -40,9 +43,8 @@ func setupProjectDataStore(t *testing.T) (*ProjectDataStore, context.Context) {
 func TestProjectDataStore_CreateProject(t *testing.T) {
 	store, ctx := setupProjectDataStore(t)
 
-	project := Project{
+	project := cloudmodel.Project{
 		OrgRepo: "org/repo1",
-		Admins:  []string{"admin1"},
 	}
 
 	// Test successful creation
@@ -51,15 +53,14 @@ func TestProjectDataStore_CreateProject(t *testing.T) {
 
 	// Test creating existing project
 	err = store.CreateProject(ctx, project)
-	assert.ErrorIs(t, err, ErrProjectExists)
+	assert.ErrorIs(t, err, server.ErrProjectExists)
 }
 
 func TestProjectDataStore_GetProject(t *testing.T) {
 	store, ctx := setupProjectDataStore(t)
 
-	project := Project{
+	project := cloudmodel.Project{
 		OrgRepo: "org/repo2",
-		Admins:  []string{"admin2"},
 	}
 	err := store.CreateProject(ctx, project)
 	require.NoError(t, err)
@@ -71,45 +72,41 @@ func TestProjectDataStore_GetProject(t *testing.T) {
 
 	// Test get non-existent project
 	_, err = store.GetProject(ctx, "non-existent/repo")
-	assert.ErrorIs(t, err, ErrProjectNotFound)
+	assert.ErrorIs(t, err, server.ErrProjectNotFound)
 }
 
 func TestProjectDataStore_UpdateProject(t *testing.T) {
 	store, ctx := setupProjectDataStore(t)
 
-	project := Project{
+	project := cloudmodel.Project{
 		OrgRepo: "org/repo3",
-		Admins:  []string{"admin3"},
 	}
 	err := store.CreateProject(ctx, project)
 	require.NoError(t, err)
 
 	// Test successful update
-	err = store.UpdateProject(ctx, "org/repo3", func(p Project) (Project, error) {
-		p.Admins = append(p.Admins, "admin4")
+	err = store.UpdateProject(ctx, "org/repo3", func(p cloudmodel.Project) (cloudmodel.Project, error) {
 		return p, nil
 	})
 	assert.NoError(t, err)
 
-	updatedProject, err := store.GetProject(ctx, "org/repo3")
+	_, err = store.GetProject(ctx, "org/repo3")
 	require.NoError(t, err)
-	assert.Contains(t, updatedProject.Admins, "admin4")
-	assert.Len(t, updatedProject.Admins, 2)
 
 	// Test update non-existent project
-	err = store.UpdateProject(ctx, "non-existent/repo", func(p Project) (Project, error) {
+	err = store.UpdateProject(ctx, "non-existent/repo", func(p cloudmodel.Project) (cloudmodel.Project, error) {
 		return p, nil
 	})
-	assert.ErrorIs(t, err, ErrProjectNotFound)
+	assert.ErrorIs(t, err, server.ErrProjectNotFound)
 
 	// Test update function error
-	err = store.UpdateProject(ctx, "org/repo3", func(p Project) (Project, error) {
+	err = store.UpdateProject(ctx, "org/repo3", func(p cloudmodel.Project) (cloudmodel.Project, error) {
 		return p, errors.New("update failed")
 	})
 	assert.ErrorContains(t, err, "update failed")
 
 	// Test changing OrgRepo (should fail)
-	err = store.UpdateProject(ctx, "org/repo3", func(p Project) (Project, error) {
+	err = store.UpdateProject(ctx, "org/repo3", func(p cloudmodel.Project) (cloudmodel.Project, error) {
 		p.OrgRepo = "changed/repo"
 		return p, nil
 	})
@@ -119,7 +116,7 @@ func TestProjectDataStore_UpdateProject(t *testing.T) {
 func TestProjectDataStore_DeleteProject(t *testing.T) {
 	store, ctx := setupProjectDataStore(t)
 
-	project := Project{OrgRepo: "org/repo4"}
+	project := cloudmodel.Project{OrgRepo: "org/repo4"}
 	err := store.CreateProject(ctx, project)
 	require.NoError(t, err)
 
@@ -128,18 +125,18 @@ func TestProjectDataStore_DeleteProject(t *testing.T) {
 	assert.NoError(t, err)
 
 	_, err = store.GetProject(ctx, "org/repo4")
-	assert.ErrorIs(t, err, ErrProjectNotFound)
+	assert.ErrorIs(t, err, server.ErrProjectNotFound)
 
 	// Test delete non-existent project
 	err = store.DeleteProject(ctx, "non-existent/repo")
-	assert.ErrorIs(t, err, ErrProjectNotFound) // Or assert.NoError if idempotent deletion is preferred
+	assert.ErrorIs(t, err, server.ErrProjectNotFound) // Or assert.NoError if idempotent deletion is preferred
 }
 
 func TestProjectDataStore_ListProjects(t *testing.T) {
 	store, ctx := setupProjectDataStore(t)
 
-	project1 := Project{OrgRepo: "list/repo1"}
-	project2 := Project{OrgRepo: "list/repo2"}
+	project1 := cloudmodel.Project{OrgRepo: "list/repo1"}
+	project2 := cloudmodel.Project{OrgRepo: "list/repo2"}
 	err := store.CreateProject(ctx, project1)
 	require.NoError(t, err)
 	err = store.CreateProject(ctx, project2)

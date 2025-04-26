@@ -11,3 +11,4 @@ coverage.txt
 .esec-keyring
 esec.db
 llm-prompt.txt
+.env.test

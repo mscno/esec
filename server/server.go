@@ -8,25 +8,54 @@ import (
 	"fmt"
 	esecpb "github.com/mscno/esec/gen/proto/go/esec"
 	"github.com/mscno/esec/gen/proto/go/esec/esecpbconnect"
+	"github.com/mscno/esec/pkg/cloudmodel"
 	"github.com/mscno/esec/server/middleware"
-	"github.com/mscno/esec/server/stores"
 	"log/slog"
 	"net/http"
 )
+
+type UserStore interface {
+	CreateUser(ctx context.Context, user cloudmodel.User) error
+	GetUser(ctx context.Context, githubID cloudmodel.UserId) (*cloudmodel.User, error)
+	UpdateUser(ctx context.Context, githubID cloudmodel.UserId, updateFn func(cloudmodel.User) (cloudmodel.User, error)) error
+	DeleteUser(ctx context.Context, githubID cloudmodel.UserId) error
+	ListUsers(ctx context.Context) ([]cloudmodel.User, error)
+}
+
+var ErrUserExists = errors.New("user already exists")
+var ErrUserNotFound = errors.New("user not found")
+
+type ProjectStore interface {
+	CreateProject(ctx context.Context, project cloudmodel.Project) error
+	GetProject(ctx context.Context, orgRepo cloudmodel.OrgRepo) (cloudmodel.Project, error)
+	UpdateProject(ctx context.Context, orgRepo cloudmodel.OrgRepo, updateFn func(project cloudmodel.Project) (cloudmodel.Project, error)) error
+	ListProjects(ctx context.Context) ([]cloudmodel.Project, error)
+	DeleteProject(ctx context.Context, orgRepo cloudmodel.OrgRepo) error
+
+	// New methods for handling secrets
+	SetProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userId cloudmodel.UserId, secrets map[cloudmodel.PrivateKeyName]string) error
+	GetProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userId cloudmodel.UserId) (map[cloudmodel.PrivateKeyName]string, error)
+	GetAllProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo) (map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string, error)
+	DeleteProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) error
+	DeleteAllProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo) error
+}
+
+var ErrProjectExists = errors.New("project already exists")
+var ErrProjectNotFound = errors.New("project not found")
 
 // Server implements esecpbconnect.EsecServiceHandler
 // It adapts the Handler logic for gRPC/protobuf
 // Add dependencies as in Handler
 type Server struct {
-	Store             stores.ProjectStore
-	UserStore         stores.UserStore
+	Store             ProjectStore
+	UserStore         UserStore
 	Logger            *slog.Logger
 	userHasRoleInRepo UserHasRoleInRepoFunc
 }
 
-type UserHasRoleInRepoFunc func(token, orgRepo, role string) bool
+type UserHasRoleInRepoFunc func(token string, orgRepo cloudmodel.OrgRepo, role string) bool
 
-func NewServer(store stores.ProjectStore, userStore stores.UserStore, logger *slog.Logger, userHasRoleInRepo UserHasRoleInRepoFunc) *Server {
+func NewServer(store ProjectStore, userStore UserStore, logger *slog.Logger, userHasRoleInRepo UserHasRoleInRepoFunc) *Server {
 	if userHasRoleInRepo == nil {
 		userHasRoleInRepo = defaultUserHasRoleInRepo
 	}
@@ -59,15 +88,15 @@ func (s *Server) CreateProject(ctx context.Context, request *connect.Request[ese
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("could not determine creator's github id"))
 	}
 
-	if !s.userHasRoleInRepo(ghuser.Token, request.Msg.OrgRepo, "admin") {
+	if !s.userHasRoleInRepo(ghuser.Token, cloudmodel.OrgRepo(orgRepo), "admin") {
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("access to %s denied", request.Msg.OrgRepo))
 	}
-	project := stores.Project{
-		OrgRepo: orgRepo,
-		Admins:  []string{creatorID},
+
+	project := cloudmodel.Project{
+		OrgRepo: cloudmodel.OrgRepo(orgRepo),
 	}
 	if err := s.Store.CreateProject(ctx, project); err != nil {
-		if errors.Is(err, stores.ErrProjectExists) {
+		if errors.Is(err, ErrProjectExists) {
 			return nil, connect.NewError(connect.CodeAlreadyExists, err)
 		}
 		s.Logger.Error("failed to create project", "orgRepo", orgRepo, "error", err)
@@ -85,8 +114,8 @@ func (s *Server) RegisterUser(ctx context.Context, request *connect.Request[esec
 		slog.Error("user info missing from context")
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
 	}
-	user := stores.User{
-		GitHubID:  fmt.Sprintf("%d", ghuser.ID),
+	user := cloudmodel.User{
+		GitHubID:  cloudmodel.UserId(fmt.Sprintf("%d", ghuser.ID)),
 		Username:  ghuser.Login,
 		PublicKey: request.Msg.GetPublicKey(),
 	}
@@ -110,16 +139,16 @@ func (s *Server) GetUserPublicKey(ctx context.Context, request *connect.Request[
 	if githubID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing github_id"))
 	}
-	user, err := s.UserStore.GetUser(ctx, githubID)
+	user, err := s.UserStore.GetUser(ctx, cloudmodel.UserId(githubID))
 	if err != nil {
-		if errors.Is(err, stores.ErrUserNotFound) {
+		if errors.Is(err, ErrUserNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("user not found"))
 		}
 		s.Logger.Error("failed to get user", "github_id", githubID, "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get user: %w", err))
 	}
 	return connect.NewResponse(&esecpb.GetUserPublicKeyResponse{
-		GithubId:  user.GitHubID,
+		GithubId:  user.GitHubID.String(),
 		Username:  user.Username,
 		PublicKey: user.PublicKey,
 	}), nil
@@ -137,21 +166,33 @@ func (s *Server) SetPerUserSecrets(ctx context.Context, request *connect.Request
 	if err := validateOrgRepo(orgRepo); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid org_repo: %w", err))
 	}
-	proj, err := s.Store.GetProject(ctx, orgRepo)
+	_, err := s.Store.GetProject(ctx, cloudmodel.OrgRepo(orgRepo))
 	if err != nil {
 		s.Logger.Error("project not found", "orgRepo", orgRepo, "error", err)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found: %w", err))
 	}
-	if !contains(proj.Admins, fmt.Sprintf("%d", ghuser.ID)) {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("only project admins may share secrets for this project"))
-	}
-	secrets := make(map[string]map[string]string)
-	for key, secretMap := range request.Msg.GetSecrets() {
-		secrets[key] = secretMap.Secrets
+	//if !contains(proj.Admins, fmt.Sprintf("%d", ghuser.ID)) {
+	//	return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("only project admins may share secrets for this project"))
+	//}
+	if !s.userHasRoleInRepo(ghuser.Token, cloudmodel.OrgRepo(orgRepo), "admin") {
 	}
 
-	for key, userSecrets := range secrets {
-		err := s.Store.SetProjectUserSecrets(ctx, orgRepo, key, userSecrets)
+	secrets := make(map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string)
+	for userId, secretMap := range request.Msg.GetSecrets() {
+		userIdTyped := cloudmodel.UserId(userId)
+		for key, ciphertext := range secretMap.GetSecrets() {
+			keyTyped := cloudmodel.PrivateKeyName(key)
+			if _, ok := secrets[userIdTyped][keyTyped]; ok {
+				secrets[userIdTyped][keyTyped] = ciphertext
+			} else {
+				secrets[userIdTyped] = make(map[cloudmodel.PrivateKeyName]string)
+				secrets[userIdTyped][keyTyped] = ciphertext
+			}
+		}
+	}
+
+	for userId, userSecrets := range secrets {
+		err := s.Store.SetProjectUserSecrets(ctx, cloudmodel.OrgRepo(orgRepo), userId, userSecrets)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to set project user secrets: %w", err))
 		}
@@ -161,7 +202,7 @@ func (s *Server) SetPerUserSecrets(ctx context.Context, request *connect.Request
 }
 
 func (s *Server) GetPerUserSecrets(ctx context.Context, request *connect.Request[esecpb.GetPerUserSecretsRequest]) (*connect.Response[esecpb.GetPerUserSecretsResponse], error) {
-	ghuser, ok := ctx.Value("user").(middleware.GithubUser)
+	_, ok := ctx.Value("user").(middleware.GithubUser)
 	if !ok {
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
 	}
@@ -172,20 +213,25 @@ func (s *Server) GetPerUserSecrets(ctx context.Context, request *connect.Request
 	if err := validateOrgRepo(orgRepo); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid org_repo: %w", err))
 	}
-	proj, err := s.Store.GetProject(ctx, orgRepo)
+
+	_, err := s.Store.GetProject(ctx, cloudmodel.OrgRepo(orgRepo))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found: %w", err))
 	}
-	if !contains(proj.Admins, fmt.Sprintf("%d", ghuser.ID)) {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("only project admins may share secrets for this project"))
-	}
-	secrets, err := s.Store.GetAllProjectUserSecrets(ctx, orgRepo)
+
+	secrets, err := s.Store.GetAllProjectUserSecrets(ctx, cloudmodel.OrgRepo(orgRepo))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to store per-user secrets: %w", err))
 	}
 	resp := &esecpb.GetPerUserSecretsResponse{Secrets: map[string]*esecpb.SecretMap{}}
 	for userID, secretMap := range secrets {
-		resp.Secrets[userID] = &esecpb.SecretMap{Secrets: secretMap}
+		userSecrets := esecpb.SecretMap{
+			Secrets: make(map[string]string, len(secrets)),
+		}
+		for key, cipher := range secretMap {
+			userSecrets.Secrets[string(key)] = cipher
+		}
+		resp.Secrets[string(userID)] = &userSecrets
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -200,12 +246,12 @@ func contains(s []string, str string) bool {
 }
 
 // userHasRoleInRepo checks if the given GitHub token has a role in the given org/repo.
-func defaultUserHasRoleInRepo(token, orgRepo string, role string) bool {
+func defaultUserHasRoleInRepo(token string, orgRepo cloudmodel.OrgRepo, role string) bool {
 	if token == "" || orgRepo == "" || role == "" {
 		return false
 	}
 
-	githubAPIURL := "https://api.github.com/repos/" + orgRepo
+	githubAPIURL := fmt.Sprintf("https://api.github.com/repos/%s", orgRepo)
 	req, err := http.NewRequest("GET", githubAPIURL, nil)
 	if err != nil {
 		return false

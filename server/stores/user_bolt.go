@@ -3,6 +3,8 @@ package stores
 import (
 	"context"
 	"encoding/json"
+	"github.com/mscno/esec/pkg/cloudmodel"
+	"github.com/mscno/esec/server"
 	"go.etcd.io/bbolt"
 )
 
@@ -16,14 +18,14 @@ func NewBoltUserStore(db *bbolt.DB) *BoltUserStore {
 
 var usersBucket = []byte("users")
 
-func (s *BoltUserStore) CreateUser(ctx context.Context, user User) error {
+func (s *BoltUserStore) CreateUser(ctx context.Context, user cloudmodel.User) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists(usersBucket)
 		if err != nil {
 			return err
 		}
 		if bucket.Get([]byte(user.GitHubID)) != nil {
-			return ErrUserExists
+			return server.ErrUserExists
 		}
 		data, err := json.Marshal(user)
 		if err != nil {
@@ -33,16 +35,16 @@ func (s *BoltUserStore) CreateUser(ctx context.Context, user User) error {
 	})
 }
 
-func (s *BoltUserStore) GetUser(ctx context.Context, githubID string) (*User, error) {
-	var user User
+func (s *BoltUserStore) GetUser(ctx context.Context, githubID cloudmodel.UserId) (*cloudmodel.User, error) {
+	var user cloudmodel.User
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(usersBucket)
 		if bucket == nil {
-			return ErrUserNotFound
+			return server.ErrUserNotFound
 		}
 		val := bucket.Get([]byte(githubID))
 		if val == nil {
-			return ErrUserNotFound
+			return server.ErrUserNotFound
 		}
 		return json.Unmarshal(val, &user)
 	})
@@ -52,17 +54,17 @@ func (s *BoltUserStore) GetUser(ctx context.Context, githubID string) (*User, er
 	return &user, nil
 }
 
-func (s *BoltUserStore) UpdateUser(ctx context.Context, githubID string, updateFn func(User) (User, error)) error {
+func (s *BoltUserStore) UpdateUser(ctx context.Context, githubID cloudmodel.UserId, updateFn func(cloudmodel.User) (cloudmodel.User, error)) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(usersBucket)
 		if bucket == nil {
-			return ErrUserNotFound
+			return server.ErrUserNotFound
 		}
 		val := bucket.Get([]byte(githubID))
 		if val == nil {
-			return ErrUserNotFound
+			return server.ErrUserNotFound
 		}
-		var user User
+		var user cloudmodel.User
 		if err := json.Unmarshal(val, &user); err != nil {
 			return err
 		}
@@ -78,28 +80,28 @@ func (s *BoltUserStore) UpdateUser(ctx context.Context, githubID string, updateF
 	})
 }
 
-func (s *BoltUserStore) DeleteUser(ctx context.Context, githubID string) error {
+func (s *BoltUserStore) DeleteUser(ctx context.Context, githubID cloudmodel.UserId) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(usersBucket)
 		if bucket == nil {
-			return ErrUserNotFound
+			return server.ErrUserNotFound
 		}
 		if bucket.Get([]byte(githubID)) == nil {
-			return ErrUserNotFound
+			return server.ErrUserNotFound
 		}
 		return bucket.Delete([]byte(githubID))
 	})
 }
 
-func (s *BoltUserStore) ListUsers(ctx context.Context) ([]User, error) {
-	var users []User
+func (s *BoltUserStore) ListUsers(ctx context.Context) ([]cloudmodel.User, error) {
+	var users []cloudmodel.User
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(usersBucket)
 		if bucket == nil {
 			return nil
 		}
 		return bucket.ForEach(func(k, v []byte) error {
-			var u User
+			var u cloudmodel.User
 			if err := json.Unmarshal(v, &u); err != nil {
 				return err
 			}
@@ -110,4 +112,4 @@ func (s *BoltUserStore) ListUsers(ctx context.Context) ([]User, error) {
 	return users, err
 }
 
-var _ UserStore = (*BoltUserStore)(nil)
+var _ server.UserStore = (*BoltUserStore)(nil)

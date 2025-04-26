@@ -4,6 +4,8 @@ import (
 	"cloud.google.com/go/datastore"
 	"context"
 	"crypto/rand"
+	"github.com/mscno/esec/pkg/cloudmodel"
+	"github.com/mscno/esec/server"
 	"os"
 	"testing"
 
@@ -13,7 +15,7 @@ import (
 )
 
 func TestUserSecretsDataStore(t *testing.T) {
-	testUserSecrets(t, func() ProjectStore {
+	testUserSecrets(t, func() server.ProjectStore {
 		ctx := context.Background()
 		projectID := os.Getenv("TEST_DATASTORE_PROJECT")
 		client, err := datastore.NewClientWithDatabase(ctx, projectID, "esec-test")
@@ -24,7 +26,7 @@ func TestUserSecretsDataStore(t *testing.T) {
 	})
 }
 func TestUserSecretsInMemory(t *testing.T) {
-	testUserSecrets(t, func() ProjectStore {
+	testUserSecrets(t, func() server.ProjectStore {
 		return NewInMemoryProjectStore()
 	})
 }
@@ -41,19 +43,18 @@ func TestUserSecretsBolt(t *testing.T) {
 		os.Remove(dbfile)
 	}()
 
-	testUserSecrets(t, func() ProjectStore {
+	testUserSecrets(t, func() server.ProjectStore {
 		return NewBoltProjectStore(db)
 	})
 }
 
-func testUserSecrets(t *testing.T, storeFactory func() ProjectStore) {
+func testUserSecrets(t *testing.T, storeFactory func() server.ProjectStore) {
 	ctx := context.Background()
 	store := storeFactory()
 
 	// Create test project
-	project := Project{
-		OrgRepo: "test-org/test-repo" + rand.Text(),
-		Admins:  []string{"admin1"},
+	project := cloudmodel.Project{
+		OrgRepo: cloudmodel.OrgRepo("test-org/test-repo" + rand.Text()),
 	}
 
 	err := store.CreateProject(ctx, project)
@@ -66,7 +67,7 @@ func testUserSecrets(t *testing.T, storeFactory func() ProjectStore) {
 	// Test setting and getting secrets for a user
 	t.Run("Set and get user secrets", func(t *testing.T) {
 		// Set secrets for user1
-		user1Secrets := map[string]string{
+		user1Secrets := map[cloudmodel.PrivateKeyName]string{
 			"API_KEY": "secret1",
 			"TOKEN":   "token1",
 		}
@@ -80,7 +81,7 @@ func testUserSecrets(t *testing.T, storeFactory func() ProjectStore) {
 		assert.Equal(t, user1Secrets, gotSecrets)
 
 		// Set secrets for user2
-		user2Secrets := map[string]string{
+		user2Secrets := map[cloudmodel.PrivateKeyName]string{
 			"DB_PASSWORD": "dbpass",
 		}
 
@@ -97,7 +98,7 @@ func testUserSecrets(t *testing.T, storeFactory func() ProjectStore) {
 
 	t.Run("Update user secrets", func(t *testing.T) {
 		// Update user1's secrets
-		updatedSecrets := map[string]string{
+		updatedSecrets := map[cloudmodel.PrivateKeyName]string{
 			"API_KEY": "newsecret",
 			"CERT":    "newcert",
 		}
@@ -126,7 +127,7 @@ func testUserSecrets(t *testing.T, storeFactory func() ProjectStore) {
 		allSecrets, err := store.GetAllProjectUserSecrets(ctx, project.OrgRepo)
 		assert.NoError(t, err)
 		assert.Len(t, allSecrets, 1)
-		assert.Contains(t, allSecrets, "user2")
+		assert.Contains(t, allSecrets, cloudmodel.UserId("user2"))
 	})
 
 	t.Run("Delete all user secrets", func(t *testing.T) {
@@ -147,20 +148,20 @@ func testUserSecrets(t *testing.T, storeFactory func() ProjectStore) {
 		// Test with non-existent project
 		_, err := store.GetAllProjectUserSecrets(ctx, "non-existent/repo")
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrProjectNotFound)
+		assert.ErrorIs(t, err, server.ErrProjectNotFound)
 
 		_, err = store.GetProjectUserSecrets(ctx, "non-existent/repo", "user1")
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrProjectNotFound)
+		assert.ErrorIs(t, err, server.ErrProjectNotFound)
 
-		err = store.SetProjectUserSecrets(ctx, "non-existent/repo", "user1", map[string]string{"key": "value"})
+		err = store.SetProjectUserSecrets(ctx, "non-existent/repo", "user1", map[cloudmodel.PrivateKeyName]string{"key": "value"})
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrProjectNotFound)
+		assert.ErrorIs(t, err, server.ErrProjectNotFound)
 	})
 
 	t.Run("Project deletion cascades to secrets", func(t *testing.T) {
 		// Add a secret for testing
-		err := store.SetProjectUserSecrets(ctx, project.OrgRepo, "user3", map[string]string{"key": "value"})
+		err := store.SetProjectUserSecrets(ctx, project.OrgRepo, "user3", map[cloudmodel.PrivateKeyName]string{"key": "value"})
 		assert.NoError(t, err)
 
 		// Delete the project
@@ -181,7 +182,7 @@ func testUserSecrets(t *testing.T, storeFactory func() ProjectStore) {
 func TestSecretPairsConversion(t *testing.T) {
 	t.Run("map to pairs and back", func(t *testing.T) {
 		// Start with a map
-		originalMap := map[string]string{
+		originalMap := map[cloudmodel.PrivateKeyName]string{
 			"API_KEY":    "secret-key-1",
 			"DB_PASS":    "password123",
 			"AUTH_TOKEN": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
@@ -192,10 +193,10 @@ func TestSecretPairsConversion(t *testing.T) {
 
 		// Verify all keys and values are in the pairs
 		assert.Len(t, pairs, len(originalMap))
-		keyFound := make(map[string]bool)
+		keyFound := make(map[cloudmodel.PrivateKeyName]bool)
 		for _, pair := range pairs {
-			assert.Equal(t, originalMap[pair.UserId], pair.Value)
-			keyFound[pair.UserId] = true
+			assert.Equal(t, originalMap[pair.Key], pair.Value)
+			keyFound[pair.Key] = true
 		}
 
 		// Verify all keys were found in pairs
@@ -212,7 +213,7 @@ func TestSecretPairsConversion(t *testing.T) {
 
 	t.Run("empty map", func(t *testing.T) {
 		// Test with empty map
-		emptyMap := map[string]string{}
+		emptyMap := map[cloudmodel.PrivateKeyName]string{}
 		pairs := mapToSecretPairs(emptyMap)
 		assert.Empty(t, pairs)
 
@@ -223,7 +224,7 @@ func TestSecretPairsConversion(t *testing.T) {
 
 	t.Run("nil map", func(t *testing.T) {
 		// Test with nil map
-		var nilMap map[string]string
+		var nilMap map[cloudmodel.PrivateKeyName]string
 		pairs := mapToSecretPairs(nilMap)
 		assert.Empty(t, pairs)
 
@@ -235,10 +236,10 @@ func TestSecretPairsConversion(t *testing.T) {
 
 	t.Run("duplicate keys", func(t *testing.T) {
 		// Create pairs with duplicate keys (invalid state but should be handled)
-		pairs := []SecretPair{
-			{UserId: "API_KEY", Value: "value1"},
-			{UserId: "DB_PASS", Value: "value2"},
-			{UserId: "API_KEY", Value: "value3"}, // Duplicate
+		pairs := []cloudmodel.SecretPair{
+			{Key: "API_KEY", Value: "value1"},
+			{Key: "DB_PASS", Value: "value2"},
+			{Key: "API_KEY", Value: "value3"}, // Duplicate
 		}
 
 		// Convert to map - last value should win

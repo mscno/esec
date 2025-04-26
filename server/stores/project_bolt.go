@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mscno/esec/pkg/cloudmodel"
+	"github.com/mscno/esec/server"
 	"strings"
 
 	"go.etcd.io/bbolt"
@@ -23,14 +25,14 @@ var (
 	projectSecretsBucket = []byte("project_secrets")
 )
 
-func (s *BoltProjectStore) CreateProject(ctx context.Context, project Project) error {
+func (s *BoltProjectStore) CreateProject(ctx context.Context, project cloudmodel.Project) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists(projectsBucket)
 		if err != nil {
 			return err
 		}
 		if bucket.Get([]byte(project.OrgRepo)) != nil {
-			return ErrProjectExists
+			return server.ErrProjectExists
 		}
 		data, err := json.Marshal(project)
 		if err != nil {
@@ -40,34 +42,34 @@ func (s *BoltProjectStore) CreateProject(ctx context.Context, project Project) e
 	})
 }
 
-func (s *BoltProjectStore) GetProject(ctx context.Context, orgRepo string) (Project, error) {
-	var project Project
+func (s *BoltProjectStore) GetProject(ctx context.Context, orgRepo cloudmodel.OrgRepo) (cloudmodel.Project, error) {
+	var project cloudmodel.Project
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(projectsBucket)
 		if bucket == nil {
-			return ErrProjectNotFound
+			return server.ErrProjectNotFound
 		}
 		val := bucket.Get([]byte(orgRepo))
 		if val == nil {
-			return ErrProjectNotFound
+			return server.ErrProjectNotFound
 		}
 		return json.Unmarshal(val, &project)
 	})
 	return project, err
 }
 
-func (s *BoltProjectStore) UpdateProject(ctx context.Context, orgRepo string, updateFn func(project Project) (Project, error)) error {
+func (s *BoltProjectStore) UpdateProject(ctx context.Context, orgRepo cloudmodel.OrgRepo, updateFn func(project cloudmodel.Project) (cloudmodel.Project, error)) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(projectsBucket)
 		if bucket == nil {
-			return ErrProjectNotFound
+			return server.ErrProjectNotFound
 		}
 		projectBytes := bucket.Get([]byte(orgRepo))
 		if projectBytes == nil {
-			return ErrProjectNotFound
+			return server.ErrProjectNotFound
 		}
 
-		var project Project
+		var project cloudmodel.Project
 		if err := json.Unmarshal(projectBytes, &project); err != nil {
 			return err
 		}
@@ -83,15 +85,15 @@ func (s *BoltProjectStore) UpdateProject(ctx context.Context, orgRepo string, up
 	})
 }
 
-func (s *BoltProjectStore) ListProjects(ctx context.Context) ([]Project, error) {
-	var projects []Project
+func (s *BoltProjectStore) ListProjects(ctx context.Context) ([]cloudmodel.Project, error) {
+	var projects []cloudmodel.Project
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(projectsBucket)
 		if bucket == nil {
 			return nil
 		}
 		return bucket.ForEach(func(k, v []byte) error {
-			var p Project
+			var p cloudmodel.Project
 			if err := json.Unmarshal(v, &p); err != nil {
 				return err
 			}
@@ -102,7 +104,7 @@ func (s *BoltProjectStore) ListProjects(ctx context.Context) ([]Project, error) 
 	return projects, err
 }
 
-func (s *BoltProjectStore) DeleteProject(ctx context.Context, orgRepo string) error {
+func (s *BoltProjectStore) DeleteProject(ctx context.Context, orgRepo cloudmodel.OrgRepo) error {
 	// First delete all user secrets for this project
 	if err := s.DeleteAllProjectUserSecrets(ctx, orgRepo); err != nil {
 		return err
@@ -112,30 +114,30 @@ func (s *BoltProjectStore) DeleteProject(ctx context.Context, orgRepo string) er
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(projectsBucket)
 		if bucket == nil {
-			return ErrProjectNotFound
+			return server.ErrProjectNotFound
 		}
 		if bucket.Get([]byte(orgRepo)) == nil {
-			return ErrProjectNotFound
+			return server.ErrProjectNotFound
 		}
 		return bucket.Delete([]byte(orgRepo))
 	})
 }
 
 // Key format for project user secrets: "orgRepo:userID"
-func makeSecretsKey(orgRepo, userID string) []byte {
+func makeSecretsKey(orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) []byte {
 	return []byte(fmt.Sprintf("%s:%s", orgRepo, userID))
 }
 
 // parseSecretsKey parses a key to extract orgRepo and userID
-func parseSecretsKey(key []byte) (orgRepo, userID string) {
+func parseSecretsKey(key []byte) (orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) {
 	parts := strings.SplitN(string(key), ":", 2)
 	if len(parts) != 2 {
 		return "", ""
 	}
-	return parts[0], parts[1]
+	return cloudmodel.OrgRepo(parts[0]), cloudmodel.UserId(parts[1])
 }
 
-func (s *BoltProjectStore) SetProjectUserSecrets(ctx context.Context, orgRepo string, userID string, secrets map[string]string) error {
+func (s *BoltProjectStore) SetProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId, secrets map[cloudmodel.PrivateKeyName]string) error {
 	// First verify the project exists
 	_, err := s.GetProject(ctx, orgRepo)
 	if err != nil {
@@ -159,25 +161,25 @@ func (s *BoltProjectStore) SetProjectUserSecrets(ctx context.Context, orgRepo st
 	})
 }
 
-func (s *BoltProjectStore) GetProjectUserSecrets(ctx context.Context, orgRepo string, userID string) (map[string]string, error) {
+func (s *BoltProjectStore) GetProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) (map[cloudmodel.PrivateKeyName]string, error) {
 	// First verify the project exists
 	_, err := s.GetProject(ctx, orgRepo)
 	if err != nil {
 		return nil, err
 	}
 
-	var secrets map[string]string
+	var secrets map[cloudmodel.PrivateKeyName]string
 	err = s.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(projectSecretsBucket)
 		if bucket == nil {
-			secrets = make(map[string]string)
+			secrets = make(map[cloudmodel.PrivateKeyName]string)
 			return nil
 		}
 
 		key := makeSecretsKey(orgRepo, userID)
 		val := bucket.Get(key)
 		if val == nil {
-			secrets = make(map[string]string)
+			secrets = make(map[cloudmodel.PrivateKeyName]string)
 			return nil
 		}
 
@@ -187,14 +189,14 @@ func (s *BoltProjectStore) GetProjectUserSecrets(ctx context.Context, orgRepo st
 	return secrets, err
 }
 
-func (s *BoltProjectStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo string) (map[string]map[string]string, error) {
+func (s *BoltProjectStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo) (map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string, error) {
 	// First verify the project exists
 	_, err := s.GetProject(ctx, orgRepo)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make(map[string]map[string]string)
+	result := make(map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string)
 
 	err = s.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(projectSecretsBucket)
@@ -211,7 +213,7 @@ func (s *BoltProjectStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo
 				continue
 			}
 
-			var secrets map[string]string
+			var secrets map[cloudmodel.PrivateKeyName]string
 			if err := json.Unmarshal(v, &secrets); err != nil {
 				return err
 			}
@@ -225,7 +227,7 @@ func (s *BoltProjectStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo
 	return result, err
 }
 
-func (s *BoltProjectStore) DeleteProjectUserSecrets(ctx context.Context, orgRepo string, userID string) error {
+func (s *BoltProjectStore) DeleteProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(projectSecretsBucket)
 		if bucket == nil {
@@ -237,7 +239,7 @@ func (s *BoltProjectStore) DeleteProjectUserSecrets(ctx context.Context, orgRepo
 	})
 }
 
-func (s *BoltProjectStore) DeleteAllProjectUserSecrets(ctx context.Context, orgRepo string) error {
+func (s *BoltProjectStore) DeleteAllProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(projectSecretsBucket)
 		if bucket == nil {
@@ -258,4 +260,4 @@ func (s *BoltProjectStore) DeleteAllProjectUserSecrets(ctx context.Context, orgR
 }
 
 // Ensure BoltProjectStore implements ProjectStore
-var _ ProjectStore = (*BoltProjectStore)(nil)
+var _ server.ProjectStore = (*BoltProjectStore)(nil)

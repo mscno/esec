@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/mscno/esec/pkg/cloudmodel"
+	"github.com/mscno/esec/server"
 
 	"cloud.google.com/go/datastore"
 )
@@ -29,25 +31,25 @@ func (s *ProjectDataStore) Close() error {
 }
 
 // projectKey creates a datastore key for a project
-func (s *ProjectDataStore) projectKey(orgRepo string) *datastore.Key {
-	return datastore.NameKey(projectKind, orgRepo, nil)
+func (s *ProjectDataStore) projectKey(orgRepo cloudmodel.OrgRepo) *datastore.Key {
+	return datastore.NameKey(projectKind, fmt.Sprintf("%s", orgRepo), nil)
 }
 
 // userSecretsKey creates a datastore key for project user secrets
-func (s *ProjectDataStore) userSecretsKey(orgRepo string, userID string) *datastore.Key {
+func (s *ProjectDataStore) userSecretsKey(orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) *datastore.Key {
 	// Use a composite key of project ID and user ID
 	compositeKey := fmt.Sprintf("%s:%s", orgRepo, userID)
 	return datastore.NameKey(projectUserSecretsKind, compositeKey, s.projectKey(orgRepo))
 }
 
 // CreateProject creates a new project in the datastore
-func (s *ProjectDataStore) CreateProject(ctx context.Context, project Project) error {
+func (s *ProjectDataStore) CreateProject(ctx context.Context, project cloudmodel.Project) error {
 	key := s.projectKey(project.OrgRepo)
 	// Check if project already exists
-	var existingProject Project
+	var existingProject cloudmodel.Project
 	err := s.client.Get(ctx, key, &existingProject)
 	if err == nil {
-		return ErrProjectExists
+		return server.ErrProjectExists
 	}
 	if !errors.Is(err, datastore.ErrNoSuchEntity) {
 		return err // Some other error occurred
@@ -59,21 +61,21 @@ func (s *ProjectDataStore) CreateProject(ctx context.Context, project Project) e
 }
 
 // GetProject retrieves a project from the datastore
-func (s *ProjectDataStore) GetProject(ctx context.Context, orgRepo string) (Project, error) {
+func (s *ProjectDataStore) GetProject(ctx context.Context, orgRepo cloudmodel.OrgRepo) (cloudmodel.Project, error) {
 	key := s.projectKey(orgRepo)
-	var project Project
+	var project cloudmodel.Project
 	err := s.client.Get(ctx, key, &project)
 	if errors.Is(err, datastore.ErrNoSuchEntity) {
-		return Project{}, ErrProjectNotFound
+		return cloudmodel.Project{}, server.ErrProjectNotFound
 	}
 	if err != nil {
-		return Project{}, err
+		return cloudmodel.Project{}, err
 	}
 	return project, nil
 }
 
 // UpdateProject updates a project in the datastore
-func (s *ProjectDataStore) UpdateProject(ctx context.Context, orgRepo string, updateFn func(project Project) (Project, error)) error {
+func (s *ProjectDataStore) UpdateProject(ctx context.Context, orgRepo cloudmodel.OrgRepo, updateFn func(project cloudmodel.Project) (cloudmodel.Project, error)) error {
 	key := s.projectKey(orgRepo)
 	tx, err := s.client.NewTransaction(ctx)
 	if err != nil {
@@ -81,10 +83,10 @@ func (s *ProjectDataStore) UpdateProject(ctx context.Context, orgRepo string, up
 	}
 	defer tx.Rollback() // Rollback if commit fails or anything goes wrong
 
-	var project Project
+	var project cloudmodel.Project
 	err = tx.Get(key, &project)
 	if errors.Is(err, datastore.ErrNoSuchEntity) {
-		return ErrProjectNotFound
+		return server.ErrProjectNotFound
 	}
 	if err != nil {
 		return err
@@ -110,8 +112,8 @@ func (s *ProjectDataStore) UpdateProject(ctx context.Context, orgRepo string, up
 }
 
 // ListProjects lists all projects in the datastore
-func (s *ProjectDataStore) ListProjects(ctx context.Context) ([]Project, error) {
-	var projects []Project
+func (s *ProjectDataStore) ListProjects(ctx context.Context) ([]cloudmodel.Project, error) {
+	var projects []cloudmodel.Project
 	query := datastore.NewQuery(projectKind)
 	_, err := s.client.GetAll(ctx, query, &projects)
 	if err != nil {
@@ -119,13 +121,13 @@ func (s *ProjectDataStore) ListProjects(ctx context.Context) ([]Project, error) 
 	}
 	// If projects is nil (GetAll returns nil slice on no results), return empty slice
 	if projects == nil {
-		return []Project{}, nil
+		return []cloudmodel.Project{}, nil
 	}
 	return projects, nil
 }
 
 // DeleteProject deletes a project and all its associated user secrets
-func (s *ProjectDataStore) DeleteProject(ctx context.Context, orgRepo string) error {
+func (s *ProjectDataStore) DeleteProject(ctx context.Context, orgRepo cloudmodel.OrgRepo) error {
 
 	_, err := s.GetProject(ctx, orgRepo)
 	if err != nil {
@@ -142,31 +144,31 @@ func (s *ProjectDataStore) DeleteProject(ctx context.Context, orgRepo string) er
 	key := s.projectKey(orgRepo)
 	err = s.client.Delete(ctx, key)
 	if errors.Is(err, datastore.ErrNoSuchEntity) {
-		return ErrProjectNotFound
+		return server.ErrProjectNotFound
 	}
 	return err
 }
 
 // mapToSecretPairs converts a map[string]string to []SecretPair
-func mapToSecretPairs(m map[string]string) []SecretPair {
-	pairs := make([]SecretPair, 0, len(m))
+func mapToSecretPairs(m map[cloudmodel.PrivateKeyName]string) []cloudmodel.SecretPair {
+	pairs := make([]cloudmodel.SecretPair, 0, len(m))
 	for k, v := range m {
-		pairs = append(pairs, SecretPair{UserId: k, Value: v})
+		pairs = append(pairs, cloudmodel.SecretPair{Key: k, Value: v})
 	}
 	return pairs
 }
 
 // secretPairsToMap converts []SecretPair to map[string]string
-func secretPairsToMap(pairs []SecretPair) map[string]string {
-	m := make(map[string]string, len(pairs))
+func secretPairsToMap(pairs []cloudmodel.SecretPair) map[cloudmodel.PrivateKeyName]string {
+	m := make(map[cloudmodel.PrivateKeyName]string, len(pairs))
 	for _, pair := range pairs {
-		m[pair.UserId] = pair.Value
+		m[pair.Key] = pair.Value
 	}
 	return m
 }
 
 // SetProjectUserSecrets sets secrets for a specific user in a project
-func (s *ProjectDataStore) SetProjectUserSecrets(ctx context.Context, orgRepo string, userID string, secrets map[string]string) error {
+func (s *ProjectDataStore) SetProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId, secrets map[cloudmodel.PrivateKeyName]string) error {
 	// Verify project exists first
 	_, err := s.GetProject(ctx, orgRepo)
 	if err != nil {
@@ -174,10 +176,10 @@ func (s *ProjectDataStore) SetProjectUserSecrets(ctx context.Context, orgRepo st
 	}
 
 	key := s.userSecretsKey(orgRepo, userID)
-	userSecrets := ProjectUserSecrets{
-		ProjectID:      orgRepo,
-		PrivateKeyName: userID,
-		Secrets:        mapToSecretPairs(secrets),
+	userSecrets := cloudmodel.ProjectUserSecrets{
+		ProjectID: orgRepo,
+		UserId:    userID,
+		Secrets:   mapToSecretPairs(secrets),
 	}
 
 	_, err = s.client.Put(ctx, key, &userSecrets)
@@ -185,7 +187,7 @@ func (s *ProjectDataStore) SetProjectUserSecrets(ctx context.Context, orgRepo st
 }
 
 // GetProjectUserSecrets gets secrets for a specific user in a project
-func (s *ProjectDataStore) GetProjectUserSecrets(ctx context.Context, orgRepo string, userID string) (map[string]string, error) {
+func (s *ProjectDataStore) GetProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) (map[cloudmodel.PrivateKeyName]string, error) {
 	// Verify project exists first
 	_, err := s.GetProject(ctx, orgRepo)
 	if err != nil {
@@ -193,10 +195,10 @@ func (s *ProjectDataStore) GetProjectUserSecrets(ctx context.Context, orgRepo st
 	}
 
 	key := s.userSecretsKey(orgRepo, userID)
-	var userSecrets ProjectUserSecrets
+	var userSecrets cloudmodel.ProjectUserSecrets
 	err = s.client.Get(ctx, key, &userSecrets)
 	if errors.Is(err, datastore.ErrNoSuchEntity) {
-		return map[string]string{}, nil // Return empty map if not found
+		return map[cloudmodel.PrivateKeyName]string{}, nil // Return empty map if not found
 	}
 	if err != nil {
 		return nil, err
@@ -205,7 +207,7 @@ func (s *ProjectDataStore) GetProjectUserSecrets(ctx context.Context, orgRepo st
 }
 
 // GetAllProjectUserSecrets gets all user secrets for a project
-func (s *ProjectDataStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo string) (map[string]map[string]string, error) {
+func (s *ProjectDataStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo) (map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string, error) {
 	// Verify project exists first
 	_, err := s.GetProject(ctx, orgRepo)
 	if err != nil {
@@ -214,30 +216,30 @@ func (s *ProjectDataStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo
 
 	// Query all user secrets for this project
 	query := datastore.NewQuery(projectUserSecretsKind).Ancestor(s.projectKey(orgRepo))
-	var userSecrets []ProjectUserSecrets
+	var userSecrets []cloudmodel.ProjectUserSecrets
 	_, err = s.client.GetAll(ctx, query, &userSecrets)
 	if err != nil {
 		return nil, err
 	}
 
 	// Build the result map
-	result := make(map[string]map[string]string)
+	result := make(map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string)
 	for _, us := range userSecrets {
-		result[us.PrivateKeyName] = secretPairsToMap(us.Secrets)
+		result[us.UserId] = secretPairsToMap(us.Secrets)
 	}
 	return result, nil
 }
 
 // DeleteProjectUserSecrets deletes secrets for a specific user in a project
-func (s *ProjectDataStore) DeleteProjectUserSecrets(ctx context.Context, orgRepo string, userID string) error {
+func (s *ProjectDataStore) DeleteProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) error {
 	key := s.userSecretsKey(orgRepo, userID)
 	return s.client.Delete(ctx, key)
 }
 
 // DeleteAllProjectUserSecrets deletes all user secrets for a project
-func (s *ProjectDataStore) DeleteAllProjectUserSecrets(ctx context.Context, orgRepo string) error {
+func (s *ProjectDataStore) DeleteAllProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo) error {
 	// Query all user secrets for this project
-	query := datastore.NewQuery(projectUserSecretsKind).Filter("project_id =", orgRepo).KeysOnly()
+	query := datastore.NewQuery(projectUserSecretsKind).Filter("project_id =", orgRepo.String()).KeysOnly()
 	keys, err := s.client.GetAll(ctx, query, nil)
 	if err != nil {
 		return err
@@ -261,4 +263,4 @@ func (s *ProjectDataStore) DeleteAllProjectUserSecrets(ctx context.Context, orgR
 }
 
 // Ensure ProjectDataStore implements ProjectStore
-var _ ProjectStore = (*ProjectDataStore)(nil)
+var _ server.ProjectStore = (*ProjectDataStore)(nil)

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"github.com/mscno/esec/pkg/client"
 	"os"
 	"path"
 
@@ -13,8 +14,8 @@ import (
 )
 
 type ShareCmd struct {
-	KeyName string   `arg:"" help:"Key to share (e.g. ESEC_PRIVATE_KEY_PROD)"`
-	Users   []string `help:"Comma-separated GitHub usernames or IDs to share with" name:"users" sep:","`
+	KeyName client.PrivateKeyName `arg:"" help:"Key to share (e.g. ESEC_PRIVATE_KEY_PROD)"`
+	Users   []string              `help:"Comma-separated GitHub usernames or IDs to share with" name:"users" sep:","`
 }
 
 func (c *ShareCmd) Run(ctx *cliCtx, parent *CloudCmd) error {
@@ -38,18 +39,20 @@ func (c *ShareCmd) Run(ctx *cliCtx, parent *CloudCmd) error {
 		return fmt.Errorf("failed to pull current sharing state: %w", err)
 	}
 	recipients := map[string]string{} // githubID -> pubKey
-	if blobs, ok := perUserPayload[c.KeyName]; ok {
-		for githubID := range blobs {
-			recipients[githubID] = "" // will fill pubKey below
+
+	for githubId, secrets := range perUserPayload {
+		if _, ok := secrets[c.KeyName]; ok {
+			recipients[githubId.String()] = ""
 		}
 	}
+
 	// Add new users
 	for _, user := range c.Users {
 		if _, ok := recipients[user]; ok {
 			continue // already shared
 		}
 		// Fetch public key for user
-		pubKey, githubID, _, err := connectClient.GetUserPublicKey(ctx, user)
+		pubKey, githubID, _, err := connectClient.GetUserPublicKey(ctx, client.UserId(user))
 		if err != nil {
 			fmt.Printf("Could not fetch key for %s: %v. Skipping.\n", user, err)
 			continue
@@ -71,7 +74,7 @@ func (c *ShareCmd) Run(ctx *cliCtx, parent *CloudCmd) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse .esec-keyring: %w", err)
 	}
-	secret, ok := localSecrets[c.KeyName]
+	secret, ok := localSecrets[c.KeyName.String()]
 	if !ok {
 		return fmt.Errorf("key %s not found in .esec-keyring", c.KeyName)
 	}
@@ -109,19 +112,19 @@ func (c *ShareCmd) Run(ctx *cliCtx, parent *CloudCmd) error {
 		newBlobs[githubID] = base64.StdEncoding.EncodeToString(ciphertext)
 	}
 	// Push updated payload
-	if len(newBlobs) > 0 {
-		if perUserPayload[c.KeyName] == nil {
-			perUserPayload[c.KeyName] = map[string]string{}
-		}
-		for k, v := range newBlobs {
-			perUserPayload[c.KeyName][k] = v
-		}
-		if err := connectClient.PushKeysPerUser(ctx, orgRepo, perUserPayload); err != nil {
-			return fmt.Errorf("failed to push updated sharing: %w", err)
-		}
-		fmt.Println("Shared secret updated for new users.")
-	} else {
-		fmt.Println("No new users to share with.")
-	}
+	//if len(newBlobs) > 0 {
+	//	if perUserPayload[c.KeyName] == nil {
+	//		perUserPayload[c.KeyName] = map[string]string{}
+	//	}
+	//	for k, v := range newBlobs {
+	//		perUserPayload[c.KeyName][k] = v
+	//	}
+	//	if err := connectClient.PushKeysPerUser(ctx, orgRepo, perUserPayload); err != nil {
+	//		return fmt.Errorf("failed to push updated sharing: %w", err)
+	//	}
+	//	fmt.Println("Shared secret updated for new users.")
+	//} else {
+	//	fmt.Println("No new users to share with.")
+	//}
 	return nil
 }

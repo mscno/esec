@@ -3,6 +3,8 @@ package stores
 import (
 	"context"
 	"errors"
+	"github.com/mscno/esec/pkg/cloudmodel"
+	"github.com/mscno/esec/server"
 
 	"cloud.google.com/go/datastore"
 )
@@ -22,17 +24,17 @@ func (s *UserDataStore) Close() error {
 	return s.client.Close()
 }
 
-func (s *UserDataStore) userKey(githubID string) *datastore.Key {
-	return datastore.NameKey(userKind, githubID, nil)
+func (s *UserDataStore) userKey(githubID cloudmodel.UserId) *datastore.Key {
+	return datastore.NameKey(userKind, githubID.String(), nil)
 }
 
-func (s *UserDataStore) CreateUser(ctx context.Context, user User) error {
+func (s *UserDataStore) CreateUser(ctx context.Context, user cloudmodel.User) error {
 	key := s.userKey(user.GitHubID)
 	// Check if user already exists
-	var existingUser User
+	var existingUser cloudmodel.User
 	err := s.client.Get(ctx, key, &existingUser)
 	if err == nil {
-		return ErrUserExists
+		return server.ErrUserExists
 	}
 	if !errors.Is(err, datastore.ErrNoSuchEntity) {
 		return err // Some other error occurred
@@ -43,12 +45,12 @@ func (s *UserDataStore) CreateUser(ctx context.Context, user User) error {
 	return err
 }
 
-func (s *UserDataStore) GetUser(ctx context.Context, githubID string) (*User, error) {
+func (s *UserDataStore) GetUser(ctx context.Context, githubID cloudmodel.UserId) (*cloudmodel.User, error) {
 	key := s.userKey(githubID)
-	var user User
+	var user cloudmodel.User
 	err := s.client.Get(ctx, key, &user)
 	if errors.Is(err, datastore.ErrNoSuchEntity) {
-		return nil, ErrUserNotFound
+		return nil, server.ErrUserNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -56,7 +58,7 @@ func (s *UserDataStore) GetUser(ctx context.Context, githubID string) (*User, er
 	return &user, nil
 }
 
-func (s *UserDataStore) UpdateUser(ctx context.Context, githubID string, updateFn func(user User) (User, error)) error {
+func (s *UserDataStore) UpdateUser(ctx context.Context, githubID cloudmodel.UserId, updateFn func(user cloudmodel.User) (cloudmodel.User, error)) error {
 	key := s.userKey(githubID)
 	tx, err := s.client.NewTransaction(ctx)
 	if err != nil {
@@ -64,10 +66,10 @@ func (s *UserDataStore) UpdateUser(ctx context.Context, githubID string, updateF
 	}
 	defer tx.Rollback() // Rollback if commit fails or anything goes wrong
 
-	var user User
+	var user cloudmodel.User
 	err = tx.Get(key, &user)
 	if errors.Is(err, datastore.ErrNoSuchEntity) {
-		return ErrUserNotFound
+		return server.ErrUserNotFound
 	}
 	if err != nil {
 		return err
@@ -92,18 +94,18 @@ func (s *UserDataStore) UpdateUser(ctx context.Context, githubID string, updateF
 	return err
 }
 
-func (s *UserDataStore) DeleteUser(ctx context.Context, githubID string) error {
+func (s *UserDataStore) DeleteUser(ctx context.Context, githubID cloudmodel.UserId) error {
 	key := s.userKey(githubID)
 	err := s.client.Delete(ctx, key)
 	if errors.Is(err, datastore.ErrNoSuchEntity) {
 		// Consider if deleting a non-existent user is an error or idempotent
-		return ErrUserNotFound // Or return nil if idempotent deletion is desired
+		return server.ErrUserNotFound // Or return nil if idempotent deletion is desired
 	}
 	return err
 }
 
-func (s *UserDataStore) ListUsers(ctx context.Context) ([]User, error) {
-	var users []User
+func (s *UserDataStore) ListUsers(ctx context.Context) ([]cloudmodel.User, error) {
+	var users []cloudmodel.User
 	query := datastore.NewQuery(userKind)
 	_, err := s.client.GetAll(ctx, query, &users)
 	if err != nil {
@@ -111,10 +113,10 @@ func (s *UserDataStore) ListUsers(ctx context.Context) ([]User, error) {
 	}
 	// If users is nil (GetAll returns nil slice on no results), return empty slice
 	if users == nil {
-		return []User{}, nil
+		return []cloudmodel.User{}, nil
 	}
 	return users, nil
 }
 
 // Compile-time check to ensure UserDataStore implements UserStore
-var _ UserStore = (*UserDataStore)(nil)
+var _ server.UserStore = (*UserDataStore)(nil)

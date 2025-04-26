@@ -2,6 +2,7 @@ package stores
 
 import (
 	"context"
+	"github.com/mscno/esec/pkg/cloudmodel"
 	"os"
 	"testing"
 
@@ -20,9 +21,8 @@ func TestBoltProjectStore_CRUD(t *testing.T) {
 	defer db.Close()
 	store := NewBoltProjectStore(db)
 
-	project := Project{
+	project := cloudmodel.Project{
 		OrgRepo: "org/repo",
-		Admins:  []string{"admin"},
 	}
 
 	// Create
@@ -36,13 +36,12 @@ func TestBoltProjectStore_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProject: %v", err)
 	}
-	if got.OrgRepo != project.OrgRepo || len(got.Admins) != 1 || got.Admins[0] != "admin" {
+	if got.OrgRepo != project.OrgRepo {
 		t.Errorf("unexpected project: %+v", got)
 	}
 
 	// Update
-	err = store.UpdateProject(ctx, "org/repo", func(p Project) (Project, error) {
-		p.Admins = append(p.Admins, "admin2")
+	err = store.UpdateProject(ctx, "org/repo", func(p cloudmodel.Project) (cloudmodel.Project, error) {
 		return p, nil
 	})
 	if err != nil {
@@ -51,9 +50,6 @@ func TestBoltProjectStore_CRUD(t *testing.T) {
 	got, err = store.GetProject(ctx, "org/repo")
 	if err != nil {
 		t.Fatalf("GetProject after update: %v", err)
-	}
-	if len(got.Admins) != 2 || got.Admins[1] != "admin2" {
-		t.Errorf("update failed: %+v", got)
 	}
 
 	// List

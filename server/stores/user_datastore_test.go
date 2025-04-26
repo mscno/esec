@@ -4,6 +4,8 @@ import (
 	"cloud.google.com/go/datastore"
 	"context"
 	"errors"
+	"github.com/mscno/esec/pkg/cloudmodel"
+	"github.com/mscno/esec/server"
 	"google.golang.org/api/option"
 	"os"
 	"testing"
@@ -46,7 +48,7 @@ func setupUserDataStore(t *testing.T) (*UserDataStore, context.Context) {
 func TestUserDataStore_CreateUser(t *testing.T) {
 	store, ctx := setupUserDataStore(t)
 
-	user := User{GitHubID: "test-user-1", Username: "Test User 1", PublicKey: "key1"}
+	user := cloudmodel.User{GitHubID: "test-user-1", Username: "Test User 1", PublicKey: "key1"}
 
 	// Test successful creation
 	err := store.CreateUser(ctx, user)
@@ -54,13 +56,13 @@ func TestUserDataStore_CreateUser(t *testing.T) {
 
 	// Test creating existing user
 	err = store.CreateUser(ctx, user)
-	assert.ErrorIs(t, err, ErrUserExists)
+	assert.ErrorIs(t, err, server.ErrUserExists)
 }
 
 func TestUserDataStore_GetUser(t *testing.T) {
 	store, ctx := setupUserDataStore(t)
 
-	user := User{GitHubID: "test-user-2", Username: "Test User 2", PublicKey: "key2"}
+	user := cloudmodel.User{GitHubID: "test-user-2", Username: "Test User 2", PublicKey: "key2"}
 	err := store.CreateUser(ctx, user)
 	require.NoError(t, err)
 
@@ -72,18 +74,18 @@ func TestUserDataStore_GetUser(t *testing.T) {
 
 	// Test get non-existent user
 	_, err = store.GetUser(ctx, "non-existent-user")
-	assert.ErrorIs(t, err, ErrUserNotFound)
+	assert.ErrorIs(t, err, server.ErrUserNotFound)
 }
 
 func TestUserDataStore_UpdateUser(t *testing.T) {
 	store, ctx := setupUserDataStore(t)
 
-	user := User{GitHubID: "test-user-3", Username: "Test User 3", PublicKey: "key3"}
+	user := cloudmodel.User{GitHubID: "test-user-3", Username: "Test User 3", PublicKey: "key3"}
 	err := store.CreateUser(ctx, user)
 	require.NoError(t, err)
 
 	// Test successful update
-	err = store.UpdateUser(ctx, "test-user-3", func(u User) (User, error) {
+	err = store.UpdateUser(ctx, "test-user-3", func(u cloudmodel.User) (cloudmodel.User, error) {
 		u.PublicKey = "newkey3"
 		return u, nil
 	})
@@ -94,19 +96,19 @@ func TestUserDataStore_UpdateUser(t *testing.T) {
 	assert.Equal(t, "newkey3", updatedUser.PublicKey)
 
 	// Test update non-existent user
-	err = store.UpdateUser(ctx, "non-existent-user", func(u User) (User, error) {
+	err = store.UpdateUser(ctx, "non-existent-user", func(u cloudmodel.User) (cloudmodel.User, error) {
 		return u, nil
 	})
-	assert.ErrorIs(t, err, ErrUserNotFound)
+	assert.ErrorIs(t, err, server.ErrUserNotFound)
 
 	// Test update function error
-	err = store.UpdateUser(ctx, "test-user-3", func(u User) (User, error) {
+	err = store.UpdateUser(ctx, "test-user-3", func(u cloudmodel.User) (cloudmodel.User, error) {
 		return u, errors.New("update failed")
 	})
 	assert.ErrorContains(t, err, "update failed")
 
 	// Test changing GitHubID (should fail)
-	err = store.UpdateUser(ctx, "test-user-3", func(u User) (User, error) {
+	err = store.UpdateUser(ctx, "test-user-3", func(u cloudmodel.User) (cloudmodel.User, error) {
 		u.GitHubID = "changed-id"
 		return u, nil
 	})
@@ -116,7 +118,7 @@ func TestUserDataStore_UpdateUser(t *testing.T) {
 func TestUserDataStore_DeleteUser(t *testing.T) {
 	store, ctx := setupUserDataStore(t)
 
-	user := User{GitHubID: "test-user-4", Username: "Test User 4", PublicKey: "key4"}
+	user := cloudmodel.User{GitHubID: "test-user-4", Username: "Test User 4", PublicKey: "key4"}
 	err := store.CreateUser(ctx, user)
 	require.NoError(t, err)
 
@@ -125,18 +127,18 @@ func TestUserDataStore_DeleteUser(t *testing.T) {
 	assert.NoError(t, err)
 
 	_, err = store.GetUser(ctx, "test-user-4")
-	assert.ErrorIs(t, err, ErrUserNotFound)
+	assert.ErrorIs(t, err, server.ErrUserNotFound)
 
 	// Test delete non-existent user
 	err = store.DeleteUser(ctx, "non-existent-user")
-	assert.ErrorIs(t, err, ErrUserNotFound) // Or assert.NoError if idempotent deletion is preferred
+	assert.ErrorIs(t, err, server.ErrUserNotFound) // Or assert.NoError if idempotent deletion is preferred
 }
 
 func TestUserDataStore_ListUsers(t *testing.T) {
 	store, ctx := setupUserDataStore(t)
 
-	user1 := User{GitHubID: "list-user-1", Username: "List User 1", PublicKey: "keyL1"}
-	user2 := User{GitHubID: "list-user-2", Username: "List User 2", PublicKey: "keyL2"}
+	user1 := cloudmodel.User{GitHubID: "list-user-1", Username: "List User 1", PublicKey: "keyL1"}
+	user2 := cloudmodel.User{GitHubID: "list-user-2", Username: "List User 2", PublicKey: "keyL2"}
 	err := store.CreateUser(ctx, user1)
 	require.NoError(t, err)
 	err = store.CreateUser(ctx, user2)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/mscno/esec"
 	"github.com/mscno/esec/pkg/auth"
+	"github.com/mscno/esec/pkg/client"
 	"net/http"
 	"os"
 	"path"
@@ -98,7 +99,7 @@ func (c *SyncPushCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	// Fetch current recipients from server
 	perUserPayloadServer, err := connectClient.PullKeysPerUser(ctx, orgRepo)
 	if err != nil {
-		perUserPayloadServer = map[string]map[string]string{} // fallback to empty
+		perUserPayloadServer = map[client.UserId]map[client.PrivateKeyName]string{} // fallback to empty
 	}
 
 	EncryptForRecipient := func(pubKey, plaintext string) (string, error) {
@@ -116,41 +117,47 @@ func (c *SyncPushCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 		return base64.StdEncoding.EncodeToString(ciphertext), nil
 	}
 
-	perUserPayload := map[string]map[string]string{}
+	perUserPayload := map[client.UserId]map[client.PrivateKeyName]string{}
 	myGitHubID, myPubHex, err := getSelf()
 	if err != nil {
 		return err
 	}
 
 	for keyName, secret := range privateKeys {
-		recipients := map[string]string{} // githubID -> pubKey
-		if blobs, ok := perUserPayloadServer[keyName]; ok && len(blobs) > 0 {
-			// Use existing recipient list from server
-			for githubID := range blobs {
-				// Fetch public key for recipient
-				if githubID == myGitHubID {
-					recipients[githubID] = myPubHex
-					continue
-				}
+		typedKey := client.PrivateKeyName(keyName)
+		recipients := map[client.UserId]string{} // githubID -> pubKey
+		for githubID, blobs := range perUserPayloadServer {
+			// Fetch public key for recipient
+			if githubID.String() == myGitHubID {
+				recipients[githubID] = myPubHex
+				continue
+			}
+			if blobs, ok := blobs[typedKey]; ok && len(blobs) > 0 {
+				// Use existing recipient list from server
+
 				pubKey, gid, _, err := connectClient.GetUserPublicKey(ctx, githubID)
 				if err != nil || gid == "" {
 					fmt.Printf("Warning: could not fetch public key for recipient %s: %v. Skipping.\n", githubID, err)
 					continue
 				}
 				recipients[githubID] = pubKey
+
+			} else {
+				// Only self
+				recipients[client.UserId(myGitHubID)] = myPubHex
 			}
-		} else {
-			// Only self
-			recipients[myGitHubID] = myPubHex
 		}
-		perUserPayload[keyName] = map[string]string{}
 		for githubID, pubKey := range recipients {
+			if perUserPayload[githubID] == nil {
+				perUserPayload[githubID] = map[client.PrivateKeyName]string{}
+			}
+
 			encrypted, err := EncryptForRecipient(pubKey, secret)
 			if err != nil {
 				fmt.Printf("Encryption failed for %s/%s: %v\n", keyName, githubID, err)
 				continue
 			}
-			perUserPayload[keyName][githubID] = encrypted
+			perUserPayload[githubID][typedKey] = encrypted
 		}
 	}
 	fmt.Printf("Prepared encrypted payload: %+v\n", perUserPayload)
@@ -243,24 +250,24 @@ func (c *SyncPullCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 
 	// Prepare new keyring map
 	newKeyring := map[string]string{}
-	for keyName, userBlobs := range perUserPayload {
-		blob, ok := userBlobs[myGitHubID]
-		if !ok {
-			fmt.Printf("No secret for your user (%s) for key %s\n", myGitHubID, keyName)
+	for userId, userBlobs := range perUserPayload {
+		if userId.String() != myGitHubID {
 			continue
 		}
-		ciphertext, err := base64.StdEncoding.DecodeString(blob)
-		if err != nil {
-			fmt.Printf("Failed to decode ciphertext for %s: %v\n", keyName, err)
-			continue
+		for keyName, blob := range userBlobs {
+			ciphertext, err := base64.StdEncoding.DecodeString(blob)
+			if err != nil {
+				fmt.Printf("Failed to decode ciphertext for %s: %v\n", keyName, err)
+				continue
+			}
+			decrypter := myKeypair.Decrypter()
+			plaintext, err := decrypter.Decrypt(ciphertext)
+			if err != nil {
+				fmt.Printf("Failed to decrypt secret %s: %v\n", keyName, err)
+				continue
+			}
+			newKeyring[keyName.String()] = string(plaintext)
 		}
-		decrypter := myKeypair.Decrypter()
-		plaintext, err := decrypter.Decrypt(ciphertext)
-		if err != nil {
-			fmt.Printf("Failed to decrypt secret %s: %v\n", keyName, err)
-			continue
-		}
-		newKeyring[keyName] = string(plaintext)
 	}
 	// Merge with existing keyring
 	merged := map[string]string{}

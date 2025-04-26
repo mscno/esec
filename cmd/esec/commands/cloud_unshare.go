@@ -2,13 +2,14 @@ package commands
 
 import (
 	"fmt"
+	"github.com/mscno/esec/pkg/client"
 
 	"github.com/mscno/esec/pkg/projectfile"
 )
 
 type UnshareCmd struct {
-	KeyName string   `arg:"" help:"Key to unshare (e.g. ESEC_PRIVATE_KEY_PROD)"`
-	Users   []string `help:"Comma-separated GitHub usernames or IDs to unshare from" name:"users" sep:","`
+	KeyName client.PrivateKeyName `arg:"" help:"Key to unshare (e.g. ESEC_PRIVATE_KEY_PROD)"`
+	Users   []string              `help:"Comma-separated GitHub usernames or IDs to unshare from" name:"users" sep:","`
 }
 
 func (c *UnshareCmd) Run(ctx *cliCtx, parent *CloudCmd) error {
@@ -31,13 +32,15 @@ func (c *UnshareCmd) Run(ctx *cliCtx, parent *CloudCmd) error {
 		return fmt.Errorf("failed to pull current sharing state: %w", err)
 	}
 	// Remove specified users from the key's recipients
-	if blobs, ok := perUserPayload[c.KeyName]; ok {
-		for _, user := range c.Users {
-			delete(blobs, user)
+	for _, user := range c.Users {
+		typedUser := client.UserId(user)
+		userBlobs, ok := perUserPayload[typedUser]
+		if ok {
+			delete(userBlobs, c.KeyName)
+		} else {
+			return fmt.Errorf("no such key shared: %s", c.KeyName)
 		}
-		perUserPayload[c.KeyName] = blobs
-	} else {
-		return fmt.Errorf("no such key shared: %s", c.KeyName)
+		perUserPayload[typedUser] = userBlobs
 	}
 	// Push updated sharing state
 	if err := connectClient.PushKeysPerUser(ctx, orgRepo, perUserPayload); err != nil {

@@ -60,8 +60,8 @@ func (c *ConnectClient) CreateProject(ctx context.Context, orgRepo string) error
 	return err
 }
 
-func (c *ConnectClient) GetUserPublicKey(ctx context.Context, usernameOrID string) (publicKey, githubID, username string, err error) {
-	req := connect.NewRequest(&esecpb.GetUserPublicKeyRequest{GithubId: usernameOrID})
+func (c *ConnectClient) GetUserPublicKey(ctx context.Context, usernameOrID UserId) (publicKey, githubID, username string, err error) {
+	req := connect.NewRequest(&esecpb.GetUserPublicKeyRequest{GithubId: usernameOrID.String()})
 	resp, err := c.client.GetUserPublicKey(ctx, req)
 	if err != nil {
 		return "", "", "", err
@@ -69,10 +69,16 @@ func (c *ConnectClient) GetUserPublicKey(ctx context.Context, usernameOrID strin
 	return resp.Msg.PublicKey, resp.Msg.GithubId, resp.Msg.Username, nil
 }
 
-func (c *ConnectClient) PushKeysPerUser(ctx context.Context, orgRepo string, perUserPayload map[string]map[string]string) error {
+func (c *ConnectClient) PushKeysPerUser(ctx context.Context, orgRepo string, perUserPayload map[UserId]map[PrivateKeyName]string) error {
 	secrets := map[string]*esecpb.SecretMap{}
-	for key, secmap := range perUserPayload {
-		secrets[key] = &esecpb.SecretMap{Secrets: secmap}
+	for userId, secmap := range perUserPayload {
+		var secretMap = &esecpb.SecretMap{
+			Secrets: make(map[string]string),
+		}
+		for key, cipher := range secmap {
+			secretMap.Secrets[key.String()] = cipher
+		}
+		secrets[userId.String()] = secretMap
 	}
 	req := connect.NewRequest(&esecpb.SetPerUserSecretsRequest{
 		OrgRepo: orgRepo,
@@ -82,15 +88,24 @@ func (c *ConnectClient) PushKeysPerUser(ctx context.Context, orgRepo string, per
 	return err
 }
 
-func (c *ConnectClient) PullKeysPerUser(ctx context.Context, orgRepo string) (map[string]map[string]string, error) {
+func (c *ConnectClient) PullKeysPerUser(ctx context.Context, orgRepo string) (map[UserId]map[PrivateKeyName]string, error) {
 	req := connect.NewRequest(&esecpb.GetPerUserSecretsRequest{OrgRepo: orgRepo})
 	resp, err := c.client.GetPerUserSecrets(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	result := make(map[string]map[string]string)
+	result := make(map[UserId]map[PrivateKeyName]string)
 	for userID, secmap := range resp.Msg.Secrets {
-		result[userID] = secmap.Secrets
+		for _, secret := range secmap.Secrets {
+			userIdTyped := UserId(userID)
+			if _, ok := result[userIdTyped]; ok {
+				result[userIdTyped][PrivateKeyName(secret)] = secret
+			} else {
+				result[userIdTyped] = map[PrivateKeyName]string{
+					PrivateKeyName(secret): secret,
+				}
+			}
+		}
 	}
 	return result, nil
 }

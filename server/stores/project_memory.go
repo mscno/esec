@@ -2,51 +2,53 @@ package stores
 
 import (
 	"context"
+	"github.com/mscno/esec/pkg/cloudmodel"
+	"github.com/mscno/esec/server"
 	"sync"
 )
 
 type InMemoryProjectStore struct {
 	mu          sync.RWMutex
-	projects    map[string]Project
-	userSecrets map[string]map[string]map[string]string // map[orgRepo]map[userID]map[key]value
+	projects    map[cloudmodel.OrgRepo]cloudmodel.Project
+	userSecrets map[cloudmodel.OrgRepo]map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string // map[orgRepo]map[userID]map[key]value
 }
 
 func NewInMemoryProjectStore() *InMemoryProjectStore {
 	return &InMemoryProjectStore{
-		projects:    make(map[string]Project),
-		userSecrets: make(map[string]map[string]map[string]string),
+		projects:    make(map[cloudmodel.OrgRepo]cloudmodel.Project),
+		userSecrets: make(map[cloudmodel.OrgRepo]map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string),
 	}
 }
 
-func (s *InMemoryProjectStore) CreateProject(ctx context.Context, project Project) error {
+func (s *InMemoryProjectStore) CreateProject(ctx context.Context, project cloudmodel.Project) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.projects[project.OrgRepo]; exists {
-		return ErrProjectExists
+		return server.ErrProjectExists
 	}
 	s.projects[project.OrgRepo] = project
 	// Initialize the secrets map for this project
-	s.userSecrets[project.OrgRepo] = make(map[string]map[string]string)
+	s.userSecrets[project.OrgRepo] = make(map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string)
 	return nil
 }
 
-func (s *InMemoryProjectStore) GetProject(ctx context.Context, orgRepo string) (Project, error) {
+func (s *InMemoryProjectStore) GetProject(ctx context.Context, orgRepo cloudmodel.OrgRepo) (cloudmodel.Project, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	p, ok := s.projects[orgRepo]
 	if !ok {
-		return Project{}, ErrProjectNotFound
+		return cloudmodel.Project{}, server.ErrProjectNotFound
 	}
 	return p, nil
 }
 
-func (s *InMemoryProjectStore) UpdateProject(ctx context.Context, orgRepo string, updateFn func(project Project) (Project, error)) error {
+func (s *InMemoryProjectStore) UpdateProject(ctx context.Context, orgRepo cloudmodel.OrgRepo, updateFn func(project cloudmodel.Project) (cloudmodel.Project, error)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	project, ok := s.projects[orgRepo]
 	if !ok {
-		return ErrProjectNotFound
+		return server.ErrProjectNotFound
 	}
 
 	project, err := updateFn(project)
@@ -57,21 +59,21 @@ func (s *InMemoryProjectStore) UpdateProject(ctx context.Context, orgRepo string
 	return nil
 }
 
-func (s *InMemoryProjectStore) ListProjects(ctx context.Context) ([]Project, error) {
+func (s *InMemoryProjectStore) ListProjects(ctx context.Context) ([]cloudmodel.Project, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var result []Project
+	var result []cloudmodel.Project
 	for _, p := range s.projects {
 		result = append(result, p)
 	}
 	return result, nil
 }
 
-func (s *InMemoryProjectStore) DeleteProject(ctx context.Context, orgRepo string) error {
+func (s *InMemoryProjectStore) DeleteProject(ctx context.Context, orgRepo cloudmodel.OrgRepo) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.projects[orgRepo]; !ok {
-		return ErrProjectNotFound
+		return server.ErrProjectNotFound
 	}
 	delete(s.projects, orgRepo)
 	// Also delete all user secrets for this project
@@ -79,22 +81,22 @@ func (s *InMemoryProjectStore) DeleteProject(ctx context.Context, orgRepo string
 	return nil
 }
 
-func (s *InMemoryProjectStore) SetProjectUserSecrets(ctx context.Context, orgRepo string, userID string, secrets map[string]string) error {
+func (s *InMemoryProjectStore) SetProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId, secrets map[cloudmodel.PrivateKeyName]string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Check if project exists
 	if _, ok := s.projects[orgRepo]; !ok {
-		return ErrProjectNotFound
+		return server.ErrProjectNotFound
 	}
 
 	// Ensure project secrets map is initialized
 	if _, ok := s.userSecrets[orgRepo]; !ok {
-		s.userSecrets[orgRepo] = make(map[string]map[string]string)
+		s.userSecrets[orgRepo] = make(map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string)
 	}
 
 	// Set the user's secrets
-	secretsCopy := make(map[string]string)
+	secretsCopy := make(map[cloudmodel.PrivateKeyName]string)
 	for k, v := range secrets {
 		secretsCopy[k] = v
 	}
@@ -102,54 +104,54 @@ func (s *InMemoryProjectStore) SetProjectUserSecrets(ctx context.Context, orgRep
 	return nil
 }
 
-func (s *InMemoryProjectStore) GetProjectUserSecrets(ctx context.Context, orgRepo string, userID string) (map[string]string, error) {
+func (s *InMemoryProjectStore) GetProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) (map[cloudmodel.PrivateKeyName]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	// Check if project exists
 	if _, ok := s.projects[orgRepo]; !ok {
-		return nil, ErrProjectNotFound
+		return nil, server.ErrProjectNotFound
 	}
 
 	// Check if project secrets map is initialized
 	projectSecrets, ok := s.userSecrets[orgRepo]
 	if !ok {
-		return make(map[string]string), nil
+		return make(map[cloudmodel.PrivateKeyName]string), nil
 	}
 
 	// Get user secrets
 	userSecrets, ok := projectSecrets[userID]
 	if !ok {
-		return make(map[string]string), nil
+		return make(map[cloudmodel.PrivateKeyName]string), nil
 	}
 
 	// Return a copy of the secrets to prevent mutations
-	secretsCopy := make(map[string]string)
+	secretsCopy := make(map[cloudmodel.PrivateKeyName]string)
 	for k, v := range userSecrets {
 		secretsCopy[k] = v
 	}
 	return secretsCopy, nil
 }
 
-func (s *InMemoryProjectStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo string) (map[string]map[string]string, error) {
+func (s *InMemoryProjectStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo) (map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	// Check if project exists
 	if _, ok := s.projects[orgRepo]; !ok {
-		return nil, ErrProjectNotFound
+		return nil, server.ErrProjectNotFound
 	}
 
 	// Check if project secrets map is initialized
 	projectSecrets, ok := s.userSecrets[orgRepo]
 	if !ok {
-		return make(map[string]map[string]string), nil
+		return make(map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string), nil
 	}
 
 	// Return a deep copy of all user secrets for this project
-	result := make(map[string]map[string]string)
+	result := make(map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string)
 	for userID, secrets := range projectSecrets {
-		userSecretsCopy := make(map[string]string)
+		userSecretsCopy := make(map[cloudmodel.PrivateKeyName]string)
 		for k, v := range secrets {
 			userSecretsCopy[k] = v
 		}
@@ -158,13 +160,13 @@ func (s *InMemoryProjectStore) GetAllProjectUserSecrets(ctx context.Context, org
 	return result, nil
 }
 
-func (s *InMemoryProjectStore) DeleteProjectUserSecrets(ctx context.Context, orgRepo string, userID string) error {
+func (s *InMemoryProjectStore) DeleteProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Check if project exists
 	if _, ok := s.projects[orgRepo]; !ok {
-		return ErrProjectNotFound
+		return server.ErrProjectNotFound
 	}
 
 	// Check if project secrets map is initialized
@@ -178,19 +180,19 @@ func (s *InMemoryProjectStore) DeleteProjectUserSecrets(ctx context.Context, org
 	return nil
 }
 
-func (s *InMemoryProjectStore) DeleteAllProjectUserSecrets(ctx context.Context, orgRepo string) error {
+func (s *InMemoryProjectStore) DeleteAllProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Check if project exists
 	if _, ok := s.projects[orgRepo]; !ok {
-		return ErrProjectNotFound
+		return server.ErrProjectNotFound
 	}
 
 	// Clear all user secrets for this project
-	s.userSecrets[orgRepo] = make(map[string]map[string]string)
+	s.userSecrets[orgRepo] = make(map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string)
 	return nil
 }
 
 // Ensure InMemoryProjectStore implements ProjectStore
-var _ ProjectStore = (*InMemoryProjectStore)(nil)
+var _ server.ProjectStore = (*InMemoryProjectStore)(nil)

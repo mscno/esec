@@ -1,7 +1,9 @@
-package server
+package e2e
 
 import (
 	"context"
+	"github.com/mscno/esec/pkg/cloudmodel"
+	"github.com/mscno/esec/server"
 	"github.com/mscno/esec/server/middleware"
 	"github.com/stretchr/testify/require"
 	"log/slog"
@@ -13,7 +15,7 @@ import (
 	"github.com/mscno/esec/server/stores"
 )
 
-func mockUserHasRoleInRepo(token, orgRepo, role string) bool {
+func mockUserHasRoleInRepo(token string, orgRepo cloudmodel.OrgRepo, role string) bool {
 	if token == "testtoken" && orgRepo == "foo/bar" {
 		return true
 	}
@@ -26,11 +28,11 @@ func mockTokenValidator(token string) (middleware.GithubUser, bool) {
 	}
 	return middleware.GithubUser{}, false
 }
-func setupTestServer() *Server {
+func setupTestServer() *server.Server {
 	store := stores.NewInMemoryProjectStore()
 	userStore := stores.NewInMemoryUserStore()
 	logger := slog.Default()
-	return NewServer(store, userStore, logger, mockUserHasRoleInRepo)
+	return server.NewServer(store, userStore, logger, mockUserHasRoleInRepo)
 }
 
 func setUserInContext(ctx context.Context, user middleware.GithubUser) context.Context {
