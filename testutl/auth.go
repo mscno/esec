@@ -1,11 +1,11 @@
 package testutl
 
 import (
-	"github.com/mscno/esec/pkg/cloudmodel"
 	"github.com/mscno/esec/server/middleware"
+	"github.com/mscno/esec/server/model"
 )
 
-func MockUserHasRoleInRepo(token string, orgRepo cloudmodel.OrgRepo, role string) bool {
+func MockUserHasRoleInRepo(token string, orgRepo model.OrgRepo, role string) bool {
 	if token == "testtoken" && orgRepo == "foo/bar" {
 		return true
 	}

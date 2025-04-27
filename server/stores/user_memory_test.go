@@ -2,13 +2,13 @@ package stores
 
 import (
 	"context"
-	"github.com/mscno/esec/pkg/cloudmodel"
+	"github.com/mscno/esec/server/model"
 	"testing"
 )
 
 func TestInMemoryUserStore_CRUD(t *testing.T) {
 	store := NewInMemoryUserStore()
-	user := cloudmodel.User{
+	user := model.User{
 		GitHubID:  "1",
 		Username:  "alice",
 		PublicKey: "pk1",
@@ -30,7 +30,7 @@ func TestInMemoryUserStore_CRUD(t *testing.T) {
 	}
 
 	// Update
-	err = store.UpdateUser(ctx, "1", func(u cloudmodel.User) (cloudmodel.User, error) {
+	err = store.UpdateUser(ctx, "1", func(u model.User) (model.User, error) {
 		u.PublicKey = "pk2"
 		return u, nil
 	})

@@ -2,19 +2,19 @@ package stores
 
 import (
 	"context"
-	"github.com/mscno/esec/pkg/cloudmodel"
 	"github.com/mscno/esec/server"
+	"github.com/mscno/esec/server/model"
 )
 
 type InMemoryUserStore struct {
-	users map[cloudmodel.UserId]cloudmodel.User
+	users map[model.UserId]model.User
 }
 
 func NewInMemoryUserStore() *InMemoryUserStore {
-	return &InMemoryUserStore{users: make(map[cloudmodel.UserId]cloudmodel.User)}
+	return &InMemoryUserStore{users: make(map[model.UserId]model.User)}
 }
 
-func (s *InMemoryUserStore) CreateUser(ctx context.Context, user cloudmodel.User) error {
+func (s *InMemoryUserStore) CreateUser(ctx context.Context, user model.User) error {
 	if _, exists := s.users[user.GitHubID]; exists {
 		return server.ErrUserExists
 	}
@@ -22,7 +22,7 @@ func (s *InMemoryUserStore) CreateUser(ctx context.Context, user cloudmodel.User
 	return nil
 }
 
-func (s *InMemoryUserStore) GetUser(ctx context.Context, githubID cloudmodel.UserId) (*cloudmodel.User, error) {
+func (s *InMemoryUserStore) GetUser(ctx context.Context, githubID model.UserId) (*model.User, error) {
 	u, ok := s.users[githubID]
 	if !ok {
 		return nil, server.ErrUserNotFound
@@ -30,7 +30,7 @@ func (s *InMemoryUserStore) GetUser(ctx context.Context, githubID cloudmodel.Use
 	return &u, nil
 }
 
-func (s *InMemoryUserStore) UpdateUser(ctx context.Context, githubID cloudmodel.UserId, updateFn func(cloudmodel.User) (cloudmodel.User, error)) error {
+func (s *InMemoryUserStore) UpdateUser(ctx context.Context, githubID model.UserId, updateFn func(model.User) (model.User, error)) error {
 	u, ok := s.users[githubID]
 	if !ok {
 		return server.ErrUserNotFound
@@ -43,7 +43,7 @@ func (s *InMemoryUserStore) UpdateUser(ctx context.Context, githubID cloudmodel.
 	return nil
 }
 
-func (s *InMemoryUserStore) DeleteUser(ctx context.Context, githubID cloudmodel.UserId) error {
+func (s *InMemoryUserStore) DeleteUser(ctx context.Context, githubID model.UserId) error {
 	if _, ok := s.users[githubID]; !ok {
 		return server.ErrUserNotFound
 	}
@@ -51,8 +51,8 @@ func (s *InMemoryUserStore) DeleteUser(ctx context.Context, githubID cloudmodel.
 	return nil
 }
 
-func (s *InMemoryUserStore) ListUsers(ctx context.Context) ([]cloudmodel.User, error) {
-	var out []cloudmodel.User
+func (s *InMemoryUserStore) ListUsers(ctx context.Context) ([]model.User, error) {
+	var out []model.User
 	for _, u := range s.users {
 		out = append(out, u)
 	}

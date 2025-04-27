@@ -2,7 +2,7 @@ package stores
 
 import (
 	"context"
-	"github.com/mscno/esec/pkg/cloudmodel"
+	"github.com/mscno/esec/server/model"
 	"os"
 	"testing"
 
@@ -21,7 +21,7 @@ func TestBoltProjectStore_CRUD(t *testing.T) {
 	defer db.Close()
 	store := NewBoltProjectStore(db)
 
-	project := cloudmodel.Project{
+	project := model.Project{
 		OrgRepo: "org/repo",
 	}
 
@@ -41,7 +41,7 @@ func TestBoltProjectStore_CRUD(t *testing.T) {
 	}
 
 	// Update
-	err = store.UpdateProject(ctx, "org/repo", func(p cloudmodel.Project) (cloudmodel.Project, error) {
+	err = store.UpdateProject(ctx, "org/repo", func(p model.Project) (model.Project, error) {
 		return p, nil
 	})
 	if err != nil {

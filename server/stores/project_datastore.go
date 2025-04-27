@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/mscno/esec/pkg/cloudmodel"
 	"github.com/mscno/esec/server"
+	"github.com/mscno/esec/server/model"
 
 	"cloud.google.com/go/datastore"
 )
@@ -31,22 +31,22 @@ func (s *ProjectDataStore) Close() error {
 }
 
 // projectKey creates a datastore key for a project
-func (s *ProjectDataStore) projectKey(orgRepo cloudmodel.OrgRepo) *datastore.Key {
+func (s *ProjectDataStore) projectKey(orgRepo model.OrgRepo) *datastore.Key {
 	return datastore.NameKey(projectKind, fmt.Sprintf("%s", orgRepo), nil)
 }
 
 // userSecretsKey creates a datastore key for project user secrets
-func (s *ProjectDataStore) userSecretsKey(orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) *datastore.Key {
+func (s *ProjectDataStore) userSecretsKey(orgRepo model.OrgRepo, userID model.UserId) *datastore.Key {
 	// Use a composite key of project ID and user ID
 	compositeKey := fmt.Sprintf("%s:%s", orgRepo, userID)
 	return datastore.NameKey(projectUserSecretsKind, compositeKey, s.projectKey(orgRepo))
 }
 
 // CreateProject creates a new project in the datastore
-func (s *ProjectDataStore) CreateProject(ctx context.Context, project cloudmodel.Project) error {
+func (s *ProjectDataStore) CreateProject(ctx context.Context, project model.Project) error {
 	key := s.projectKey(project.OrgRepo)
 	// Check if project already exists
-	var existingProject cloudmodel.Project
+	var existingProject model.Project
 	err := s.client.Get(ctx, key, &existingProject)
 	if err == nil {
 		return server.ErrProjectExists
@@ -61,21 +61,21 @@ func (s *ProjectDataStore) CreateProject(ctx context.Context, project cloudmodel
 }
 
 // GetProject retrieves a project from the datastore
-func (s *ProjectDataStore) GetProject(ctx context.Context, orgRepo cloudmodel.OrgRepo) (cloudmodel.Project, error) {
+func (s *ProjectDataStore) GetProject(ctx context.Context, orgRepo model.OrgRepo) (model.Project, error) {
 	key := s.projectKey(orgRepo)
-	var project cloudmodel.Project
+	var project model.Project
 	err := s.client.Get(ctx, key, &project)
 	if errors.Is(err, datastore.ErrNoSuchEntity) {
-		return cloudmodel.Project{}, server.ErrProjectNotFound
+		return model.Project{}, server.ErrProjectNotFound
 	}
 	if err != nil {
-		return cloudmodel.Project{}, err
+		return model.Project{}, err
 	}
 	return project, nil
 }
 
 // UpdateProject updates a project in the datastore
-func (s *ProjectDataStore) UpdateProject(ctx context.Context, orgRepo cloudmodel.OrgRepo, updateFn func(project cloudmodel.Project) (cloudmodel.Project, error)) error {
+func (s *ProjectDataStore) UpdateProject(ctx context.Context, orgRepo model.OrgRepo, updateFn func(project model.Project) (model.Project, error)) error {
 	key := s.projectKey(orgRepo)
 	tx, err := s.client.NewTransaction(ctx)
 	if err != nil {
@@ -83,7 +83,7 @@ func (s *ProjectDataStore) UpdateProject(ctx context.Context, orgRepo cloudmodel
 	}
 	defer tx.Rollback() // Rollback if commit fails or anything goes wrong
 
-	var project cloudmodel.Project
+	var project model.Project
 	err = tx.Get(key, &project)
 	if errors.Is(err, datastore.ErrNoSuchEntity) {
 		return server.ErrProjectNotFound
@@ -112,8 +112,8 @@ func (s *ProjectDataStore) UpdateProject(ctx context.Context, orgRepo cloudmodel
 }
 
 // ListProjects lists all projects in the datastore
-func (s *ProjectDataStore) ListProjects(ctx context.Context) ([]cloudmodel.Project, error) {
-	var projects []cloudmodel.Project
+func (s *ProjectDataStore) ListProjects(ctx context.Context) ([]model.Project, error) {
+	var projects []model.Project
 	query := datastore.NewQuery(projectKind)
 	_, err := s.client.GetAll(ctx, query, &projects)
 	if err != nil {
@@ -121,13 +121,13 @@ func (s *ProjectDataStore) ListProjects(ctx context.Context) ([]cloudmodel.Proje
 	}
 	// If projects is nil (GetAll returns nil slice on no results), return empty slice
 	if projects == nil {
-		return []cloudmodel.Project{}, nil
+		return []model.Project{}, nil
 	}
 	return projects, nil
 }
 
 // DeleteProject deletes a project and all its associated user secrets
-func (s *ProjectDataStore) DeleteProject(ctx context.Context, orgRepo cloudmodel.OrgRepo) error {
+func (s *ProjectDataStore) DeleteProject(ctx context.Context, orgRepo model.OrgRepo) error {
 
 	_, err := s.GetProject(ctx, orgRepo)
 	if err != nil {
@@ -150,17 +150,17 @@ func (s *ProjectDataStore) DeleteProject(ctx context.Context, orgRepo cloudmodel
 }
 
 // mapToSecretPairs converts a map[string]string to []SecretPair
-func mapToSecretPairs(m map[cloudmodel.PrivateKeyName]string) []cloudmodel.SecretPair {
-	pairs := make([]cloudmodel.SecretPair, 0, len(m))
+func mapToSecretPairs(m map[model.PrivateKeyName]string) []model.SecretPair {
+	pairs := make([]model.SecretPair, 0, len(m))
 	for k, v := range m {
-		pairs = append(pairs, cloudmodel.SecretPair{Key: k, Value: v})
+		pairs = append(pairs, model.SecretPair{Key: k, Value: v})
 	}
 	return pairs
 }
 
 // secretPairsToMap converts []SecretPair to map[string]string
-func secretPairsToMap(pairs []cloudmodel.SecretPair) map[cloudmodel.PrivateKeyName]string {
-	m := make(map[cloudmodel.PrivateKeyName]string, len(pairs))
+func secretPairsToMap(pairs []model.SecretPair) map[model.PrivateKeyName]string {
+	m := make(map[model.PrivateKeyName]string, len(pairs))
 	for _, pair := range pairs {
 		m[pair.Key] = pair.Value
 	}
@@ -168,7 +168,7 @@ func secretPairsToMap(pairs []cloudmodel.SecretPair) map[cloudmodel.PrivateKeyNa
 }
 
 // SetProjectUserSecrets sets secrets for a specific user in a project
-func (s *ProjectDataStore) SetProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId, secrets map[cloudmodel.PrivateKeyName]string) error {
+func (s *ProjectDataStore) SetProjectUserSecrets(ctx context.Context, orgRepo model.OrgRepo, userID model.UserId, secrets map[model.PrivateKeyName]string) error {
 	// Verify project exists first
 	_, err := s.GetProject(ctx, orgRepo)
 	if err != nil {
@@ -176,7 +176,7 @@ func (s *ProjectDataStore) SetProjectUserSecrets(ctx context.Context, orgRepo cl
 	}
 
 	key := s.userSecretsKey(orgRepo, userID)
-	userSecrets := cloudmodel.ProjectUserSecrets{
+	userSecrets := model.ProjectUserSecrets{
 		ProjectID: orgRepo,
 		UserId:    userID,
 		Secrets:   mapToSecretPairs(secrets),
@@ -187,7 +187,7 @@ func (s *ProjectDataStore) SetProjectUserSecrets(ctx context.Context, orgRepo cl
 }
 
 // GetProjectUserSecrets gets secrets for a specific user in a project
-func (s *ProjectDataStore) GetProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) (map[cloudmodel.PrivateKeyName]string, error) {
+func (s *ProjectDataStore) GetProjectUserSecrets(ctx context.Context, orgRepo model.OrgRepo, userID model.UserId) (map[model.PrivateKeyName]string, error) {
 	// Verify project exists first
 	_, err := s.GetProject(ctx, orgRepo)
 	if err != nil {
@@ -195,10 +195,10 @@ func (s *ProjectDataStore) GetProjectUserSecrets(ctx context.Context, orgRepo cl
 	}
 
 	key := s.userSecretsKey(orgRepo, userID)
-	var userSecrets cloudmodel.ProjectUserSecrets
+	var userSecrets model.ProjectUserSecrets
 	err = s.client.Get(ctx, key, &userSecrets)
 	if errors.Is(err, datastore.ErrNoSuchEntity) {
-		return map[cloudmodel.PrivateKeyName]string{}, nil // Return empty map if not found
+		return map[model.PrivateKeyName]string{}, nil // Return empty map if not found
 	}
 	if err != nil {
 		return nil, err
@@ -207,7 +207,7 @@ func (s *ProjectDataStore) GetProjectUserSecrets(ctx context.Context, orgRepo cl
 }
 
 // GetAllProjectUserSecrets gets all user secrets for a project
-func (s *ProjectDataStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo) (map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string, error) {
+func (s *ProjectDataStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo model.OrgRepo) (map[model.UserId]map[model.PrivateKeyName]string, error) {
 	// Verify project exists first
 	_, err := s.GetProject(ctx, orgRepo)
 	if err != nil {
@@ -216,14 +216,14 @@ func (s *ProjectDataStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo
 
 	// Query all user secrets for this project
 	query := datastore.NewQuery(projectUserSecretsKind).Ancestor(s.projectKey(orgRepo))
-	var userSecrets []cloudmodel.ProjectUserSecrets
+	var userSecrets []model.ProjectUserSecrets
 	_, err = s.client.GetAll(ctx, query, &userSecrets)
 	if err != nil {
 		return nil, err
 	}
 
 	// Build the result map
-	result := make(map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string)
+	result := make(map[model.UserId]map[model.PrivateKeyName]string)
 	for _, us := range userSecrets {
 		result[us.UserId] = secretPairsToMap(us.Secrets)
 	}
@@ -231,13 +231,13 @@ func (s *ProjectDataStore) GetAllProjectUserSecrets(ctx context.Context, orgRepo
 }
 
 // DeleteProjectUserSecrets deletes secrets for a specific user in a project
-func (s *ProjectDataStore) DeleteProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo, userID cloudmodel.UserId) error {
+func (s *ProjectDataStore) DeleteProjectUserSecrets(ctx context.Context, orgRepo model.OrgRepo, userID model.UserId) error {
 	key := s.userSecretsKey(orgRepo, userID)
 	return s.client.Delete(ctx, key)
 }
 
 // DeleteAllProjectUserSecrets deletes all user secrets for a project
-func (s *ProjectDataStore) DeleteAllProjectUserSecrets(ctx context.Context, orgRepo cloudmodel.OrgRepo) error {
+func (s *ProjectDataStore) DeleteAllProjectUserSecrets(ctx context.Context, orgRepo model.OrgRepo) error {
 	// Query all user secrets for this project
 	query := datastore.NewQuery(projectUserSecretsKind).Filter("project_id =", orgRepo.String()).KeysOnly()
 	keys, err := s.client.GetAll(ctx, query, nil)

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"github.com/joho/godotenv"
-	"github.com/mscno/esec/pkg/cloudmodel"
 	"github.com/mscno/esec/server"
+	"github.com/mscno/esec/server/model"
 	"os"
 	"testing"
 
@@ -43,7 +43,7 @@ func setupProjectDataStore(t *testing.T) (*ProjectDataStore, context.Context) {
 func TestProjectDataStore_CreateProject(t *testing.T) {
 	store, ctx := setupProjectDataStore(t)
 
-	project := cloudmodel.Project{
+	project := model.Project{
 		OrgRepo: "org/repo1",
 	}
 
@@ -59,7 +59,7 @@ func TestProjectDataStore_CreateProject(t *testing.T) {
 func TestProjectDataStore_GetProject(t *testing.T) {
 	store, ctx := setupProjectDataStore(t)
 
-	project := cloudmodel.Project{
+	project := model.Project{
 		OrgRepo: "org/repo2",
 	}
 	err := store.CreateProject(ctx, project)
@@ -78,14 +78,14 @@ func TestProjectDataStore_GetProject(t *testing.T) {
 func TestProjectDataStore_UpdateProject(t *testing.T) {
 	store, ctx := setupProjectDataStore(t)
 
-	project := cloudmodel.Project{
+	project := model.Project{
 		OrgRepo: "org/repo3",
 	}
 	err := store.CreateProject(ctx, project)
 	require.NoError(t, err)
 
 	// Test successful update
-	err = store.UpdateProject(ctx, "org/repo3", func(p cloudmodel.Project) (cloudmodel.Project, error) {
+	err = store.UpdateProject(ctx, "org/repo3", func(p model.Project) (model.Project, error) {
 		return p, nil
 	})
 	assert.NoError(t, err)
@@ -94,19 +94,19 @@ func TestProjectDataStore_UpdateProject(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test update non-existent project
-	err = store.UpdateProject(ctx, "non-existent/repo", func(p cloudmodel.Project) (cloudmodel.Project, error) {
+	err = store.UpdateProject(ctx, "non-existent/repo", func(p model.Project) (model.Project, error) {
 		return p, nil
 	})
 	assert.ErrorIs(t, err, server.ErrProjectNotFound)
 
 	// Test update function error
-	err = store.UpdateProject(ctx, "org/repo3", func(p cloudmodel.Project) (cloudmodel.Project, error) {
+	err = store.UpdateProject(ctx, "org/repo3", func(p model.Project) (model.Project, error) {
 		return p, errors.New("update failed")
 	})
 	assert.ErrorContains(t, err, "update failed")
 
 	// Test changing OrgRepo (should fail)
-	err = store.UpdateProject(ctx, "org/repo3", func(p cloudmodel.Project) (cloudmodel.Project, error) {
+	err = store.UpdateProject(ctx, "org/repo3", func(p model.Project) (model.Project, error) {
 		p.OrgRepo = "changed/repo"
 		return p, nil
 	})
@@ -116,7 +116,7 @@ func TestProjectDataStore_UpdateProject(t *testing.T) {
 func TestProjectDataStore_DeleteProject(t *testing.T) {
 	store, ctx := setupProjectDataStore(t)
 
-	project := cloudmodel.Project{OrgRepo: "org/repo4"}
+	project := model.Project{OrgRepo: "org/repo4"}
 	err := store.CreateProject(ctx, project)
 	require.NoError(t, err)
 
@@ -135,8 +135,8 @@ func TestProjectDataStore_DeleteProject(t *testing.T) {
 func TestProjectDataStore_ListProjects(t *testing.T) {
 	store, ctx := setupProjectDataStore(t)
 
-	project1 := cloudmodel.Project{OrgRepo: "list/repo1"}
-	project2 := cloudmodel.Project{OrgRepo: "list/repo2"}
+	project1 := model.Project{OrgRepo: "list/repo1"}
+	project2 := model.Project{OrgRepo: "list/repo2"}
 	err := store.CreateProject(ctx, project1)
 	require.NoError(t, err)
 	err = store.CreateProject(ctx, project2)

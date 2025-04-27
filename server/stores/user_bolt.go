@@ -3,8 +3,8 @@ package stores
 import (
 	"context"
 	"encoding/json"
-	"github.com/mscno/esec/pkg/cloudmodel"
 	"github.com/mscno/esec/server"
+	"github.com/mscno/esec/server/model"
 	"go.etcd.io/bbolt"
 )
 
@@ -18,7 +18,7 @@ func NewBoltUserStore(db *bbolt.DB) *BoltUserStore {
 
 var usersBucket = []byte("users")
 
-func (s *BoltUserStore) CreateUser(ctx context.Context, user cloudmodel.User) error {
+func (s *BoltUserStore) CreateUser(ctx context.Context, user model.User) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists(usersBucket)
 		if err != nil {
@@ -35,8 +35,8 @@ func (s *BoltUserStore) CreateUser(ctx context.Context, user cloudmodel.User) er
 	})
 }
 
-func (s *BoltUserStore) GetUser(ctx context.Context, githubID cloudmodel.UserId) (*cloudmodel.User, error) {
-	var user cloudmodel.User
+func (s *BoltUserStore) GetUser(ctx context.Context, githubID model.UserId) (*model.User, error) {
+	var user model.User
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(usersBucket)
 		if bucket == nil {
@@ -54,7 +54,7 @@ func (s *BoltUserStore) GetUser(ctx context.Context, githubID cloudmodel.UserId)
 	return &user, nil
 }
 
-func (s *BoltUserStore) UpdateUser(ctx context.Context, githubID cloudmodel.UserId, updateFn func(cloudmodel.User) (cloudmodel.User, error)) error {
+func (s *BoltUserStore) UpdateUser(ctx context.Context, githubID model.UserId, updateFn func(model.User) (model.User, error)) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(usersBucket)
 		if bucket == nil {
@@ -64,7 +64,7 @@ func (s *BoltUserStore) UpdateUser(ctx context.Context, githubID cloudmodel.User
 		if val == nil {
 			return server.ErrUserNotFound
 		}
-		var user cloudmodel.User
+		var user model.User
 		if err := json.Unmarshal(val, &user); err != nil {
 			return err
 		}
@@ -80,7 +80,7 @@ func (s *BoltUserStore) UpdateUser(ctx context.Context, githubID cloudmodel.User
 	})
 }
 
-func (s *BoltUserStore) DeleteUser(ctx context.Context, githubID cloudmodel.UserId) error {
+func (s *BoltUserStore) DeleteUser(ctx context.Context, githubID model.UserId) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(usersBucket)
 		if bucket == nil {
@@ -93,15 +93,15 @@ func (s *BoltUserStore) DeleteUser(ctx context.Context, githubID cloudmodel.User
 	})
 }
 
-func (s *BoltUserStore) ListUsers(ctx context.Context) ([]cloudmodel.User, error) {
-	var users []cloudmodel.User
+func (s *BoltUserStore) ListUsers(ctx context.Context) ([]model.User, error) {
+	var users []model.User
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(usersBucket)
 		if bucket == nil {
 			return nil
 		}
 		return bucket.ForEach(func(k, v []byte) error {
-			var u cloudmodel.User
+			var u model.User
 			if err := json.Unmarshal(v, &u); err != nil {
 				return err
 			}

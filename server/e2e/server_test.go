@@ -2,9 +2,9 @@ package e2e
 
 import (
 	"context"
-	"github.com/mscno/esec/pkg/cloudmodel"
 	"github.com/mscno/esec/server"
 	"github.com/mscno/esec/server/middleware"
+	"github.com/mscno/esec/server/model"
 	"github.com/stretchr/testify/require"
 	"log/slog"
 	"testing"
@@ -15,7 +15,7 @@ import (
 	"github.com/mscno/esec/server/stores"
 )
 
-func mockUserHasRoleInRepo(token string, orgRepo cloudmodel.OrgRepo, role string) bool {
+func mockUserHasRoleInRepo(token string, orgRepo model.OrgRepo, role string) bool {
 	if token == "testtoken" && orgRepo == "foo/bar" {
 		return true
 	}

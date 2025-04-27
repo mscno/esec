@@ -1,4 +1,4 @@
-package cloudmodel
+package model
 
 type PrivateKeyName string
 
