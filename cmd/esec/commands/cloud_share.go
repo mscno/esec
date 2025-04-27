@@ -111,20 +111,22 @@ func (c *ShareCmd) Run(ctx *cliCtx, parent *CloudCmd) error {
 		}
 		newBlobs[githubID] = base64.StdEncoding.EncodeToString(ciphertext)
 	}
-	// Push updated payload
-	//if len(newBlobs) > 0 {
-	//	if perUserPayload[c.KeyName] == nil {
-	//		perUserPayload[c.KeyName] = map[string]string{}
-	//	}
-	//	for k, v := range newBlobs {
-	//		perUserPayload[c.KeyName][k] = v
-	//	}
-	//	if err := connectClient.PushKeysPerUser(ctx, orgRepo, perUserPayload); err != nil {
-	//		return fmt.Errorf("failed to push updated sharing: %w", err)
-	//	}
-	//	fmt.Println("Shared secret updated for new users.")
-	//} else {
-	//	fmt.Println("No new users to share with.")
-	//}
+	if len(newBlobs) > 0 {
+		// Create a payload in the format expected by connectClient.PushKeysPerUser
+		payload := make(map[client.UserId]map[client.PrivateKeyName]string)
+		for githubID, ciphertext := range newBlobs {
+			userID := client.UserId(githubID)
+			if _, ok := payload[userID]; !ok {
+				payload[userID] = make(map[client.PrivateKeyName]string)
+			}
+			payload[userID][c.KeyName] = ciphertext
+		}
+		if err := connectClient.PushKeysPerUser(ctx, orgRepo, payload); err != nil {
+			return fmt.Errorf("failed to push updated sharing: %w", err)
+		}
+		fmt.Println("Shared secret updated for new users.")
+	} else {
+		fmt.Println("No new users to share with.")
+	}
 	return nil
 }

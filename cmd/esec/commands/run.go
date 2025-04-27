@@ -29,6 +29,11 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 		return fmt.Errorf("no command specified to run")
 	}
 
+	// Validate the command is safe to execute
+	if err := validateCommand(c.Command); err != nil {
+		return err
+	}
+
 	// Use structured logging for debug information
 	ctx.Logger.Debug("preparing to run command", "command", strings.Join(c.Command, " "))
 
@@ -76,12 +81,15 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	var envVars map[string]string
 	switch format {
 	case fileutils.Env:
+		// Sanitize variables to prevent injection
 		envVars, err = esec.DotEnvToEnv(data)
+		envVars = sanitizeEnvVars(envVars)
 		if err != nil {
 			return fmt.Errorf("error parsing decrypted .env: %v", err)
 		}
 	case fileutils.Ejson:
 		envVars, err = esec.EjsonToEnv(data)
+		envVars = sanitizeEnvVars(envVars)
 		if err != nil {
 			return fmt.Errorf("error parsing decrypted EJSON: %v", err)
 		}
@@ -183,4 +191,30 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 		ctx.Logger.Debug("command completed successfully")
 		return nil
 	}
+}
+
+// validateCommand checks if the command is safe to execute
+func validateCommand(command []string) error {
+	if len(command) == 0 {
+		return fmt.Errorf("no command specified to run")
+	}
+
+	// Validate that the command doesn't contain suspicious characters
+	for _, arg := range command {
+		if strings.Contains(arg, "$(") || strings.Contains(arg, "`") {
+			return fmt.Errorf("command contains potentially unsafe shell metacharacters")
+		}
+	}
+
+	return nil
+}
+
+// sanitizeEnvVars removes potentially dangerous environment variables
+func sanitizeEnvVars(vars map[string]string) map[string]string {
+	for k := range vars {
+		if strings.Contains(k, "=") || strings.Contains(k, ";") || strings.Contains(k, "\n") {
+			delete(vars, k)
+		}
+	}
+	return vars
 }

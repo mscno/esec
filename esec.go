@@ -442,6 +442,10 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 	if privKeyString, exists := os.LookupEnv(keyToLookup); exists {
 		return format.ParseKey(privKeyString)
 	}
+	cleanPath := filepath.Clean(keyPath)
+	if strings.Contains(cleanPath, "..") || !strings.HasPrefix(cleanPath, filepath.Clean(keyPath)) {
+		return privKey, fmt.Errorf("invalid keyPath containing directory traversal sequences: %s", keyPath)
+	}
 
 	// If not found in env vars, try reading from the keyring file.
 	keyringPath := filepath.Join(keyPath, DefaultKeyringFilename)

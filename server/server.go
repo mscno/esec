@@ -171,10 +171,9 @@ func (s *Server) SetPerUserSecrets(ctx context.Context, request *connect.Request
 		s.Logger.Error("project not found", "orgRepo", orgRepo, "error", err)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found: %w", err))
 	}
-	//if !contains(proj.Admins, fmt.Sprintf("%d", ghuser.ID)) {
-	//	return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("only project admins may share secrets for this project"))
-	//}
+
 	if !s.userHasRoleInRepo(ghuser.Token, cloudmodel.OrgRepo(orgRepo), "admin") {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("only project admins may share secrets for this project"))
 	}
 
 	secrets := make(map[cloudmodel.UserId]map[cloudmodel.PrivateKeyName]string)

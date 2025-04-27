@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/mscno/esec"
 	"github.com/mscno/esec/pkg/fileutils"
@@ -61,7 +60,6 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 	ctx.Logger.Debug("file details", "path", fileName, "size", fileInfo.Size(), "mode", fileInfo.Mode())
 
 	ctx.Logger.Debug("decrypting file", "path", fileName)
-	var buf bytes.Buffer
 	data, err := esec.DecryptFile(fileName, c.KeyDir, key)
 	if err != nil {
 		ctx.Logger.Debug("decryption failed", "path", fileName, "error", err)
@@ -69,7 +67,6 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 	}
 
 	ctx.Logger.Debug("decryption successful", "path", fileName, "bytes", len(data))
-	buf.Read(data)
 	fmt.Println(string(data))
 	return nil
 }

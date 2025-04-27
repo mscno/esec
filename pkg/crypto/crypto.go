@@ -153,12 +153,12 @@ func (d *Decrypter) decrypt(bm *boxedMessage) ([]byte, error) {
 
 func genNonce() (nonce [24]byte, err error) {
 	var n int
-	n, err = rand.Read(nonce[0:24])
+	n, err = rand.Read(nonce[:])
 	if err != nil {
 		return
 	}
-	if n != 24 {
-		err = fmt.Errorf("not enough bytes returned from rand.Reader")
+	if n != len(nonce) {
+		err = fmt.Errorf("insufficient bytes from random source: got %d, need %d", n, len(nonce))
 	}
 	return
 }
