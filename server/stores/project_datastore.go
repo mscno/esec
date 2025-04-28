@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/mscno/esec/server"
 	"github.com/mscno/esec/server/model"
 

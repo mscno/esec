@@ -4,13 +4,22 @@
 ## Table of Contents
 
 - [esec/esec.proto](#esec_esec-proto)
+    - [CreateOrganizationRequest](#esec-CreateOrganizationRequest)
+    - [CreateOrganizationResponse](#esec-CreateOrganizationResponse)
     - [CreateProjectRequest](#esec-CreateProjectRequest)
     - [CreateProjectResponse](#esec-CreateProjectResponse)
+    - [DeleteOrganizationRequest](#esec-DeleteOrganizationRequest)
+    - [DeleteOrganizationResponse](#esec-DeleteOrganizationResponse)
+    - [GetOrganizationRequest](#esec-GetOrganizationRequest)
+    - [GetOrganizationResponse](#esec-GetOrganizationResponse)
     - [GetPerUserSecretsRequest](#esec-GetPerUserSecretsRequest)
     - [GetPerUserSecretsResponse](#esec-GetPerUserSecretsResponse)
     - [GetPerUserSecretsResponse.SecretsEntry](#esec-GetPerUserSecretsResponse-SecretsEntry)
     - [GetUserPublicKeyRequest](#esec-GetUserPublicKeyRequest)
     - [GetUserPublicKeyResponse](#esec-GetUserPublicKeyResponse)
+    - [ListOrganizationsRequest](#esec-ListOrganizationsRequest)
+    - [ListOrganizationsResponse](#esec-ListOrganizationsResponse)
+    - [Organization](#esec-Organization)
     - [PerUserSecrets](#esec-PerUserSecrets)
     - [PerUserSecrets.SecretsEntry](#esec-PerUserSecrets-SecretsEntry)
     - [Project](#esec-Project)
@@ -23,6 +32,8 @@
     - [SetPerUserSecretsResponse](#esec-SetPerUserSecretsResponse)
     - [User](#esec-User)
   
+    - [OrganizationType](#esec-OrganizationType)
+  
     - [EsecService](#esec-EsecService)
   
 - [Scalar Value Types](#scalar-value-types)
@@ -33,6 +44,36 @@
 <p align="right"><a href="#top">Top</a></p>
 
 ## esec/esec.proto
+
+
+
+<a name="esec-CreateOrganizationRequest"></a>
+
+### CreateOrganizationRequest
+Request to create a new TEAM organization
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| name | [string](#string) |  | The desired name for the team organization |
+
+
+
+
+
+
+<a name="esec-CreateOrganizationResponse"></a>
+
+### CreateOrganizationResponse
+Response for creating an organization
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| organization | [Organization](#esec-Organization) |  | The newly created organization |
+
+
+
 
 
 
@@ -61,6 +102,66 @@ Request/response for creating a project
 | ----- | ---- | ----- | ----------- |
 | status | [string](#string) |  |  |
 | project | [string](#string) |  |  |
+
+
+
+
+
+
+<a name="esec-DeleteOrganizationRequest"></a>
+
+### DeleteOrganizationRequest
+Request to delete an organization by ID
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | The ID of the organization to delete |
+
+
+
+
+
+
+<a name="esec-DeleteOrganizationResponse"></a>
+
+### DeleteOrganizationResponse
+Response for deleting an organization
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| status | [string](#string) |  | e.g., &#34;organization deleted&#34; |
+
+
+
+
+
+
+<a name="esec-GetOrganizationRequest"></a>
+
+### GetOrganizationRequest
+Request to get a specific organization by ID
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | The ID of the organization to retrieve |
+
+
+
+
+
+
+<a name="esec-GetOrganizationResponse"></a>
+
+### GetOrganizationResponse
+Response containing a single organization
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| organization | [Organization](#esec-Organization) |  |  |
 
 
 
@@ -145,6 +246,53 @@ Request/response for getting a user&#39;s public key
 
 
 
+<a name="esec-ListOrganizationsRequest"></a>
+
+### ListOrganizationsRequest
+Request to list organizations (potentially filtered in the future)
+
+Future: Add filters like owner_id, type etc.
+
+
+
+
+
+
+<a name="esec-ListOrganizationsResponse"></a>
+
+### ListOrganizationsResponse
+Response containing a list of organizations
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| organizations | [Organization](#esec-Organization) | repeated |  |
+
+
+
+
+
+
+<a name="esec-Organization"></a>
+
+### Organization
+Represents an organization (personal or team)
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | GitHub org ID, username (for personal), or generated UUID (for team) |
+| name | [string](#string) |  | GitHub org/user login or team name |
+| owner_github_id | [string](#string) |  | GitHub ID of the user who owns/created this record |
+| type | [OrganizationType](#esec-OrganizationType) |  | Type of organization |
+| created_at | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  |
+| updated_at | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  |
+
+
+
+
+
+
 <a name="esec-PerUserSecrets"></a>
 
 ### PerUserSecrets
@@ -188,6 +336,8 @@ Project information
 | org | [string](#string) |  |  |
 | repo | [string](#string) |  |  |
 | org_repo | [string](#string) |  | e.g., &#34;org/repo&#34; |
+| created_at | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  |
+| updated_at | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  |
 
 
 
@@ -313,12 +463,27 @@ User information
 | github_id | [string](#string) |  |  |
 | username | [string](#string) |  |  |
 | public_key | [string](#string) |  |  |
+| created_at | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  |
+| updated_at | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  |
 
 
 
 
 
  
+
+
+<a name="esec-OrganizationType"></a>
+
+### OrganizationType
+Enum defining the type of organization
+
+| Name | Number | Description |
+| ---- | ------ | ----------- |
+| ORGANIZATION_TYPE_UNSPECIFIED | 0 |  |
+| ORGANIZATION_TYPE_PERSONAL | 1 |  |
+| ORGANIZATION_TYPE_TEAM | 2 |  |
+
 
  
 
@@ -337,6 +502,10 @@ ESEC main service
 | GetUserPublicKey | [GetUserPublicKeyRequest](#esec-GetUserPublicKeyRequest) | [GetUserPublicKeyResponse](#esec-GetUserPublicKeyResponse) | Public key retrieval |
 | SetPerUserSecrets | [SetPerUserSecretsRequest](#esec-SetPerUserSecretsRequest) | [SetPerUserSecretsResponse](#esec-SetPerUserSecretsResponse) | Per-user secrets |
 | GetPerUserSecrets | [GetPerUserSecretsRequest](#esec-GetPerUserSecretsRequest) | [GetPerUserSecretsResponse](#esec-GetPerUserSecretsResponse) |  |
+| CreateOrganization | [CreateOrganizationRequest](#esec-CreateOrganizationRequest) | [CreateOrganizationResponse](#esec-CreateOrganizationResponse) | Creates a new team organization |
+| ListOrganizations | [ListOrganizationsRequest](#esec-ListOrganizationsRequest) | [ListOrganizationsResponse](#esec-ListOrganizationsResponse) | Lists organizations (currently TEAM organizations) |
+| GetOrganization | [GetOrganizationRequest](#esec-GetOrganizationRequest) | [GetOrganizationResponse](#esec-GetOrganizationResponse) | Gets a specific organization by ID |
+| DeleteOrganization | [DeleteOrganizationRequest](#esec-DeleteOrganizationRequest) | [DeleteOrganizationResponse](#esec-DeleteOrganizationResponse) | Deletes a team organization by ID |
 
  
 

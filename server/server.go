@@ -1,17 +1,18 @@
 package server
 
 import (
-	"connectrpc.com/connect"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
+
+	"connectrpc.com/connect"
 	esecpb "github.com/mscno/esec/gen/proto/go/esec"
 	"github.com/mscno/esec/gen/proto/go/esec/esecpbconnect"
 	"github.com/mscno/esec/server/middleware"
 	model "github.com/mscno/esec/server/model"
-	"log/slog"
-	"net/http"
 )
 
 type UserStore interface {
@@ -42,6 +43,36 @@ type ProjectStore interface {
 
 var ErrProjectExists = errors.New("project already exists")
 var ErrProjectNotFound = errors.New("project not found")
+
+
+// OrganizationStore defines the interface for CRUD operations on Organizations.
+type OrganizationStore interface {
+	// CreateOrganization creates a new organization record.
+	CreateOrganization(ctx context.Context, org *model.Organization) error
+
+	// GetOrganizationByID retrieves an organization by its unique ID.
+	// Returns ErrOrganizationNotFound if the organization does not exist.
+	GetOrganizationByID(ctx context.Context, id string) (*model.Organization, error)
+
+	// GetOrganizationByName retrieves an organization by its name.
+	// Names might not be unique, so this could return multiple or just the first.
+	// Consider if uniqueness is enforced or if ListByName is better.
+	// Returns ErrOrganizationNotFound if the organization does not exist.
+	GetOrganizationByName(ctx context.Context, name string) (*model.Organization, error)
+
+	// UpdateOrganization updates an existing organization record.
+	// It should likely check if the organization exists first.
+	UpdateOrganization(ctx context.Context, org *model.Organization) error
+
+	// DeleteOrganization removes an organization by its ID.
+	// It should not return an error if the organization doesn't exist.
+	DeleteOrganization(ctx context.Context, id string) error
+
+	// ListOrganizations retrieves all organization records.
+	ListOrganizations(ctx context.Context) ([]*model.Organization, error)
+}
+var ErrOrganizationNotFound = errors.New("organization not found")
+
 
 // Server implements esecpbconnect.EsecServiceHandler
 // It adapts the Handler logic for gRPC/protobuf

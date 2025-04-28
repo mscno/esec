@@ -4,13 +4,85 @@
       "name": "esec/esec.proto",
       "description": "",
       "package": "esec",
-      "hasEnums": false,
+      "hasEnums": true,
       "hasExtensions": false,
       "hasMessages": true,
       "hasServices": true,
-      "enums": [],
+      "enums": [
+        {
+          "name": "OrganizationType",
+          "longName": "OrganizationType",
+          "fullName": "esec.OrganizationType",
+          "description": "Enum defining the type of organization",
+          "values": [
+            {
+              "name": "ORGANIZATION_TYPE_UNSPECIFIED",
+              "number": "0",
+              "description": ""
+            },
+            {
+              "name": "ORGANIZATION_TYPE_PERSONAL",
+              "number": "1",
+              "description": ""
+            },
+            {
+              "name": "ORGANIZATION_TYPE_TEAM",
+              "number": "2",
+              "description": ""
+            }
+          ]
+        }
+      ],
       "extensions": [],
       "messages": [
+        {
+          "name": "CreateOrganizationRequest",
+          "longName": "CreateOrganizationRequest",
+          "fullName": "esec.CreateOrganizationRequest",
+          "description": "Request to create a new TEAM organization",
+          "hasExtensions": false,
+          "hasFields": true,
+          "hasOneofs": false,
+          "extensions": [],
+          "fields": [
+            {
+              "name": "name",
+              "description": "The desired name for the team organization",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            }
+          ]
+        },
+        {
+          "name": "CreateOrganizationResponse",
+          "longName": "CreateOrganizationResponse",
+          "fullName": "esec.CreateOrganizationResponse",
+          "description": "Response for creating an organization",
+          "hasExtensions": false,
+          "hasFields": true,
+          "hasOneofs": false,
+          "extensions": [],
+          "fields": [
+            {
+              "name": "organization",
+              "description": "The newly created organization",
+              "label": "",
+              "type": "Organization",
+              "longType": "Organization",
+              "fullType": "esec.Organization",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            }
+          ]
+        },
         {
           "name": "CreateProjectRequest",
           "longName": "CreateProjectRequest",
@@ -64,6 +136,102 @@
               "type": "string",
               "longType": "string",
               "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            }
+          ]
+        },
+        {
+          "name": "DeleteOrganizationRequest",
+          "longName": "DeleteOrganizationRequest",
+          "fullName": "esec.DeleteOrganizationRequest",
+          "description": "Request to delete an organization by ID",
+          "hasExtensions": false,
+          "hasFields": true,
+          "hasOneofs": false,
+          "extensions": [],
+          "fields": [
+            {
+              "name": "id",
+              "description": "The ID of the organization to delete",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            }
+          ]
+        },
+        {
+          "name": "DeleteOrganizationResponse",
+          "longName": "DeleteOrganizationResponse",
+          "fullName": "esec.DeleteOrganizationResponse",
+          "description": "Response for deleting an organization",
+          "hasExtensions": false,
+          "hasFields": true,
+          "hasOneofs": false,
+          "extensions": [],
+          "fields": [
+            {
+              "name": "status",
+              "description": "e.g., \"organization deleted\"",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            }
+          ]
+        },
+        {
+          "name": "GetOrganizationRequest",
+          "longName": "GetOrganizationRequest",
+          "fullName": "esec.GetOrganizationRequest",
+          "description": "Request to get a specific organization by ID",
+          "hasExtensions": false,
+          "hasFields": true,
+          "hasOneofs": false,
+          "extensions": [],
+          "fields": [
+            {
+              "name": "id",
+              "description": "The ID of the organization to retrieve",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            }
+          ]
+        },
+        {
+          "name": "GetOrganizationResponse",
+          "longName": "GetOrganizationResponse",
+          "fullName": "esec.GetOrganizationResponse",
+          "description": "Response containing a single organization",
+          "hasExtensions": false,
+          "hasFields": true,
+          "hasOneofs": false,
+          "extensions": [],
+          "fields": [
+            {
+              "name": "organization",
+              "description": "",
+              "label": "",
+              "type": "Organization",
+              "longType": "Organization",
+              "fullType": "esec.Organization",
               "ismap": false,
               "isoneof": false,
               "oneofdecl": "",
@@ -228,6 +396,125 @@
           ]
         },
         {
+          "name": "ListOrganizationsRequest",
+          "longName": "ListOrganizationsRequest",
+          "fullName": "esec.ListOrganizationsRequest",
+          "description": "Request to list organizations (potentially filtered in the future)\n\nFuture: Add filters like owner_id, type etc.",
+          "hasExtensions": false,
+          "hasFields": false,
+          "hasOneofs": false,
+          "extensions": [],
+          "fields": []
+        },
+        {
+          "name": "ListOrganizationsResponse",
+          "longName": "ListOrganizationsResponse",
+          "fullName": "esec.ListOrganizationsResponse",
+          "description": "Response containing a list of organizations",
+          "hasExtensions": false,
+          "hasFields": true,
+          "hasOneofs": false,
+          "extensions": [],
+          "fields": [
+            {
+              "name": "organizations",
+              "description": "",
+              "label": "repeated",
+              "type": "Organization",
+              "longType": "Organization",
+              "fullType": "esec.Organization",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            }
+          ]
+        },
+        {
+          "name": "Organization",
+          "longName": "Organization",
+          "fullName": "esec.Organization",
+          "description": "Represents an organization (personal or team)",
+          "hasExtensions": false,
+          "hasFields": true,
+          "hasOneofs": false,
+          "extensions": [],
+          "fields": [
+            {
+              "name": "id",
+              "description": "GitHub org ID, username (for personal), or generated UUID (for team)",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            },
+            {
+              "name": "name",
+              "description": "GitHub org/user login or team name",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            },
+            {
+              "name": "owner_github_id",
+              "description": "GitHub ID of the user who owns/created this record",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            },
+            {
+              "name": "type",
+              "description": "Type of organization",
+              "label": "",
+              "type": "OrganizationType",
+              "longType": "OrganizationType",
+              "fullType": "esec.OrganizationType",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            },
+            {
+              "name": "created_at",
+              "description": "",
+              "label": "",
+              "type": "Timestamp",
+              "longType": "google.protobuf.Timestamp",
+              "fullType": "google.protobuf.Timestamp",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            },
+            {
+              "name": "updated_at",
+              "description": "",
+              "label": "",
+              "type": "Timestamp",
+              "longType": "google.protobuf.Timestamp",
+              "fullType": "google.protobuf.Timestamp",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            }
+          ]
+        },
+        {
           "name": "PerUserSecrets",
           "longName": "PerUserSecrets",
           "fullName": "esec.PerUserSecrets",
@@ -340,6 +627,30 @@
               "type": "string",
               "longType": "string",
               "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            },
+            {
+              "name": "created_at",
+              "description": "",
+              "label": "",
+              "type": "Timestamp",
+              "longType": "google.protobuf.Timestamp",
+              "fullType": "google.protobuf.Timestamp",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            },
+            {
+              "name": "updated_at",
+              "description": "",
+              "label": "",
+              "type": "Timestamp",
+              "longType": "google.protobuf.Timestamp",
+              "fullType": "google.protobuf.Timestamp",
               "ismap": false,
               "isoneof": false,
               "oneofdecl": "",
@@ -596,6 +907,30 @@
               "isoneof": false,
               "oneofdecl": "",
               "defaultValue": ""
+            },
+            {
+              "name": "created_at",
+              "description": "",
+              "label": "",
+              "type": "Timestamp",
+              "longType": "google.protobuf.Timestamp",
+              "fullType": "google.protobuf.Timestamp",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            },
+            {
+              "name": "updated_at",
+              "description": "",
+              "label": "",
+              "type": "Timestamp",
+              "longType": "google.protobuf.Timestamp",
+              "fullType": "google.protobuf.Timestamp",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
             }
           ]
         }
@@ -665,6 +1000,54 @@
               "responseType": "GetPerUserSecretsResponse",
               "responseLongType": "GetPerUserSecretsResponse",
               "responseFullType": "esec.GetPerUserSecretsResponse",
+              "responseStreaming": false
+            },
+            {
+              "name": "CreateOrganization",
+              "description": "Creates a new team organization",
+              "requestType": "CreateOrganizationRequest",
+              "requestLongType": "CreateOrganizationRequest",
+              "requestFullType": "esec.CreateOrganizationRequest",
+              "requestStreaming": false,
+              "responseType": "CreateOrganizationResponse",
+              "responseLongType": "CreateOrganizationResponse",
+              "responseFullType": "esec.CreateOrganizationResponse",
+              "responseStreaming": false
+            },
+            {
+              "name": "ListOrganizations",
+              "description": "Lists organizations (currently TEAM organizations)",
+              "requestType": "ListOrganizationsRequest",
+              "requestLongType": "ListOrganizationsRequest",
+              "requestFullType": "esec.ListOrganizationsRequest",
+              "requestStreaming": false,
+              "responseType": "ListOrganizationsResponse",
+              "responseLongType": "ListOrganizationsResponse",
+              "responseFullType": "esec.ListOrganizationsResponse",
+              "responseStreaming": false
+            },
+            {
+              "name": "GetOrganization",
+              "description": "Gets a specific organization by ID",
+              "requestType": "GetOrganizationRequest",
+              "requestLongType": "GetOrganizationRequest",
+              "requestFullType": "esec.GetOrganizationRequest",
+              "requestStreaming": false,
+              "responseType": "GetOrganizationResponse",
+              "responseLongType": "GetOrganizationResponse",
+              "responseFullType": "esec.GetOrganizationResponse",
+              "responseStreaming": false
+            },
+            {
+              "name": "DeleteOrganization",
+              "description": "Deletes a team organization by ID",
+              "requestType": "DeleteOrganizationRequest",
+              "requestLongType": "DeleteOrganizationRequest",
+              "requestFullType": "esec.DeleteOrganizationRequest",
+              "requestStreaming": false,
+              "responseType": "DeleteOrganizationResponse",
+              "responseLongType": "DeleteOrganizationResponse",
+              "responseFullType": "esec.DeleteOrganizationResponse",
               "responseStreaming": false
             }
           ]

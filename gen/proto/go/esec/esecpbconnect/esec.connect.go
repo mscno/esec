@@ -48,16 +48,32 @@ const (
 	// EsecServiceGetPerUserSecretsProcedure is the fully-qualified name of the EsecService's
 	// GetPerUserSecrets RPC.
 	EsecServiceGetPerUserSecretsProcedure = "/esec.EsecService/GetPerUserSecrets"
+	// EsecServiceCreateOrganizationProcedure is the fully-qualified name of the EsecService's
+	// CreateOrganization RPC.
+	EsecServiceCreateOrganizationProcedure = "/esec.EsecService/CreateOrganization"
+	// EsecServiceListOrganizationsProcedure is the fully-qualified name of the EsecService's
+	// ListOrganizations RPC.
+	EsecServiceListOrganizationsProcedure = "/esec.EsecService/ListOrganizations"
+	// EsecServiceGetOrganizationProcedure is the fully-qualified name of the EsecService's
+	// GetOrganization RPC.
+	EsecServiceGetOrganizationProcedure = "/esec.EsecService/GetOrganization"
+	// EsecServiceDeleteOrganizationProcedure is the fully-qualified name of the EsecService's
+	// DeleteOrganization RPC.
+	EsecServiceDeleteOrganizationProcedure = "/esec.EsecService/DeleteOrganization"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
-	esecServiceServiceDescriptor                 = esec.File_esec_esec_proto.Services().ByName("EsecService")
-	esecServiceCreateProjectMethodDescriptor     = esecServiceServiceDescriptor.Methods().ByName("CreateProject")
-	esecServiceRegisterUserMethodDescriptor      = esecServiceServiceDescriptor.Methods().ByName("RegisterUser")
-	esecServiceGetUserPublicKeyMethodDescriptor  = esecServiceServiceDescriptor.Methods().ByName("GetUserPublicKey")
-	esecServiceSetPerUserSecretsMethodDescriptor = esecServiceServiceDescriptor.Methods().ByName("SetPerUserSecrets")
-	esecServiceGetPerUserSecretsMethodDescriptor = esecServiceServiceDescriptor.Methods().ByName("GetPerUserSecrets")
+	esecServiceServiceDescriptor                  = esec.File_esec_esec_proto.Services().ByName("EsecService")
+	esecServiceCreateProjectMethodDescriptor      = esecServiceServiceDescriptor.Methods().ByName("CreateProject")
+	esecServiceRegisterUserMethodDescriptor       = esecServiceServiceDescriptor.Methods().ByName("RegisterUser")
+	esecServiceGetUserPublicKeyMethodDescriptor   = esecServiceServiceDescriptor.Methods().ByName("GetUserPublicKey")
+	esecServiceSetPerUserSecretsMethodDescriptor  = esecServiceServiceDescriptor.Methods().ByName("SetPerUserSecrets")
+	esecServiceGetPerUserSecretsMethodDescriptor  = esecServiceServiceDescriptor.Methods().ByName("GetPerUserSecrets")
+	esecServiceCreateOrganizationMethodDescriptor = esecServiceServiceDescriptor.Methods().ByName("CreateOrganization")
+	esecServiceListOrganizationsMethodDescriptor  = esecServiceServiceDescriptor.Methods().ByName("ListOrganizations")
+	esecServiceGetOrganizationMethodDescriptor    = esecServiceServiceDescriptor.Methods().ByName("GetOrganization")
+	esecServiceDeleteOrganizationMethodDescriptor = esecServiceServiceDescriptor.Methods().ByName("DeleteOrganization")
 )
 
 // EsecServiceClient is a client for the esec.EsecService service.
@@ -71,6 +87,14 @@ type EsecServiceClient interface {
 	// Per-user secrets
 	SetPerUserSecrets(context.Context, *connect.Request[esec.SetPerUserSecretsRequest]) (*connect.Response[esec.SetPerUserSecretsResponse], error)
 	GetPerUserSecrets(context.Context, *connect.Request[esec.GetPerUserSecretsRequest]) (*connect.Response[esec.GetPerUserSecretsResponse], error)
+	// Creates a new team organization
+	CreateOrganization(context.Context, *connect.Request[esec.CreateOrganizationRequest]) (*connect.Response[esec.CreateOrganizationResponse], error)
+	// Lists organizations (currently TEAM organizations)
+	ListOrganizations(context.Context, *connect.Request[esec.ListOrganizationsRequest]) (*connect.Response[esec.ListOrganizationsResponse], error)
+	// Gets a specific organization by ID
+	GetOrganization(context.Context, *connect.Request[esec.GetOrganizationRequest]) (*connect.Response[esec.GetOrganizationResponse], error)
+	// Deletes a team organization by ID
+	DeleteOrganization(context.Context, *connect.Request[esec.DeleteOrganizationRequest]) (*connect.Response[esec.DeleteOrganizationResponse], error)
 }
 
 // NewEsecServiceClient constructs a client for the esec.EsecService service. By default, it uses
@@ -113,16 +137,44 @@ func NewEsecServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(esecServiceGetPerUserSecretsMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		createOrganization: connect.NewClient[esec.CreateOrganizationRequest, esec.CreateOrganizationResponse](
+			httpClient,
+			baseURL+EsecServiceCreateOrganizationProcedure,
+			connect.WithSchema(esecServiceCreateOrganizationMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		listOrganizations: connect.NewClient[esec.ListOrganizationsRequest, esec.ListOrganizationsResponse](
+			httpClient,
+			baseURL+EsecServiceListOrganizationsProcedure,
+			connect.WithSchema(esecServiceListOrganizationsMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		getOrganization: connect.NewClient[esec.GetOrganizationRequest, esec.GetOrganizationResponse](
+			httpClient,
+			baseURL+EsecServiceGetOrganizationProcedure,
+			connect.WithSchema(esecServiceGetOrganizationMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		deleteOrganization: connect.NewClient[esec.DeleteOrganizationRequest, esec.DeleteOrganizationResponse](
+			httpClient,
+			baseURL+EsecServiceDeleteOrganizationProcedure,
+			connect.WithSchema(esecServiceDeleteOrganizationMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // esecServiceClient implements EsecServiceClient.
 type esecServiceClient struct {
-	createProject     *connect.Client[esec.CreateProjectRequest, esec.CreateProjectResponse]
-	registerUser      *connect.Client[esec.RegisterUserRequest, esec.RegisterUserResponse]
-	getUserPublicKey  *connect.Client[esec.GetUserPublicKeyRequest, esec.GetUserPublicKeyResponse]
-	setPerUserSecrets *connect.Client[esec.SetPerUserSecretsRequest, esec.SetPerUserSecretsResponse]
-	getPerUserSecrets *connect.Client[esec.GetPerUserSecretsRequest, esec.GetPerUserSecretsResponse]
+	createProject      *connect.Client[esec.CreateProjectRequest, esec.CreateProjectResponse]
+	registerUser       *connect.Client[esec.RegisterUserRequest, esec.RegisterUserResponse]
+	getUserPublicKey   *connect.Client[esec.GetUserPublicKeyRequest, esec.GetUserPublicKeyResponse]
+	setPerUserSecrets  *connect.Client[esec.SetPerUserSecretsRequest, esec.SetPerUserSecretsResponse]
+	getPerUserSecrets  *connect.Client[esec.GetPerUserSecretsRequest, esec.GetPerUserSecretsResponse]
+	createOrganization *connect.Client[esec.CreateOrganizationRequest, esec.CreateOrganizationResponse]
+	listOrganizations  *connect.Client[esec.ListOrganizationsRequest, esec.ListOrganizationsResponse]
+	getOrganization    *connect.Client[esec.GetOrganizationRequest, esec.GetOrganizationResponse]
+	deleteOrganization *connect.Client[esec.DeleteOrganizationRequest, esec.DeleteOrganizationResponse]
 }
 
 // CreateProject calls esec.EsecService.CreateProject.
@@ -150,6 +202,26 @@ func (c *esecServiceClient) GetPerUserSecrets(ctx context.Context, req *connect.
 	return c.getPerUserSecrets.CallUnary(ctx, req)
 }
 
+// CreateOrganization calls esec.EsecService.CreateOrganization.
+func (c *esecServiceClient) CreateOrganization(ctx context.Context, req *connect.Request[esec.CreateOrganizationRequest]) (*connect.Response[esec.CreateOrganizationResponse], error) {
+	return c.createOrganization.CallUnary(ctx, req)
+}
+
+// ListOrganizations calls esec.EsecService.ListOrganizations.
+func (c *esecServiceClient) ListOrganizations(ctx context.Context, req *connect.Request[esec.ListOrganizationsRequest]) (*connect.Response[esec.ListOrganizationsResponse], error) {
+	return c.listOrganizations.CallUnary(ctx, req)
+}
+
+// GetOrganization calls esec.EsecService.GetOrganization.
+func (c *esecServiceClient) GetOrganization(ctx context.Context, req *connect.Request[esec.GetOrganizationRequest]) (*connect.Response[esec.GetOrganizationResponse], error) {
+	return c.getOrganization.CallUnary(ctx, req)
+}
+
+// DeleteOrganization calls esec.EsecService.DeleteOrganization.
+func (c *esecServiceClient) DeleteOrganization(ctx context.Context, req *connect.Request[esec.DeleteOrganizationRequest]) (*connect.Response[esec.DeleteOrganizationResponse], error) {
+	return c.deleteOrganization.CallUnary(ctx, req)
+}
+
 // EsecServiceHandler is an implementation of the esec.EsecService service.
 type EsecServiceHandler interface {
 	// Project management
@@ -161,6 +233,14 @@ type EsecServiceHandler interface {
 	// Per-user secrets
 	SetPerUserSecrets(context.Context, *connect.Request[esec.SetPerUserSecretsRequest]) (*connect.Response[esec.SetPerUserSecretsResponse], error)
 	GetPerUserSecrets(context.Context, *connect.Request[esec.GetPerUserSecretsRequest]) (*connect.Response[esec.GetPerUserSecretsResponse], error)
+	// Creates a new team organization
+	CreateOrganization(context.Context, *connect.Request[esec.CreateOrganizationRequest]) (*connect.Response[esec.CreateOrganizationResponse], error)
+	// Lists organizations (currently TEAM organizations)
+	ListOrganizations(context.Context, *connect.Request[esec.ListOrganizationsRequest]) (*connect.Response[esec.ListOrganizationsResponse], error)
+	// Gets a specific organization by ID
+	GetOrganization(context.Context, *connect.Request[esec.GetOrganizationRequest]) (*connect.Response[esec.GetOrganizationResponse], error)
+	// Deletes a team organization by ID
+	DeleteOrganization(context.Context, *connect.Request[esec.DeleteOrganizationRequest]) (*connect.Response[esec.DeleteOrganizationResponse], error)
 }
 
 // NewEsecServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -199,6 +279,30 @@ func NewEsecServiceHandler(svc EsecServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(esecServiceGetPerUserSecretsMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	esecServiceCreateOrganizationHandler := connect.NewUnaryHandler(
+		EsecServiceCreateOrganizationProcedure,
+		svc.CreateOrganization,
+		connect.WithSchema(esecServiceCreateOrganizationMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	esecServiceListOrganizationsHandler := connect.NewUnaryHandler(
+		EsecServiceListOrganizationsProcedure,
+		svc.ListOrganizations,
+		connect.WithSchema(esecServiceListOrganizationsMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	esecServiceGetOrganizationHandler := connect.NewUnaryHandler(
+		EsecServiceGetOrganizationProcedure,
+		svc.GetOrganization,
+		connect.WithSchema(esecServiceGetOrganizationMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	esecServiceDeleteOrganizationHandler := connect.NewUnaryHandler(
+		EsecServiceDeleteOrganizationProcedure,
+		svc.DeleteOrganization,
+		connect.WithSchema(esecServiceDeleteOrganizationMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/esec.EsecService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EsecServiceCreateProjectProcedure:
@@ -211,6 +315,14 @@ func NewEsecServiceHandler(svc EsecServiceHandler, opts ...connect.HandlerOption
 			esecServiceSetPerUserSecretsHandler.ServeHTTP(w, r)
 		case EsecServiceGetPerUserSecretsProcedure:
 			esecServiceGetPerUserSecretsHandler.ServeHTTP(w, r)
+		case EsecServiceCreateOrganizationProcedure:
+			esecServiceCreateOrganizationHandler.ServeHTTP(w, r)
+		case EsecServiceListOrganizationsProcedure:
+			esecServiceListOrganizationsHandler.ServeHTTP(w, r)
+		case EsecServiceGetOrganizationProcedure:
+			esecServiceGetOrganizationHandler.ServeHTTP(w, r)
+		case EsecServiceDeleteOrganizationProcedure:
+			esecServiceDeleteOrganizationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -238,4 +350,20 @@ func (UnimplementedEsecServiceHandler) SetPerUserSecrets(context.Context, *conne
 
 func (UnimplementedEsecServiceHandler) GetPerUserSecrets(context.Context, *connect.Request[esec.GetPerUserSecretsRequest]) (*connect.Response[esec.GetPerUserSecretsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("esec.EsecService.GetPerUserSecrets is not implemented"))
+}
+
+func (UnimplementedEsecServiceHandler) CreateOrganization(context.Context, *connect.Request[esec.CreateOrganizationRequest]) (*connect.Response[esec.CreateOrganizationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("esec.EsecService.CreateOrganization is not implemented"))
+}
+
+func (UnimplementedEsecServiceHandler) ListOrganizations(context.Context, *connect.Request[esec.ListOrganizationsRequest]) (*connect.Response[esec.ListOrganizationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("esec.EsecService.ListOrganizations is not implemented"))
+}
+
+func (UnimplementedEsecServiceHandler) GetOrganization(context.Context, *connect.Request[esec.GetOrganizationRequest]) (*connect.Response[esec.GetOrganizationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("esec.EsecService.GetOrganization is not implemented"))
+}
+
+func (UnimplementedEsecServiceHandler) DeleteOrganization(context.Context, *connect.Request[esec.DeleteOrganizationRequest]) (*connect.Response[esec.DeleteOrganizationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("esec.EsecService.DeleteOrganization is not implemented"))
 }

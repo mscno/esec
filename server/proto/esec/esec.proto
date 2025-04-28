@@ -2,6 +2,9 @@ syntax = "proto3";
 
 package esec;
 
+import "google/protobuf/timestamp.proto";
+
+
 option go_package = "github.com/mscno/esec/gen/proto/go/esec;esecpb";
 
 // ESEC main service
@@ -18,6 +21,18 @@ service EsecService {
   // Per-user secrets
   rpc SetPerUserSecrets(SetPerUserSecretsRequest) returns (SetPerUserSecretsResponse);
   rpc GetPerUserSecrets(GetPerUserSecretsRequest) returns (GetPerUserSecretsResponse);
+
+  // Creates a new team organization
+  rpc CreateOrganization(CreateOrganizationRequest) returns (CreateOrganizationResponse);
+
+  // Lists organizations (currently TEAM organizations)
+  rpc ListOrganizations(ListOrganizationsRequest) returns (ListOrganizationsResponse);
+
+  // Gets a specific organization by ID
+  rpc GetOrganization(GetOrganizationRequest) returns (GetOrganizationResponse);
+
+  // Deletes a team organization by ID
+  rpc DeleteOrganization(DeleteOrganizationRequest) returns (DeleteOrganizationResponse);
 }
 
 // Project information
@@ -25,6 +40,8 @@ message Project {
   string org = 1;
   string repo = 2;
   string org_repo = 3; // e.g., "org/repo"
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
 }
 
 // User information
@@ -32,6 +49,8 @@ message User {
   string github_id = 1;
   string username = 2;
   string public_key = 3;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
 }
 
 // Request/response for creating a project
@@ -93,3 +112,59 @@ message GetPerUserSecretsResponse {
   map<string, SecretMap> secrets = 1;
 }
 
+// Enum defining the type of organization
+enum OrganizationType {
+  ORGANIZATION_TYPE_UNSPECIFIED = 0;
+  ORGANIZATION_TYPE_PERSONAL = 1;
+  ORGANIZATION_TYPE_TEAM = 2;
+}
+
+// Represents an organization (personal or team)
+message Organization {
+  string id = 1; // GitHub org ID, username (for personal), or generated UUID (for team)
+  string name = 2; // GitHub org/user login or team name
+  string owner_github_id = 3; // GitHub ID of the user who owns/created this record
+  OrganizationType type = 4; // Type of organization
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// Request to create a new TEAM organization
+message CreateOrganizationRequest {
+  string name = 1; // The desired name for the team organization
+}
+
+// Response for creating an organization
+message CreateOrganizationResponse {
+  Organization organization = 1; // The newly created organization
+}
+
+// Request to list organizations (potentially filtered in the future)
+message ListOrganizationsRequest {
+  // Future: Add filters like owner_id, type etc.
+}
+
+// Response containing a list of organizations
+message ListOrganizationsResponse {
+  repeated Organization organizations = 1;
+}
+
+// Request to get a specific organization by ID
+message GetOrganizationRequest {
+  string id = 1; // The ID of the organization to retrieve
+}
+
+// Response containing a single organization
+message GetOrganizationResponse {
+  Organization organization = 1;
+}
+
+// Request to delete an organization by ID
+message DeleteOrganizationRequest {
+  string id = 1; // The ID of the organization to delete
+}
+
+// Response for deleting an organization
+message DeleteOrganizationResponse {
+  string status = 1; // e.g., "organization deleted"
+}

@@ -179,11 +179,35 @@
             <ul>
               
                 <li>
+                  <a href="#esec.CreateOrganizationRequest"><span class="badge">M</span>CreateOrganizationRequest</a>
+                </li>
+              
+                <li>
+                  <a href="#esec.CreateOrganizationResponse"><span class="badge">M</span>CreateOrganizationResponse</a>
+                </li>
+              
+                <li>
                   <a href="#esec.CreateProjectRequest"><span class="badge">M</span>CreateProjectRequest</a>
                 </li>
               
                 <li>
                   <a href="#esec.CreateProjectResponse"><span class="badge">M</span>CreateProjectResponse</a>
+                </li>
+              
+                <li>
+                  <a href="#esec.DeleteOrganizationRequest"><span class="badge">M</span>DeleteOrganizationRequest</a>
+                </li>
+              
+                <li>
+                  <a href="#esec.DeleteOrganizationResponse"><span class="badge">M</span>DeleteOrganizationResponse</a>
+                </li>
+              
+                <li>
+                  <a href="#esec.GetOrganizationRequest"><span class="badge">M</span>GetOrganizationRequest</a>
+                </li>
+              
+                <li>
+                  <a href="#esec.GetOrganizationResponse"><span class="badge">M</span>GetOrganizationResponse</a>
                 </li>
               
                 <li>
@@ -204,6 +228,18 @@
               
                 <li>
                   <a href="#esec.GetUserPublicKeyResponse"><span class="badge">M</span>GetUserPublicKeyResponse</a>
+                </li>
+              
+                <li>
+                  <a href="#esec.ListOrganizationsRequest"><span class="badge">M</span>ListOrganizationsRequest</a>
+                </li>
+              
+                <li>
+                  <a href="#esec.ListOrganizationsResponse"><span class="badge">M</span>ListOrganizationsResponse</a>
+                </li>
+              
+                <li>
+                  <a href="#esec.Organization"><span class="badge">M</span>Organization</a>
                 </li>
               
                 <li>
@@ -251,6 +287,10 @@
                 </li>
               
               
+                <li>
+                  <a href="#esec.OrganizationType"><span class="badge">E</span>OrganizationType</a>
+                </li>
+              
               
               
                 <li>
@@ -271,6 +311,54 @@
       </div>
       <p></p>
 
+      
+        <h3 id="esec.CreateOrganizationRequest">CreateOrganizationRequest</h3>
+        <p>Request to create a new TEAM organization</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>name</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>The desired name for the team organization </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="esec.CreateOrganizationResponse">CreateOrganizationResponse</h3>
+        <p>Response for creating an organization</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>organization</td>
+                  <td><a href="#esec.Organization">Organization</a></td>
+                  <td></td>
+                  <td><p>The newly created organization </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
       
         <h3 id="esec.CreateProjectRequest">CreateProjectRequest</h3>
         <p>Request/response for creating a project</p>
@@ -316,6 +404,102 @@
                 <tr>
                   <td>project</td>
                   <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="esec.DeleteOrganizationRequest">DeleteOrganizationRequest</h3>
+        <p>Request to delete an organization by ID</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>id</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>The ID of the organization to delete </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="esec.DeleteOrganizationResponse">DeleteOrganizationResponse</h3>
+        <p>Response for deleting an organization</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>status</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>e.g., &#34;organization deleted&#34; </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="esec.GetOrganizationRequest">GetOrganizationRequest</h3>
+        <p>Request to get a specific organization by ID</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>id</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>The ID of the organization to retrieve </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="esec.GetOrganizationResponse">GetOrganizationResponse</h3>
+        <p>Response containing a single organization</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>organization</td>
+                  <td><a href="#esec.Organization">Organization</a></td>
                   <td></td>
                   <td><p> </p></td>
                 </tr>
@@ -468,6 +652,96 @@
 
         
       
+        <h3 id="esec.ListOrganizationsRequest">ListOrganizationsRequest</h3>
+        <p>Request to list organizations (potentially filtered in the future)</p><p>Future: Add filters like owner_id, type etc.</p>
+
+        
+
+        
+      
+        <h3 id="esec.ListOrganizationsResponse">ListOrganizationsResponse</h3>
+        <p>Response containing a list of organizations</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>organizations</td>
+                  <td><a href="#esec.Organization">Organization</a></td>
+                  <td>repeated</td>
+                  <td><p> </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="esec.Organization">Organization</h3>
+        <p>Represents an organization (personal or team)</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>id</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>GitHub org ID, username (for personal), or generated UUID (for team) </p></td>
+                </tr>
+              
+                <tr>
+                  <td>name</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>GitHub org/user login or team name </p></td>
+                </tr>
+              
+                <tr>
+                  <td>owner_github_id</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>GitHub ID of the user who owns/created this record </p></td>
+                </tr>
+              
+                <tr>
+                  <td>type</td>
+                  <td><a href="#esec.OrganizationType">OrganizationType</a></td>
+                  <td></td>
+                  <td><p>Type of organization </p></td>
+                </tr>
+              
+                <tr>
+                  <td>created_at</td>
+                  <td><a href="#google.protobuf.Timestamp">google.protobuf.Timestamp</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>updated_at</td>
+                  <td><a href="#google.protobuf.Timestamp">google.protobuf.Timestamp</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
         <h3 id="esec.PerUserSecrets">PerUserSecrets</h3>
         <p>Per-user secrets for a project</p>
 
@@ -559,6 +833,20 @@
                   <td><a href="#string">string</a></td>
                   <td></td>
                   <td><p>e.g., &#34;org/repo&#34; </p></td>
+                </tr>
+              
+                <tr>
+                  <td>created_at</td>
+                  <td><a href="#google.protobuf.Timestamp">google.protobuf.Timestamp</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>updated_at</td>
+                  <td><a href="#google.protobuf.Timestamp">google.protobuf.Timestamp</a></td>
+                  <td></td>
+                  <td><p> </p></td>
                 </tr>
               
             </tbody>
@@ -788,6 +1076,20 @@
                   <td><p> </p></td>
                 </tr>
               
+                <tr>
+                  <td>created_at</td>
+                  <td><a href="#google.protobuf.Timestamp">google.protobuf.Timestamp</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>updated_at</td>
+                  <td><a href="#google.protobuf.Timestamp">google.protobuf.Timestamp</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
             </tbody>
           </table>
 
@@ -796,6 +1098,35 @@
         
       
 
+      
+        <h3 id="esec.OrganizationType">OrganizationType</h3>
+        <p>Enum defining the type of organization</p>
+        <table class="enum-table">
+          <thead>
+            <tr><td>Name</td><td>Number</td><td>Description</td></tr>
+          </thead>
+          <tbody>
+            
+              <tr>
+                <td>ORGANIZATION_TYPE_UNSPECIFIED</td>
+                <td>0</td>
+                <td><p></p></td>
+              </tr>
+            
+              <tr>
+                <td>ORGANIZATION_TYPE_PERSONAL</td>
+                <td>1</td>
+                <td><p></p></td>
+              </tr>
+            
+              <tr>
+                <td>ORGANIZATION_TYPE_TEAM</td>
+                <td>2</td>
+                <td><p></p></td>
+              </tr>
+            
+          </tbody>
+        </table>
       
 
       
@@ -842,6 +1173,34 @@
                 <td><a href="#esec.GetPerUserSecretsRequest">GetPerUserSecretsRequest</a></td>
                 <td><a href="#esec.GetPerUserSecretsResponse">GetPerUserSecretsResponse</a></td>
                 <td><p></p></td>
+              </tr>
+            
+              <tr>
+                <td>CreateOrganization</td>
+                <td><a href="#esec.CreateOrganizationRequest">CreateOrganizationRequest</a></td>
+                <td><a href="#esec.CreateOrganizationResponse">CreateOrganizationResponse</a></td>
+                <td><p>Creates a new team organization</p></td>
+              </tr>
+            
+              <tr>
+                <td>ListOrganizations</td>
+                <td><a href="#esec.ListOrganizationsRequest">ListOrganizationsRequest</a></td>
+                <td><a href="#esec.ListOrganizationsResponse">ListOrganizationsResponse</a></td>
+                <td><p>Lists organizations (currently TEAM organizations)</p></td>
+              </tr>
+            
+              <tr>
+                <td>GetOrganization</td>
+                <td><a href="#esec.GetOrganizationRequest">GetOrganizationRequest</a></td>
+                <td><a href="#esec.GetOrganizationResponse">GetOrganizationResponse</a></td>
+                <td><p>Gets a specific organization by ID</p></td>
+              </tr>
+            
+              <tr>
+                <td>DeleteOrganization</td>
+                <td><a href="#esec.DeleteOrganizationRequest">DeleteOrganizationRequest</a></td>
+                <td><a href="#esec.DeleteOrganizationResponse">DeleteOrganizationResponse</a></td>
+                <td><p>Deletes a team organization by ID</p></td>
               </tr>
             
           </tbody>
