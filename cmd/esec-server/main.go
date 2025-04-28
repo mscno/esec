@@ -1,19 +1,20 @@
 package main
 
 import (
-	"cloud.google.com/go/datastore"
 	"context"
 	"flag"
 	"fmt"
-	"github.com/mscno/esec/gen/proto/go/esec/esecpbconnect"
-	"github.com/mscno/esec/server/middleware"
-	"go.etcd.io/bbolt"
-	"golang.org/x/time/rate"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"time"
+
+	"cloud.google.com/go/datastore"
+	"github.com/mscno/esec/gen/proto/go/esec/esecpbconnect"
+	"github.com/mscno/esec/server/middleware"
+	"go.etcd.io/bbolt"
+	"golang.org/x/time/rate"
 
 	"github.com/mscno/esec/server"
 	"github.com/mscno/esec/server/stores"
@@ -26,6 +27,7 @@ func main() {
 	// Choose store implementation
 	var projectStore server.ProjectStore
 	var userStore server.UserStore
+	var orgStore server.OrganizationStore
 	storeType := os.Getenv("ESEC_STORE")
 	if storeType == "bolt" {
 		boltPath := os.Getenv("ESEC_BOLT_PATH")
@@ -37,14 +39,11 @@ func main() {
 			log.Fatalf("failed to open BoltDB: %v", err)
 		}
 		defer db.Close()
-		boltProjectStore := stores.NewBoltProjectStore(db)
 
-		projectStore = boltProjectStore
+		projectStore = stores.NewBoltProjectStore(db)
+		userStore = stores.NewBoltUserStore(db)
+		//orgStore = stores.NewBoltOrganizationStore(db)
 		logger.Info(fmt.Sprintf("Using BoltDB store at %s", boltPath))
-
-		boltUserStore := stores.NewBoltUserStore(db)
-
-		userStore = boltUserStore
 
 	} else if storeType == "datastore" {
 		datastoreProject := os.Getenv("ESEC_DATASTORE_PROJECT")
@@ -54,16 +53,18 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to create datastore client: %v", err)
 		}
-		projectStore = stores.NewProjectDataStore(ctx, dsClient)
-		userStore = stores.NewUserDataStore(ctx, dsClient)
-
+		projectStore = stores.NewProjectDataStore(logger, dsClient)
+		userStore = stores.NewUserDataStore(logger, dsClient)
+		orgStore = stores.NewOrganizationDataStore(logger, dsClient)
+		logger.Info(fmt.Sprintf("Using datastore store at %s", datastoreProject))
 	} else {
 		projectStore = stores.NewInMemoryProjectStore()
 		userStore = stores.NewInMemoryUserStore()
+		orgStore = stores.NewInMemoryOrganizationStore()
 		logger.Info("Using in-memory store")
 	}
 
-	srv := server.NewServer(projectStore, userStore, logger, nil)
+	srv := server.NewServer(projectStore, userStore, orgStore, logger, nil)
 
 	path, h := esecpbconnect.NewEsecServiceHandler(srv)
 

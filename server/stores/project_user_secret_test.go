@@ -1,13 +1,15 @@
 package stores
 
 import (
-	"cloud.google.com/go/datastore"
 	"context"
 	"crypto/rand"
-	"github.com/mscno/esec/server"
-	"github.com/mscno/esec/server/model"
+	"log/slog"
 	"os"
 	"testing"
+
+	"cloud.google.com/go/datastore"
+	"github.com/mscno/esec/server"
+	"github.com/mscno/esec/server/model"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,7 +22,7 @@ func TestUserSecretsDataStore(t *testing.T) {
 		projectID := os.Getenv("TEST_DATASTORE_PROJECT")
 		client, err := datastore.NewClientWithDatabase(ctx, projectID, "esec-test")
 		assert.NoError(t, err)
-		store := NewProjectDataStore(ctx, client)
+		store := NewProjectDataStore(slog.Default(),client)
 
 		return store
 	})

@@ -1,6 +1,9 @@
 test:
     TEST_DATASTORE_PROJECT=esec-prod go test ./...
 
+serve:
+    ESEC_STORE=datastore ESEC_DATASTORE_DATABASE=esec-prod ESEC_DATASTORE_PROJECT=esec-prod go run ./cmd/esec-server/main.go
+
 cover:
     go test -coverprofile=coverage.out ./...
     go tool cover -html=coverage.out

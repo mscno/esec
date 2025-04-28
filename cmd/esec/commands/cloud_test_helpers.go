@@ -17,6 +17,7 @@ func testServer(t *testing.T) int {
 	esecSvc := server.NewServer(
 		stores.NewInMemoryProjectStore(),
 		stores.NewInMemoryUserStore(),
+		stores.NewInMemoryOrganizationStore(),
 		slog.Default(),
 		testutl.MockUserHasRoleInRepo,
 	)

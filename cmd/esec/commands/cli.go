@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+
 	"github.com/alecthomas/kong"
 	"github.com/mscno/esec/pkg/fileutils"
 	"github.com/mscno/esec/pkg/oskeyring"
@@ -46,6 +47,7 @@ type CloudCmd struct {
 	Unshare  UnshareCmd  `cmd:"" help:"Unshare a secret key with other users"`
 	Projects ProjectsCmd `cmd:"" help:"Project commands"`
 	Keys     KeysCmd     `cmd:"" help:"Key management commands"`
+	Orgs     OrgsCmd     `cmd:"" help:"Manage team organizations"`
 }
 
 func Execute(version string) {

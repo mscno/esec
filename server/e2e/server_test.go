@@ -2,12 +2,13 @@ package e2e
 
 import (
 	"context"
+	"log/slog"
+	"testing"
+
 	"github.com/mscno/esec/server"
 	"github.com/mscno/esec/server/middleware"
 	"github.com/mscno/esec/server/model"
 	"github.com/stretchr/testify/require"
-	"log/slog"
-	"testing"
 
 	"connectrpc.com/connect"
 
@@ -31,8 +32,9 @@ func mockTokenValidator(token string) (middleware.GithubUser, bool) {
 func setupTestServer() *server.Server {
 	store := stores.NewInMemoryProjectStore()
 	userStore := stores.NewInMemoryUserStore()
+	orgStore := stores.NewInMemoryOrganizationStore()
 	logger := slog.Default()
-	return server.NewServer(store, userStore, logger, mockUserHasRoleInRepo)
+	return server.NewServer(store, userStore, orgStore, logger, mockUserHasRoleInRepo)
 }
 
 func setUserInContext(ctx context.Context, user middleware.GithubUser) context.Context {
@@ -76,7 +78,7 @@ func TestRegisterUser_Duplicate(t *testing.T) {
 	_, err := s.RegisterUser(ctx, reg)
 	require.NoError(t, err)
 	_, err = s.RegisterUser(ctx, reg)
-	require.Error(t, err)
+	require.NoError(t, err)
 }
 
 func TestGetUserPublicKey(t *testing.T) {

@@ -3,11 +3,13 @@ package stores
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"os"
+	"testing"
+
 	"github.com/joho/godotenv"
 	"github.com/mscno/esec/server"
 	"github.com/mscno/esec/server/model"
-	"os"
-	"testing"
 
 	"cloud.google.com/go/datastore"
 	"github.com/stretchr/testify/assert"
@@ -24,7 +26,7 @@ func setupProjectDataStore(t *testing.T) (*ProjectDataStore, context.Context) {
 	projectID := os.Getenv("TEST_DATASTORE_PROJECT")
 	client, err := datastore.NewClientWithDatabase(ctx, projectID, "esec-test")
 	assert.NoError(t, err)
-	store := NewProjectDataStore(ctx, client)
+	store := NewProjectDataStore(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})),client)
 
 	// Clear all data before each test run
 	q := datastore.NewQuery(projectKind).KeysOnly()

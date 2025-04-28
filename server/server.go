@@ -7,33 +7,44 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"connectrpc.com/connect"
 	esecpb "github.com/mscno/esec/gen/proto/go/esec"
 	"github.com/mscno/esec/gen/proto/go/esec/esecpbconnect"
 	"github.com/mscno/esec/server/middleware"
 	model "github.com/mscno/esec/server/model"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	// "github.com/google/uuid" // Removed UUID import
 )
 
+// --- Store Interface Definitions ---
+
+// Errors related to User operations
+var ErrUserExists = errors.New("user already exists")
+var ErrUserNotFound = errors.New("user not found")
+
+// UserStore defines the interface for CRUD operations on Users.
 type UserStore interface {
 	CreateUser(ctx context.Context, user model.User) error
 	GetUser(ctx context.Context, githubID model.UserId) (*model.User, error)
 	UpdateUser(ctx context.Context, githubID model.UserId, updateFn func(model.User) (model.User, error)) error
 	DeleteUser(ctx context.Context, githubID model.UserId) error
 	ListUsers(ctx context.Context) ([]model.User, error)
+
 }
 
-var ErrUserExists = errors.New("user already exists")
-var ErrUserNotFound = errors.New("user not found")
+// Errors related to Project operations
+var ErrProjectExists = errors.New("project already exists")
+var ErrProjectNotFound = errors.New("project not found")
 
+// ProjectStore defines the interface for CRUD operations on Projects and their secrets.
 type ProjectStore interface {
 	CreateProject(ctx context.Context, project model.Project) error
 	GetProject(ctx context.Context, orgRepo model.OrgRepo) (model.Project, error)
 	UpdateProject(ctx context.Context, orgRepo model.OrgRepo, updateFn func(project model.Project) (model.Project, error)) error
 	ListProjects(ctx context.Context) ([]model.Project, error)
 	DeleteProject(ctx context.Context, orgRepo model.OrgRepo) error
-
-	// New methods for handling secrets
 	SetProjectUserSecrets(ctx context.Context, orgRepo model.OrgRepo, userId model.UserId, secrets map[model.PrivateKeyName]string) error
 	GetProjectUserSecrets(ctx context.Context, orgRepo model.OrgRepo, userId model.UserId) (map[model.PrivateKeyName]string, error)
 	GetAllProjectUserSecrets(ctx context.Context, orgRepo model.OrgRepo) (map[model.UserId]map[model.PrivateKeyName]string, error)
@@ -41,58 +52,42 @@ type ProjectStore interface {
 	DeleteAllProjectUserSecrets(ctx context.Context, orgRepo model.OrgRepo) error
 }
 
-var ErrProjectExists = errors.New("project already exists")
-var ErrProjectNotFound = errors.New("project not found")
-
+// Errors related to Organization operations
+var ErrOrganizationNotFound = errors.New("organization not found")
 
 // OrganizationStore defines the interface for CRUD operations on Organizations.
 type OrganizationStore interface {
-	// CreateOrganization creates a new organization record.
 	CreateOrganization(ctx context.Context, org *model.Organization) error
-
-	// GetOrganizationByID retrieves an organization by its unique ID.
-	// Returns ErrOrganizationNotFound if the organization does not exist.
 	GetOrganizationByID(ctx context.Context, id string) (*model.Organization, error)
-
-	// GetOrganizationByName retrieves an organization by its name.
-	// Names might not be unique, so this could return multiple or just the first.
-	// Consider if uniqueness is enforced or if ListByName is better.
-	// Returns ErrOrganizationNotFound if the organization does not exist.
 	GetOrganizationByName(ctx context.Context, name string) (*model.Organization, error)
-
-	// UpdateOrganization updates an existing organization record.
-	// It should likely check if the organization exists first.
 	UpdateOrganization(ctx context.Context, org *model.Organization) error
-
-	// DeleteOrganization removes an organization by its ID.
-	// It should not return an error if the organization doesn't exist.
 	DeleteOrganization(ctx context.Context, id string) error
-
-	// ListOrganizations retrieves all organization records.
 	ListOrganizations(ctx context.Context) ([]*model.Organization, error)
 }
-var ErrOrganizationNotFound = errors.New("organization not found")
 
+// --- Server Implementation ---
 
 // Server implements esecpbconnect.EsecServiceHandler
 // It adapts the Handler logic for gRPC/protobuf
 // Add dependencies as in Handler
 type Server struct {
-	Store             ProjectStore
-	UserStore         UserStore
+	Store             ProjectStore     // Use local interface type
+	UserStore         UserStore        // Use local interface type
+	OrganizationStore OrganizationStore // Use local interface type
 	Logger            *slog.Logger
 	userHasRoleInRepo UserHasRoleInRepoFunc
 }
 
 type UserHasRoleInRepoFunc func(token string, orgRepo model.OrgRepo, role string) bool
 
-func NewServer(store ProjectStore, userStore UserStore, logger *slog.Logger, userHasRoleInRepo UserHasRoleInRepoFunc) *Server {
+func NewServer(store ProjectStore, userStore UserStore, orgStore OrganizationStore, logger *slog.Logger, userHasRoleInRepo UserHasRoleInRepoFunc) *Server {
 	if userHasRoleInRepo == nil {
 		userHasRoleInRepo = defaultUserHasRoleInRepo
 	}
 	return &Server{
 		Store:             store,
 		UserStore:         userStore,
+		OrganizationStore: orgStore,
 		Logger:            logger,
 		userHasRoleInRepo: userHasRoleInRepo,
 	}
@@ -153,15 +148,67 @@ func (s *Server) RegisterUser(ctx context.Context, request *connect.Request[esec
 	if user.GitHubID == "" || user.Username == "" || user.PublicKey == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing user fields"))
 	}
-	if _, err := s.UserStore.GetUser(ctx, user.GitHubID); err == nil {
-		return nil, connect.NewError(connect.CodeAlreadyExists, err)
+
+	// Attempt to upsert the user
+	created := false
+	existingUser, err := s.UserStore.GetUser(ctx, user.GitHubID) // Assign to existingUser
+	if err != nil {
+		if !errors.Is(err, ErrUserNotFound) { // Use local error
+			s.Logger.Error("failed to check existing user", "github_id", user.GitHubID, "error", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check user existence: %w", err))
+		}
+		// User not found, create them
+		if err := s.UserStore.CreateUser(ctx, user); err != nil {
+			s.Logger.Error("failed to register user", "github_id", user.GitHubID, "error", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to register user: %w", err))
+		}
+		created = true
+	} else { // Use existingUser here
+		// User found, update if public key differs
+		if existingUser.PublicKey != user.PublicKey {
+			s.Logger.Info("updating user public key", "github_id", user.GitHubID)
+			err = s.UserStore.UpdateUser(ctx, user.GitHubID, func(u model.User) (model.User, error) {
+				u.PublicKey = user.PublicKey
+				return u, nil
+			})
+			if err != nil {
+				s.Logger.Error("failed to update user public key", "github_id", user.GitHubID, "error", err)
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update user public key: %w", err))
+			}
+		}
 	}
-	if err := s.UserStore.CreateUser(ctx, user); err != nil {
-		s.Logger.Error("failed to register user", "github_id", user.GitHubID, "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to register user: %w", err))
+
+	// After user upsert, ensure personal organization exists
+	personalOrgName := user.Username // Restore definition
+	personalOrgID := user.Username   // Restore definition
+	_, err = s.OrganizationStore.GetOrganizationByID(ctx, personalOrgID)
+	if err != nil {
+		if errors.Is(err, ErrOrganizationNotFound) { // Use local error
+			s.Logger.Info("personal organization not found, creating...", "org_id", personalOrgID, "owner_github_id", user.GitHubID)
+			personalOrg := &model.Organization{ // Restore definition
+				ID:            personalOrgID,
+				Name:          personalOrgName,
+				OwnerGithubID: string(user.GitHubID),
+				Type:          model.OrganizationTypePersonal,
+			}
+			if err := s.OrganizationStore.CreateOrganization(ctx, personalOrg); err != nil {
+				// Log error but don't fail the user registration
+				s.Logger.Error("failed to create personal organization", "org_id", personalOrgID, "error", err)
+			} else {
+				s.Logger.Info("created personal organization", "org_id", personalOrgID)
+			}
+		} else {
+			// Log error fetching org but don't fail the user registration
+			s.Logger.Error("failed to check for personal organization", "org_id", personalOrgID, "error", err)
+		}
+	}
+
+	status := "user updated"
+	if created {
+		status = "user registered"
 	}
 	return connect.NewResponse(&esecpb.RegisterUserResponse{
-		Status: "user registered",
+		Status: status,
 	}), nil
 }
 
@@ -172,7 +219,7 @@ func (s *Server) GetUserPublicKey(ctx context.Context, request *connect.Request[
 	}
 	user, err := s.UserStore.GetUser(ctx, model.UserId(githubID))
 	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
+		if errors.Is(err, ErrUserNotFound) { // Use local error
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("user not found"))
 		}
 		s.Logger.Error("failed to get user", "github_id", githubID, "error", err)
@@ -320,5 +367,167 @@ func defaultUserHasRoleInRepo(token string, orgRepo model.OrgRepo, role string) 
 		return resp.StatusCode == http.StatusOK
 	default:
 		return false
+	}
+}
+
+// CreateOrganization handles the creation of a new TEAM organization.
+func (s *Server) CreateOrganization(ctx context.Context, req *connect.Request[esecpb.CreateOrganizationRequest]) (*connect.Response[esecpb.CreateOrganizationResponse], error) {
+	ghuser, ok := ctx.Value("user").(middleware.GithubUser)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
+	}
+
+	orgName := req.Msg.GetName()
+	if orgName == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing organization name"))
+	}
+	// TODO: Add further validation for orgName (e.g., length, characters) if needed
+
+	// Use the provided name as the ID for the team org
+	orgID := orgName
+	ownerID := fmt.Sprintf("%d", ghuser.ID)
+
+	newOrg := &model.Organization{
+		ID:            orgID, // Use Name as ID
+		Name:          orgName,
+		OwnerGithubID: ownerID,
+		Type:          model.OrganizationTypeTeam, // Explicitly set type to team
+	}
+
+	if err := s.OrganizationStore.CreateOrganization(ctx, newOrg); err != nil {
+		// Check for specific errors like ID/name conflict
+		if strings.Contains(err.Error(), "already exists") { // Basic check, might need refinement
+			// Distinguish between ID and Name conflict if possible from store error
+			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("organization with ID or name '%s' already exists", orgName))
+		}
+		s.Logger.Error("failed to create organization", "name", orgName, "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create organization: %w", err))
+	}
+
+	s.Logger.Info("created team organization", "org_id", orgID, "name", orgName, "owner_id", ownerID)
+
+	pbOrg := modelToProtoOrg(newOrg)
+	return connect.NewResponse(&esecpb.CreateOrganizationResponse{Organization: pbOrg}), nil
+}
+
+// ListOrganizations lists organizations accessible to the user (currently owned team orgs).
+func (s *Server) ListOrganizations(ctx context.Context, req *connect.Request[esecpb.ListOrganizationsRequest]) (*connect.Response[esecpb.ListOrganizationsResponse], error) {
+	ghuser, ok := ctx.Value("user").(middleware.GithubUser)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
+	}
+	ownerID := fmt.Sprintf("%d", ghuser.ID)
+
+	allOrgs, err := s.OrganizationStore.ListOrganizations(ctx)
+	if err != nil {
+		s.Logger.Error("failed to list organizations", "owner_id", ownerID, "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list organizations: %w", err))
+	}
+
+	pbOrgs := make([]*esecpb.Organization, 0)
+	for _, org := range allOrgs {
+		// Filter: Only show orgs owned by the requesting user
+		// TODO: Add logic later to show orgs the user is a member of
+		if org.OwnerGithubID == ownerID {
+			pbOrgs = append(pbOrgs, modelToProtoOrg(org))
+		}
+	}
+
+	return connect.NewResponse(&esecpb.ListOrganizationsResponse{Organizations: pbOrgs}), nil
+}
+
+// GetOrganization retrieves a specific organization by ID, checking ownership.
+func (s *Server) GetOrganization(ctx context.Context, req *connect.Request[esecpb.GetOrganizationRequest]) (*connect.Response[esecpb.GetOrganizationResponse], error) {
+	ghuser, ok := ctx.Value("user").(middleware.GithubUser)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
+	}
+	ownerID := fmt.Sprintf("%d", ghuser.ID)
+	orgID := req.Msg.GetId()
+	if orgID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing organization ID"))
+	}
+
+	org, err := s.OrganizationStore.GetOrganizationByID(ctx, orgID)
+	if err != nil {
+		if errors.Is(err, ErrOrganizationNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("organization not found"))
+		}
+		s.Logger.Error("failed to get organization", "org_id", orgID, "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get organization: %w", err))
+	}
+
+	// Permission Check: Only owner can get (for now)
+	// TODO: Add member check later
+	if org.OwnerGithubID != ownerID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("permission denied to view organization"))
+	}
+
+	pbOrg := modelToProtoOrg(org)
+	return connect.NewResponse(&esecpb.GetOrganizationResponse{Organization: pbOrg}), nil
+}
+
+// DeleteOrganization deletes a TEAM organization by ID, checking ownership.
+func (s *Server) DeleteOrganization(ctx context.Context, req *connect.Request[esecpb.DeleteOrganizationRequest]) (*connect.Response[esecpb.DeleteOrganizationResponse], error) {
+	ghuser, ok := ctx.Value("user").(middleware.GithubUser)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
+	}
+	ownerID := fmt.Sprintf("%d", ghuser.ID)
+	orgID := req.Msg.GetId()
+	if orgID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing organization ID"))
+	}
+
+	// Fetch first to check ownership and type
+	org, err := s.OrganizationStore.GetOrganizationByID(ctx, orgID)
+	if err != nil {
+		if errors.Is(err, ErrOrganizationNotFound) {
+			// Deleting non-existent is okay, return success
+			return connect.NewResponse(&esecpb.DeleteOrganizationResponse{Status: "organization not found or already deleted"}), nil
+		}
+		s.Logger.Error("failed to get organization before delete", "org_id", orgID, "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get organization: %w", err))
+	}
+
+	// Permission Check: Only owner can delete
+	if org.OwnerGithubID != ownerID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("permission denied to delete organization"))
+	}
+
+	// Type Check: Cannot delete personal organizations
+	if org.Type == model.OrganizationTypePersonal {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("cannot delete personal organizations"))
+	}
+
+	if err := s.OrganizationStore.DeleteOrganization(ctx, orgID); err != nil {
+		s.Logger.Error("failed to delete organization", "org_id", orgID, "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete organization: %w", err))
+	}
+
+	s.Logger.Info("deleted team organization", "org_id", orgID, "name", org.Name, "owner_id", ownerID)
+	return connect.NewResponse(&esecpb.DeleteOrganizationResponse{Status: "organization deleted"}), nil
+}
+
+// modelToProtoOrg converts the internal model to the protobuf message.
+func modelToProtoOrg(org *model.Organization) *esecpb.Organization {
+	if org == nil {
+		return nil
+	}
+	pbType := esecpb.OrganizationType_ORGANIZATION_TYPE_UNSPECIFIED
+	switch org.Type {
+	case model.OrganizationTypePersonal:
+		pbType = esecpb.OrganizationType_ORGANIZATION_TYPE_PERSONAL
+	case model.OrganizationTypeTeam:
+		pbType = esecpb.OrganizationType_ORGANIZATION_TYPE_TEAM
+	}
+
+	return &esecpb.Organization{
+		Id:            org.ID,
+		Name:          org.Name,
+		OwnerGithubId: org.OwnerGithubID,
+		Type:          pbType,
+		CreatedAt:     timestamppb.New(org.CreatedAt),
+		UpdatedAt:     timestamppb.New(org.UpdatedAt),
 	}
 }

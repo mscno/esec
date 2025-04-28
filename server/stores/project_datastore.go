@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/mscno/esec/server"
 	"github.com/mscno/esec/server/model"
@@ -19,11 +20,12 @@ const (
 // ProjectDataStore implements the ProjectStore interface using Google Cloud Datastore
 type ProjectDataStore struct {
 	client *datastore.Client
+	logger    *slog.Logger
 }
 
 // NewProjectDataStore creates a new ProjectDataStore with the given client
-func NewProjectDataStore(ctx context.Context, client *datastore.Client) *ProjectDataStore {
-	return &ProjectDataStore{client: client}
+func NewProjectDataStore(logger *slog.Logger, client *datastore.Client) *ProjectDataStore {
+	return &ProjectDataStore{client: client, logger: logger}
 }
 
 // Close closes the underlying datastore client

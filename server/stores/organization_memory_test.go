@@ -13,10 +13,10 @@ import (
 
 func TestOrganizationMemoryStore_CRUD(t *testing.T) {
 	ctx := context.Background()
-	store := NewOrganizationMemoryStore()
+	store := NewInMemoryOrganizationStore()
 
-	org1 := &model.Organization{ID: "org1", Name: "Test Org 1"}
-	org2 := &model.Organization{ID: "org2", Name: "Test Org 2"}
+	org1 := &model.Organization{ID: "org1", Name: "Test Org 1",Type: model.OrganizationTypeTeam,OwnerGithubID: "testuser"}
+	org2 := &model.Organization{ID: "org2", Name: "Test Org 2",Type: model.OrganizationTypeTeam,OwnerGithubID: "testuser"}
 
 	// Create
 	err := store.CreateOrganization(ctx, org1)

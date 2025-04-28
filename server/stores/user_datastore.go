@@ -3,6 +3,7 @@ package stores
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/mscno/esec/server"
 	"github.com/mscno/esec/server/model"
@@ -14,10 +15,11 @@ const userKind = "User"
 
 type UserDataStore struct {
 	client *datastore.Client
+	logger *slog.Logger
 }
 
-func NewUserDataStore(ctx context.Context, client *datastore.Client) *UserDataStore {
-	return &UserDataStore{client: client}
+func NewUserDataStore(logger *slog.Logger, client *datastore.Client) *UserDataStore {
+	return &UserDataStore{client: client, logger: logger}
 }
 
 // Close closes the underlying datastore client.

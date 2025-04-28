@@ -19,7 +19,7 @@ type organizationMemoryStore struct {
 }
 
 // NewOrganizationMemoryStore creates a new in-memory organization store.
-func NewOrganizationMemoryStore() server.OrganizationStore {
+func NewInMemoryOrganizationStore() server.OrganizationStore {
 	return &organizationMemoryStore{
 		orgs:  make(map[string]*model.Organization),
 		byName: make(map[string]string),
@@ -64,7 +64,7 @@ func (s *organizationMemoryStore) GetOrganizationByID(ctx context.Context, id st
 
 	org, ok := s.orgs[id]
 	if !ok {
-		return nil, ErrOrganizationNotFound
+		return nil, server.ErrOrganizationNotFound
 	}
 	// Return a copy to prevent modification outside the store
 	retOrg := *org
@@ -77,14 +77,14 @@ func (s *organizationMemoryStore) GetOrganizationByName(ctx context.Context, nam
 
 	id, ok := s.byName[name]
 	if !ok {
-		return nil, ErrOrganizationNotFound
+		return nil, server.ErrOrganizationNotFound
 	}
 
 	org, ok := s.orgs[id]
 	if !ok {
 		// This indicates an inconsistency, name exists but ID doesn't
 		// Might happen if Delete isn't careful
-		return nil, ErrOrganizationNotFound
+		return nil, server.ErrOrganizationNotFound
 	}
 
 	retOrg := *org
@@ -97,7 +97,7 @@ func (s *organizationMemoryStore) UpdateOrganization(ctx context.Context, org *m
 
 	existingOrg, ok := s.orgs[org.ID]
 	if !ok {
-		return ErrOrganizationNotFound
+		return server.ErrOrganizationNotFound
 	}
 
 	if existingOrg.Type != org.Type {

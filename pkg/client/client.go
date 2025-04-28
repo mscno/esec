@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+
+	esecpb "github.com/mscno/esec/gen/proto/go/esec"
 )
 
 type UserId string
@@ -27,4 +29,10 @@ type Client interface {
 	PushKeysPerUser(ctx context.Context, orgRepo string, perUserPayload map[UserId]map[PrivateKeyName]string) error
 	// PullKeysPerUser fetches per-recipient encrypted secrets from the sync server for the given project.
 	PullKeysPerUser(ctx context.Context, orgRepo string) (map[UserId]map[PrivateKeyName]string, error)
+
+	// Organization Methods
+	CreateOrganization(ctx context.Context, name string) (*esecpb.Organization, error)
+	ListOrganizations(ctx context.Context) ([]*esecpb.Organization, error)
+	GetOrganization(ctx context.Context, id string) (*esecpb.Organization, error)
+	DeleteOrganization(ctx context.Context, id string) (string, error)
 }

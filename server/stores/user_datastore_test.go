@@ -1,14 +1,16 @@
 package stores
 
 import (
-	"cloud.google.com/go/datastore"
 	"context"
 	"errors"
+	"log/slog"
+	"os"
+	"testing"
+
+	"cloud.google.com/go/datastore"
 	"github.com/mscno/esec/server"
 	"github.com/mscno/esec/server/model"
 	"google.golang.org/api/option"
-	"os"
-	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +31,7 @@ func setupUserDataStore(t *testing.T) (*UserDataStore, context.Context) {
 	projectID := "test-project-users"
 	client, err := datastore.NewClient(ctx, projectID, option.WithEndpoint(host))
 	assert.NoError(t, err)
-	store := NewUserDataStore(ctx, client)
+	store := NewUserDataStore(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})),client)
 
 	// Clear all data before each test run (optional, but good practice)
 	q := datastore.NewQuery(userKind).KeysOnly()

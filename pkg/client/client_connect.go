@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -106,6 +107,54 @@ func (c *ConnectClient) PullKeysPerUser(ctx context.Context, orgRepo string) (ma
 		}
 	}
 	return result, nil
+}
+
+// --- Organization Methods ---
+
+func (c *ConnectClient) CreateOrganization(ctx context.Context, name string) (*esecpb.Organization, error) {
+	req := &esecpb.CreateOrganizationRequest{
+		Name: name,
+	}
+	resp, err := c.client.CreateOrganization(ctx, connect.NewRequest(req))
+	if err != nil {
+		c.logger.Error("CreateOrganization request failed", "error", err)
+		return nil, fmt.Errorf("CreateOrganization failed: %w", err)
+	}
+	return resp.Msg.GetOrganization(), nil
+}
+
+func (c *ConnectClient) ListOrganizations(ctx context.Context) ([]*esecpb.Organization, error) {
+	req := &esecpb.ListOrganizationsRequest{}
+	resp, err := c.client.ListOrganizations(ctx, connect.NewRequest(req))
+	if err != nil {
+		c.logger.Error("ListOrganizations request failed", "error", err)
+		return nil, fmt.Errorf("ListOrganizations failed: %w", err)
+	}
+	return resp.Msg.GetOrganizations(), nil
+}
+
+func (c *ConnectClient) GetOrganization(ctx context.Context, id string) (*esecpb.Organization, error) {
+	req := &esecpb.GetOrganizationRequest{
+		Id: id,
+	}
+	resp, err := c.client.GetOrganization(ctx, connect.NewRequest(req))
+	if err != nil {
+		c.logger.Error("GetOrganization request failed", "id", id, "error", err)
+		return nil, fmt.Errorf("GetOrganization failed: %w", err)
+	}
+	return resp.Msg.GetOrganization(), nil
+}
+
+func (c *ConnectClient) DeleteOrganization(ctx context.Context, id string) (string, error) {
+	req := &esecpb.DeleteOrganizationRequest{
+		Id: id,
+	}
+	resp, err := c.client.DeleteOrganization(ctx, connect.NewRequest(req))
+	if err != nil {
+		c.logger.Error("DeleteOrganization request failed", "id", id, "error", err)
+		return "", fmt.Errorf("DeleteOrganization failed: %w", err)
+	}
+	return resp.Msg.GetStatus(), nil
 }
 
 var _ Client = (*ConnectClient)(nil)

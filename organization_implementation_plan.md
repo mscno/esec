@@ -49,11 +49,10 @@ This plan outlines the steps to add features for managing Team Organizations in 
      - **`CreateOrganization`:**
        - Get authenticated user (`ghuser`) from context.
        - Get `name` from `request.Msg`.
-       - Validate `name` (e.g., non-empty).
-       - Generate a unique `ID` (e.g., `github.com/google/uuid`).
-       - Create `model.Organization` with `ID`, `Name`, `OwnerGithubID: string(ghuser.ID)`, `Type: model.OrganizationTypeTeam`.
+       - Validate `name` (e.g., non-empty, potentially check GitHub Naming rules if desired).
+       - Create `model.Organization` with `ID: name`, `Name: name`, `OwnerGithubID: string(ghuser.ID)`, `Type: model.OrganizationTypeTeam`.
        - Call `s.OrganizationStore.CreateOrganization`.
-       - Handle potential errors (e.g., name conflict).
+       - Handle potential errors (e.g., ID/name conflict).
        - Convert the created `model.Organization` to `esecpb.Organization` (requires a helper function or manual mapping).
        - Return `connect.NewResponse(&esecpb.CreateOrganizationResponse{Organization: &pbOrg})`.
      - **`ListOrganizations`:**
