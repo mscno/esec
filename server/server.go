@@ -81,16 +81,17 @@ type Server struct {
 type UserHasRoleInRepoFunc func(token string, orgRepo model.OrgRepo, role string) bool
 
 func NewServer(store ProjectStore, userStore UserStore, orgStore OrganizationStore, logger *slog.Logger, userHasRoleInRepo UserHasRoleInRepoFunc) *Server {
-	if userHasRoleInRepo == nil {
-		userHasRoleInRepo = defaultUserHasRoleInRepo
-	}
-	return &Server{
+	srv := &Server{
 		Store:             store,
 		UserStore:         userStore,
 		OrganizationStore: orgStore,
 		Logger:            logger,
 		userHasRoleInRepo: userHasRoleInRepo,
 	}
+	if userHasRoleInRepo == nil {
+		userHasRoleInRepo = srv.defaultUserHasRoleInRepo
+	}
+	return srv
 }
 
 var _ esecpbconnect.EsecServiceHandler = (*Server)(nil)
@@ -333,7 +334,7 @@ func contains(s []string, str string) bool {
 }
 
 // userHasRoleInRepo checks if the given GitHub token has a role in the given org/repo.
-func defaultUserHasRoleInRepo(token string, orgRepo model.OrgRepo, role string) bool {
+func (s *Server) defaultUserHasRoleInRepo(token string, orgRepo model.OrgRepo, role string) bool {
 	if token == "" || orgRepo == "" || role == "" {
 		return false
 	}
@@ -345,6 +346,7 @@ func defaultUserHasRoleInRepo(token string, orgRepo model.OrgRepo, role string) 
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Authorization", "Bearer "+token)
+	s.Logger.Debug("checking github api", "url", githubAPIURL, "token", token, "orgRepo", orgRepo, "role", role)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false

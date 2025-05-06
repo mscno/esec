@@ -17,7 +17,7 @@ type AuthCmd struct {
 	RecoverKeypair  AuthRecoverKeypairCmd  `cmd:"" help:"Recover your keypair from a 24-word BIP39 mnemonic phrase"`
 
 	// Global flags for auth commands
-	GithubClientID string `env:"ESEC_GITHUB_CLIENT_ID" help:"GitHub OAuth App Client ID." short:"c"`
+	GithubClientID string `env:"ESEC_GITHUB_CLIENT_ID" default:"Iv23liDPymlwvV4Z7ROm" help:"GitHub OAuth App Client ID." short:"c"`
 }
 
 type LoginCmd struct{}

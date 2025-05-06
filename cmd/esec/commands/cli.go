@@ -36,7 +36,7 @@ type cli struct {
 
 type CloudCmd struct {
 	// Global flags for cloud commands (inherited by subcommands)
-	ServerURL  string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"http://localhost:8080" group:"Cloud Flags:"`
+	ServerURL  string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"https://esec-server-1072520634286.europe-west1.run.app" group:"Cloud Flags:"`
 	AuthToken  string `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN" group:"Cloud Flags:"`
 	ProjectDir string `help:"Directory containing the projects file" env:"ESEC_PROJECTS_FILE_DIR" default:"." group:"Cloud Flags:"`
 
