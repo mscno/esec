@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -31,7 +32,6 @@ type UserStore interface {
 	UpdateUser(ctx context.Context, githubID model.UserId, updateFn func(model.User) (model.User, error)) error
 	DeleteUser(ctx context.Context, githubID model.UserId) error
 	ListUsers(ctx context.Context) ([]model.User, error)
-
 }
 
 // Errors related to Project operations
@@ -71,8 +71,8 @@ type OrganizationStore interface {
 // It adapts the Handler logic for gRPC/protobuf
 // Add dependencies as in Handler
 type Server struct {
-	Store             ProjectStore     // Use local interface type
-	UserStore         UserStore        // Use local interface type
+	Store             ProjectStore      // Use local interface type
+	UserStore         UserStore         // Use local interface type
 	OrganizationStore OrganizationStore // Use local interface type
 	Logger            *slog.Logger
 	userHasRoleInRepo UserHasRoleInRepoFunc
@@ -383,6 +383,21 @@ func (s *Server) CreateOrganization(ctx context.Context, req *connect.Request[es
 	}
 	// TODO: Add further validation for orgName (e.g., length, characters) if needed
 
+	// Check if user is admin of the GitHub organization
+	isAdmin, err := s.userIsGitHubOrgAdmin(ctx, ghuser.Token, orgName, ghuser.Login)
+	if err != nil {
+		s.Logger.Error("failed to check GitHub org admin status", "org", orgName, "user", ghuser.Login, "error", err)
+		// Return a generic internal error to avoid leaking information about org existence/permissions
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to verify organization permissions"))
+	}
+	if !isAdmin {
+		s.Logger.Warn("user is not admin of GitHub organization", "org", orgName, "user", ghuser.Login)
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("user %s is not an admin of the GitHub organization %s", ghuser.Login, orgName))
+	}
+
+	// TODO: Check if the Esec GitHub App is installed on this organization.
+	// This might require app authentication.
+
 	// Use the provided name as the ID for the team org
 	orgID := orgName
 	ownerID := fmt.Sprintf("%d", ghuser.ID)
@@ -408,6 +423,67 @@ func (s *Server) CreateOrganization(ctx context.Context, req *connect.Request[es
 
 	pbOrg := modelToProtoOrg(newOrg)
 	return connect.NewResponse(&esecpb.CreateOrganizationResponse{Organization: pbOrg}), nil
+}
+
+// userIsGitHubOrgAdmin checks if a user has the 'admin' role in a GitHub organization.
+func (s *Server) userIsGitHubOrgAdmin(ctx context.Context, token, org, username string) (bool, error) {
+	// Input validation
+	if token == "" || org == "" || username == "" {
+		return false, fmt.Errorf("token, org, and username cannot be empty")
+	}
+
+	// Construct the API URL safely
+	apiURL := fmt.Sprintf("https://api.github.com/orgs/%s/memberships/%s", url.PathEscape(org), url.PathEscape(username))
+
+	// Create request
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to create GitHub API request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28") // Best practice
+
+	// Make the request
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("failed to call GitHub API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Handle common non-200 responses
+	if resp.StatusCode == http.StatusNotFound {
+		// Could be the org doesn't exist, or the user is not a member
+		s.Logger.Info("GitHub org membership check returned 404", "org", org, "user", username, "url", apiURL)
+		return false, nil // Not an admin if not found
+	}
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+		// Token invalid or lacks scope
+		s.Logger.Warn("GitHub org membership check returned forbidden/unauthorized", "status", resp.StatusCode, "org", org, "user", username)
+		return false, fmt.Errorf("github API access denied (status %d)", resp.StatusCode)
+	}
+	if resp.StatusCode != http.StatusOK {
+		// Other unexpected error
+		s.Logger.Error("GitHub org membership check returned unexpected status", "status", resp.StatusCode, "org", org, "user", username)
+		// Consider reading the body for more details if needed, but be careful about leaking info
+		return false, fmt.Errorf("github API returned unexpected status %d", resp.StatusCode)
+	}
+
+	// Decode the response
+	var membership struct {
+		State string `json:"state"` // "active", "pending"
+		Role  string `json:"role"`  // "admin", "member"
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&membership); err != nil {
+		return false, fmt.Errorf("failed to decode GitHub membership response: %w", err)
+	}
+
+	// Check if the user is an active admin
+	isAdmin := membership.State == "active" && membership.Role == "admin"
+	s.Logger.Debug("GitHub org membership check result", "org", org, "user", username, "state", membership.State, "role", membership.Role, "is_admin", isAdmin)
+	return isAdmin, nil
 }
 
 // ListOrganizations lists organizations accessible to the user (currently owned team orgs).
