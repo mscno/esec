@@ -13,7 +13,7 @@ import (
 	"github.com/mscno/esec/testutl"
 )
 
-func testServer(t *testing.T) int {
+func testServer(t *testing.T) (*server.Server, int) {
 	esecSvc := server.NewServer(
 		stores.NewInMemoryProjectStore(),
 		stores.NewInMemoryUserStore(),
@@ -40,5 +40,5 @@ func testServer(t *testing.T) int {
 		srv.Server.Close()
 	})
 
-	return port
+	return esecSvc, port
 }

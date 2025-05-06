@@ -268,6 +268,12 @@ func (s *Server) SetPerUserSecrets(ctx context.Context, request *connect.Request
 		}
 	}
 
+	// TODO Wrap in TX
+	err = s.Store.DeleteAllProjectUserSecrets(ctx, model.OrgRepo(orgRepo))
+	if err != nil {
+		s.Logger.Error("failed to delete all project user secrets", "orgRepo", orgRepo, "error", err)
+	}
+
 	for userId, userSecrets := range secrets {
 		err := s.Store.SetProjectUserSecrets(ctx, model.OrgRepo(orgRepo), userId, userSecrets)
 		if err != nil {
@@ -300,6 +306,10 @@ func (s *Server) GetPerUserSecrets(ctx context.Context, request *connect.Request
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to store per-user secrets: %w", err))
 	}
+	if len(secrets) == 0 {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no secrets stored for this project, or you dont have the required permissions to access this project"))
+	}
+
 	resp := &esecpb.GetPerUserSecretsResponse{Secrets: map[string]*esecpb.SecretMap{}}
 	for userID, secretMap := range secrets {
 		userSecrets := esecpb.SecretMap{

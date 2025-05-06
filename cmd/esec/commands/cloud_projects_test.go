@@ -16,7 +16,7 @@ import (
 )
 
 func TestProjects(t *testing.T) {
-	port := testServer(t)
+	_, port := testServer(t)
 	time.Sleep(time.Second * 1)
 
 	ctx := &cliCtx{
@@ -27,7 +27,7 @@ func TestProjects(t *testing.T) {
 		OSKeyring: oskeyring.NewMemoryService(),
 	}
 	cloudCmd := &CloudCmd{ServerURL: "http://localhost:" + strconv.Itoa(port), ProjectDir: t.TempDir()}
-	ctx.OSKeyring.Set(auth.ServiceName, auth.AccountName, "testtoken")
+	ctx.OSKeyring.Set(auth.ServiceName, auth.GithubToken, "testtoken")
 
 	cmd := ProjectsCreateCmd{"mscno/esec"}
 	err := cmd.Run(ctx, cloudCmd)
@@ -42,6 +42,6 @@ func TestProjects(t *testing.T) {
 
 	cmdInfo := ProjectsInfoCmd{"foo/bar"}
 	err = cmdInfo.Run(ctx, cloudCmd)
-	assert.NoError(t, err)
+	assert.Error(t, err)
 
 }

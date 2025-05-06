@@ -3,8 +3,10 @@ package auth
 import "context"
 
 const (
-	ServiceName = "esec-sync"
-	AccountName = "github_token"
+	ServiceName  = "esec-sync"
+	GithubToken  = "github_token"
+	GithubUserID = "github_user_id"
+	GithubLogin  = "github_login"
 )
 
 // Provider defines the interface for authentication providers.
@@ -13,7 +15,11 @@ type Provider interface {
 	Login(ctx context.Context) error
 	// GetToken retrieves the stored authentication token.
 	GetToken(ctx context.Context) (string, error)
-	// Logout removes the stored authentication token.
+	// GetUserID retrieves the stored GitHub User ID.
+	GetUserID(ctx context.Context) (string, error)
+	// GetGithubLogin retrieves the stored GitHub Login.
+	GetGithubLogin(ctx context.Context) (string, error)
+	// Logout removes the stored authentication token and user identifiers.
 	Logout(ctx context.Context) error
 }
 

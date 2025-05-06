@@ -30,17 +30,13 @@ type SyncPushCmd struct {
 type SyncPullCmd struct {
 }
 
-func (c *SyncPushCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
+func (c *SyncPushCmd) Run(ctx *cliCtx, cloud *CloudCmd) error {
 	keyringPath := path.Join(cloud.ProjectDir, ".esec-keyring")
 
 	// Read org/repo from .esec-project
 	orgRepo, err := projectfile.ReadProjectFile(cloud.ProjectDir)
 	if err != nil {
 		return fmt.Errorf("failed to read .esec-project: %w", err)
-	}
-	token, err := ctx.OSKeyring.Get(auth.ServiceName, auth.AccountName)
-	if err != nil {
-		return fmt.Errorf("failed to get service account token: %w", err)
 	}
 
 	// Setup client using the helper function
@@ -85,10 +81,12 @@ func (c *SyncPushCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	myKeypair := &crypto.Keypair{Private: privArr, Public: pubArr}
 
 	getSelf := func() (myGitHubID, pubHex string, err error) {
-		myGitHubID, err = getGitHubIDFromToken(token)
+		provider := auth.NewGithubProvider(auth.Config{}, ctx.OSKeyring) // Pass ctx.OSKeyring
+		myGitHubID, err = provider.GetUserID(ctx)                        // Use ctx directly
 		if err != nil {
-			return "", "", fmt.Errorf("could not determine your GitHub ID: %w", err)
+			return "", "", fmt.Errorf("failed to get github id from keyring: %w. Please login first with 'esec cloud auth login'", err)
 		}
+
 		pubHex, pubErr := ctx.OSKeyring.Get("esec", "public-key")
 		if pubErr != nil {
 			return "", "", fmt.Errorf("could not find your public key in the OS keyring. Please run 'esec auth generate-keypair' first.")
@@ -201,16 +199,12 @@ func getGitHubIDFromToken(token string) (string, error) {
 	return fmt.Sprintf("%d", user.ID), nil
 }
 
-func (c *SyncPullCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
+func (c *SyncPullCmd) Run(ctx *cliCtx, cloud *CloudCmd) error {
 	keyringPath := path.Join(cloud.ProjectDir, ".esec-keyring")
 	// Read org/repo from .esec-project
 	orgRepo, err := projectfile.ReadProjectFile(cloud.ProjectDir)
 	if err != nil {
 		return fmt.Errorf("failed to read .esec-project: %w", err)
-	}
-	token, err := ctx.OSKeyring.Get(auth.ServiceName, auth.AccountName)
-	if err != nil {
-		return fmt.Errorf("failed to get service account token: %w", err)
 	}
 	// Setup client using the helper function
 	connectClient, err := setupConnectClient(ctx, cloud)
@@ -226,14 +220,10 @@ func (c *SyncPullCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 	ctx.Logger.Debug("per-user secrets", "perUserPayload", perUserPayload)
 
 	// Load our own GitHub ID (from env or token)
-	myGitHubID := os.Getenv("ESEC_GITHUB_ID")
-	if myGitHubID == "" {
-		// Try to fetch from GitHub API using token
-		id, err := getGitHubIDFromToken(token)
-		if err != nil {
-			return fmt.Errorf("could not determine GitHub ID from token: %w", err)
-		}
-		myGitHubID = id
+	provider := auth.NewGithubProvider(auth.Config{}, ctx.OSKeyring) // Pass ctx.OSKeyring
+	myGitHubID, err := provider.GetUserID(ctx)                       // Use ctx directly
+	if err != nil {
+		return fmt.Errorf("failed to get github id from keyring: %w. Please login first with 'esec cloud auth login'", err)
 	}
 	// Load our private key from OS keyring using injected service
 	privHex, privErr := ctx.OSKeyring.Get("esec", "private-key")
@@ -260,14 +250,12 @@ func (c *SyncPullCmd) Run(ctx *cliCtx, parent *SyncCmd, cloud *CloudCmd) error {
 			ctx.Logger.Debug("Reading key", "keyName", keyName)
 			ciphertext, err := base64.StdEncoding.DecodeString(blob)
 			if err != nil {
-				fmt.Printf("Failed to decode ciphertext for %s: %v\n", keyName, err)
-				continue
+				return fmt.Errorf("Failed to decode ciphertext for %s: %v\n", keyName, err)
 			}
 			decrypter := myKeypair.Decrypter()
 			plaintext, err := decrypter.Decrypt(ciphertext)
 			if err != nil {
-				fmt.Printf("Failed to decrypt secret %s: %v\n", keyName, err)
-				continue
+				return fmt.Errorf("Failed to decrypt secret %s: %v\n", keyName, err)
 			}
 			newKeyring[keyName.String()] = string(plaintext)
 		}

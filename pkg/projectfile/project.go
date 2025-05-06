@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -29,6 +30,7 @@ func WriteProjectFile(dir string, orgRepo string) error {
 		return err
 	}
 	filePath := filepath.Join(dir, ProjectFileName)
+	slog.Debug("Writing project file", "filePath", filePath)
 	content := fmt.Sprintf("%s=%s\n", ProjectKey, orgRepo)
 	return os.WriteFile(filePath, []byte(content), 0644)
 }

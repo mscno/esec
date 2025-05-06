@@ -89,13 +89,20 @@ func (c *ShareCmd) Run(ctx *cliCtx, parent *CloudCmd) error {
 	}
 	var priv [32]byte
 	copy(priv[:], privBytes)
-	myKeypair := &crypto.Keypair{Private: priv}
+
 	newBlobs := map[string]string{}
 	for githubID, pubKey := range recipients {
 		if pubKey == "" {
 			// Already shared, skip
 			continue
 		}
+		var kp crypto.Keypair
+		err = kp.Generate()
+		if err != nil {
+			return err
+		}
+
+		// Create an encrypter using the public key extracted from the input data
 		var pubArr [32]byte
 		pubBytes, err := hex.DecodeString(pubKey)
 		if err != nil || len(pubBytes) != 32 {
@@ -103,7 +110,8 @@ func (c *ShareCmd) Run(ctx *cliCtx, parent *CloudCmd) error {
 			continue
 		}
 		copy(pubArr[:], pubBytes)
-		enc := myKeypair.Encrypter(pubArr)
+		enc := kp.Encrypter(pubArr)
+
 		ciphertext, err := enc.Encrypt([]byte(secret))
 		if err != nil {
 			fmt.Printf("Encryption failed for %s: %v\n", githubID, err)

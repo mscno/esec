@@ -36,9 +36,10 @@ func (c *ProjectsCreateCmd) Run(ctx *cliCtx, cloud *CloudCmd) error {
 		return fmt.Errorf("failed to create project: %w", err)
 	}
 	// Write the new project file after successful creation
-	if err := projectfile.WriteProjectFile(".", c.OrgRepo); err != nil {
+	if err := projectfile.WriteProjectFile(cloud.ProjectDir, c.OrgRepo); err != nil {
 		return fmt.Errorf("project created, but failed to write .esec-project file: %w", err)
 	}
+
 	fmt.Printf("Successfully created project '%s' on %s\n", c.OrgRepo, cloud.ServerURL)
 	return nil
 }

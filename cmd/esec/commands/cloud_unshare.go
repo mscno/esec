@@ -36,11 +36,14 @@ func (c *UnshareCmd) Run(ctx *cliCtx, parent *CloudCmd) error {
 		typedUser := client.UserId(user)
 		userBlobs, ok := perUserPayload[typedUser]
 		if ok {
-			delete(userBlobs, c.KeyName)
+			delete(perUserPayload[typedUser], c.KeyName)
 		} else {
 			return fmt.Errorf("no such key shared: %s", c.KeyName)
 		}
 		perUserPayload[typedUser] = userBlobs
+		//if len(userBlobs) == 0 {
+		//	delete(perUserPayload, typedUser)
+		//}
 	}
 	// Push updated sharing state
 	if err := connectClient.PushKeysPerUser(ctx, orgRepo, perUserPayload); err != nil {

@@ -2,12 +2,12 @@ package e2e
 
 import (
 	"context"
+	"github.com/mscno/esec/testutl"
 	"log/slog"
 	"testing"
 
 	"github.com/mscno/esec/server"
 	"github.com/mscno/esec/server/middleware"
-	"github.com/mscno/esec/server/model"
 	"github.com/stretchr/testify/require"
 
 	"connectrpc.com/connect"
@@ -16,25 +16,12 @@ import (
 	"github.com/mscno/esec/server/stores"
 )
 
-func mockUserHasRoleInRepo(token string, orgRepo model.OrgRepo, role string) bool {
-	if token == "testtoken" && orgRepo == "foo/bar" {
-		return true
-	}
-	return false
-}
-
-func mockTokenValidator(token string) (middleware.GithubUser, bool) {
-	if token == "testtoken" {
-		return middleware.GithubUser{Login: "testuser", ID: 42}, true
-	}
-	return middleware.GithubUser{}, false
-}
 func setupTestServer() *server.Server {
 	store := stores.NewInMemoryProjectStore()
 	userStore := stores.NewInMemoryUserStore()
 	orgStore := stores.NewInMemoryOrganizationStore()
 	logger := slog.Default()
-	return server.NewServer(store, userStore, orgStore, logger, mockUserHasRoleInRepo)
+	return server.NewServer(store, userStore, orgStore, logger, testutl.MockUserHasRoleInRepo)
 }
 
 func setUserInContext(ctx context.Context, user middleware.GithubUser) context.Context {
