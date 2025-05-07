@@ -50,7 +50,7 @@ jobs:
       run: gcloud info
 
     - name: Install ko
-      uses: ko-build/setup-ko@v0.8
+      uses: ko-build/setup-ko@v0.9
 
     - name: Build and Push Image
       run: |
