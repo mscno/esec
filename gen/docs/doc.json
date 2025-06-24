@@ -36,6 +36,90 @@
       "extensions": [],
       "messages": [
         {
+          "name": "CheckInstallationRequest",
+          "longName": "CheckInstallationRequest",
+          "fullName": "esec.CheckInstallationRequest",
+          "description": "Request to check GitHub App installation",
+          "hasExtensions": false,
+          "hasFields": true,
+          "hasOneofs": true,
+          "extensions": [],
+          "fields": [
+            {
+              "name": "organization_name",
+              "description": "",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": true,
+              "oneofdecl": "target",
+              "defaultValue": ""
+            },
+            {
+              "name": "repository_name",
+              "description": "Format: \"owner/repo\"",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": true,
+              "oneofdecl": "target",
+              "defaultValue": ""
+            }
+          ]
+        },
+        {
+          "name": "CheckInstallationResponse",
+          "longName": "CheckInstallationResponse",
+          "fullName": "esec.CheckInstallationResponse",
+          "description": "Response for checking GitHub App installation",
+          "hasExtensions": false,
+          "hasFields": true,
+          "hasOneofs": false,
+          "extensions": [],
+          "fields": [
+            {
+              "name": "installed",
+              "description": "",
+              "label": "",
+              "type": "bool",
+              "longType": "bool",
+              "fullType": "bool",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            },
+            {
+              "name": "installation_id",
+              "description": "The ID of the installation, if found",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            },
+            {
+              "name": "message",
+              "description": "Additional info, e.g., error message",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            }
+          ]
+        },
+        {
           "name": "CreateOrganizationRequest",
           "longName": "CreateOrganizationRequest",
           "fullName": "esec.CreateOrganizationRequest",
@@ -388,6 +472,66 @@
               "type": "string",
               "longType": "string",
               "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            }
+          ]
+        },
+        {
+          "name": "InitiateSessionRequest",
+          "longName": "InitiateSessionRequest",
+          "fullName": "esec.InitiateSessionRequest",
+          "description": "Request to initiate a session",
+          "hasExtensions": false,
+          "hasFields": true,
+          "hasOneofs": false,
+          "extensions": [],
+          "fields": [
+            {
+              "name": "github_user_token",
+              "description": "The token obtained from GitHub device flow",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            }
+          ]
+        },
+        {
+          "name": "InitiateSessionResponse",
+          "longName": "InitiateSessionResponse",
+          "fullName": "esec.InitiateSessionResponse",
+          "description": "Response for initiating a session",
+          "hasExtensions": false,
+          "hasFields": true,
+          "hasOneofs": false,
+          "extensions": [],
+          "fields": [
+            {
+              "name": "session_token",
+              "description": "The app-managed session token",
+              "label": "",
+              "type": "string",
+              "longType": "string",
+              "fullType": "string",
+              "ismap": false,
+              "isoneof": false,
+              "oneofdecl": "",
+              "defaultValue": ""
+            },
+            {
+              "name": "expires_at_unix",
+              "description": "Unix timestamp for session expiry",
+              "label": "",
+              "type": "int64",
+              "longType": "int64",
+              "fullType": "int64",
               "ismap": false,
               "isoneof": false,
               "oneofdecl": "",
@@ -1048,6 +1192,30 @@
               "responseType": "DeleteOrganizationResponse",
               "responseLongType": "DeleteOrganizationResponse",
               "responseFullType": "esec.DeleteOrganizationResponse",
+              "responseStreaming": false
+            },
+            {
+              "name": "InitiateSession",
+              "description": "Initiates a new app-managed session using a GitHub user token",
+              "requestType": "InitiateSessionRequest",
+              "requestLongType": "InitiateSessionRequest",
+              "requestFullType": "esec.InitiateSessionRequest",
+              "requestStreaming": false,
+              "responseType": "InitiateSessionResponse",
+              "responseLongType": "InitiateSessionResponse",
+              "responseFullType": "esec.InitiateSessionResponse",
+              "responseStreaming": false
+            },
+            {
+              "name": "CheckInstallation",
+              "description": "Checks if the GitHub App is installed on an org or repo",
+              "requestType": "CheckInstallationRequest",
+              "requestLongType": "CheckInstallationRequest",
+              "requestFullType": "esec.CheckInstallationRequest",
+              "requestStreaming": false,
+              "responseType": "CheckInstallationResponse",
+              "responseLongType": "CheckInstallationResponse",
+              "responseFullType": "esec.CheckInstallationResponse",
               "responseStreaming": false
             }
           ]

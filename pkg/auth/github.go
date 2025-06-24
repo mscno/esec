@@ -258,3 +258,20 @@ func (p *GithubProvider) Logout(ctx context.Context) error {
 
 // Ensure GithubProvider implements Provider interface
 var _ Provider = (*GithubProvider)(nil)
+
+// PerformDeviceFlow handles the GitHub device flow and returns the user token.
+func PerformDeviceFlow(ctx context.Context, oauthCfg *oauth2.Config) (string, error) {
+	deviceCode, err := oauthCfg.DeviceAuth(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to request device code: %w", err)
+	}
+
+	fmt.Printf("Please visit %s and enter the code: %s\n", deviceCode.VerificationURI, deviceCode.UserCode)
+	fmt.Println("Waiting for authentication to complete in your browser...")
+
+	token, err := oauthCfg.DeviceAccessToken(ctx, deviceCode)
+	if err != nil {
+		return "", fmt.Errorf("failed to get access token: %w", err)
+	}
+	return token.AccessToken, nil
+}

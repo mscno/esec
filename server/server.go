@@ -2,30 +2,28 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/go-github/v71/github"
 	"log/slog"
 	"net/http"
-	"net/url"
+	"strconv"
 	"strings"
 
 	"connectrpc.com/connect"
 	esecpb "github.com/mscno/esec/gen/proto/go/esec"
 	"github.com/mscno/esec/gen/proto/go/esec/esecpbconnect"
+	pkgSession "github.com/mscno/esec/pkg/session" // Alias to avoid conflict
 	"github.com/mscno/esec/server/middleware"
 	model "github.com/mscno/esec/server/model"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	// "github.com/google/uuid" // Removed UUID import
 )
 
 // --- Store Interface Definitions ---
-
-// Errors related to User operations
+// ... (Store interfaces remain the same) ...
 var ErrUserExists = errors.New("user already exists")
 var ErrUserNotFound = errors.New("user not found")
 
-// UserStore defines the interface for CRUD operations on Users.
 type UserStore interface {
 	CreateUser(ctx context.Context, user model.User) error
 	GetUser(ctx context.Context, githubID model.UserId) (*model.User, error)
@@ -34,11 +32,9 @@ type UserStore interface {
 	ListUsers(ctx context.Context) ([]model.User, error)
 }
 
-// Errors related to Project operations
 var ErrProjectExists = errors.New("project already exists")
 var ErrProjectNotFound = errors.New("project not found")
 
-// ProjectStore defines the interface for CRUD operations on Projects and their secrets.
 type ProjectStore interface {
 	CreateProject(ctx context.Context, project model.Project) error
 	GetProject(ctx context.Context, orgRepo model.OrgRepo) (model.Project, error)
@@ -52,10 +48,8 @@ type ProjectStore interface {
 	DeleteAllProjectUserSecrets(ctx context.Context, orgRepo model.OrgRepo) error
 }
 
-// Errors related to Organization operations
 var ErrOrganizationNotFound = errors.New("organization not found")
 
-// OrganizationStore defines the interface for CRUD operations on Organizations.
 type OrganizationStore interface {
 	CreateOrganization(ctx context.Context, org *model.Organization) error
 	GetOrganizationByID(ctx context.Context, id string) (*model.Organization, error)
@@ -66,42 +60,76 @@ type OrganizationStore interface {
 }
 
 // --- Server Implementation ---
-
-// Server implements esecpbconnect.EsecServiceHandler
-// It adapts the Handler logic for gRPC/protobuf
-// Add dependencies as in Handler
 type Server struct {
-	Store             ProjectStore      // Use local interface type
-	UserStore         UserStore         // Use local interface type
-	OrganizationStore OrganizationStore // Use local interface type
+	Store             ProjectStore
+	UserStore         UserStore
+	OrganizationStore OrganizationStore
 	Logger            *slog.Logger
-	userHasRoleInRepo UserHasRoleInRepoFunc
+	githubAppClient   *github.Client // For GitHub App authenticated calls
+	// userHasRoleInRepo UserHasRoleInRepoFunc // This will be replaced by internal logic using githubAppClient
 }
 
-type UserHasRoleInRepoFunc func(token string, orgRepo model.OrgRepo, role string) bool
+// UserHasRoleInRepoFunc is now an internal detail or a helper method.
+// type UserHasRoleInRepoFunc func(token string, orgRepo model.OrgRepo, role string) bool
 
-func NewServer(store ProjectStore, userStore UserStore, orgStore OrganizationStore, logger *slog.Logger, userHasRoleInRepo UserHasRoleInRepoFunc) *Server {
+func NewServer(store ProjectStore, userStore UserStore, orgStore OrganizationStore, logger *slog.Logger, ghAppClient *github.Client) *Server {
 	srv := &Server{
 		Store:             store,
 		UserStore:         userStore,
 		OrganizationStore: orgStore,
 		Logger:            logger,
-		userHasRoleInRepo: userHasRoleInRepo,
-	}
-	if userHasRoleInRepo == nil {
-		userHasRoleInRepo = srv.defaultUserHasRoleInRepo
+		githubAppClient:   ghAppClient,
 	}
 	return srv
 }
 
 var _ esecpbconnect.EsecServiceHandler = (*Server)(nil)
 
-func (s *Server) CreateProject(ctx context.Context, request *connect.Request[esecpb.CreateProjectRequest]) (*connect.Response[esecpb.CreateProjectResponse], error) {
-	ghuser, ok := ctx.Value("user").(middleware.GithubUser)
+// Helper to get authenticated user from context
+func getAuthenticatedUser(ctx context.Context) (middleware.AppSessionUser, error) {
+	user, ok := ctx.Value("user").(middleware.AppSessionUser)
 	if !ok {
-		slog.Error("user info missing from context")
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
+		return middleware.AppSessionUser{}, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("authentication required: user info missing from context or not AppSessionUser type"))
 	}
+	return user, nil
+}
+
+func (s *Server) InitiateSession(ctx context.Context, request *connect.Request[esecpb.InitiateSessionRequest]) (*connect.Response[esecpb.InitiateSessionResponse], error) {
+	githubUserToken := request.Msg.GetGithubUserToken()
+	if githubUserToken == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("GitHub user token is required"))
+	}
+
+	// Validate the GitHub user token (this logic was in middleware.ValidateGitHubToken)
+	ghLogin, ghID, err := middleware.GetUserInfo(githubUserToken) // Using the renamed GetUserInfo
+	if err != nil {
+		s.Logger.Warn("Failed to validate GitHub user token during session initiation", "error", err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("invalid GitHub user token: %w", err))
+	}
+	if ghLogin == "" || ghID == 0 {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("could not retrieve valid user info from GitHub token"))
+	}
+
+	// Generate app session token
+	sessionToken, expiresAt, err := pkgSession.GenerateToken(strconv.Itoa(ghID), ghLogin)
+	if err != nil {
+		s.Logger.Error("Failed to generate session token", "error", err, "github_login", ghLogin)
+		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to create session"))
+	}
+
+	s.Logger.Info("Session initiated successfully", "github_login", ghLogin, "github_id", ghID)
+	return connect.NewResponse(&esecpb.InitiateSessionResponse{
+		SessionToken:  sessionToken,
+		ExpiresAtUnix: expiresAt,
+	}), nil
+}
+
+func (s *Server) CreateProject(ctx context.Context, request *connect.Request[esecpb.CreateProjectRequest]) (*connect.Response[esecpb.CreateProjectResponse], error) {
+	appUser, err := getAuthenticatedUser(ctx)
+	if err != nil {
+		return nil, err // err is already a connect.Error
+	}
+
 	orgRepo := request.Msg.GetOrgRepo()
 	if orgRepo == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing org_repo"))
@@ -109,14 +137,15 @@ func (s *Server) CreateProject(ctx context.Context, request *connect.Request[ese
 	if err := validateOrgRepo(orgRepo); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid org_repo: %w", err))
 	}
-	creatorID := fmt.Sprintf("%d", ghuser.ID)
-	if creatorID == "" || creatorID == "0" {
-		s.Logger.Error("could not determine creator's github id")
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("could not determine creator's github id"))
-	}
 
-	if !s.userHasRoleInRepo(ghuser.Token, model.OrgRepo(orgRepo), "admin") {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("access to %s denied", request.Msg.OrgRepo))
+	// Permission check using GitHub App client
+	hasAccess, checkErr := s.userHasRoleInRepo(ctx, model.OrgRepo(orgRepo), "admin", appUser.GithubLogin)
+	if checkErr != nil {
+		s.Logger.Error("Error checking repository role", "orgRepo", orgRepo, "user", appUser.GithubLogin, "error", checkErr)
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("failed to verify repository permissions for %s on %s", appUser.GithubLogin, orgRepo))
+	}
+	if !hasAccess {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("user %s does not have admin role in %s", appUser.GithubLogin, orgRepo))
 	}
 
 	project := model.Project{
@@ -136,36 +165,33 @@ func (s *Server) CreateProject(ctx context.Context, request *connect.Request[ese
 }
 
 func (s *Server) RegisterUser(ctx context.Context, request *connect.Request[esecpb.RegisterUserRequest]) (*connect.Response[esecpb.RegisterUserResponse], error) {
-	ghuser, ok := ctx.Value("user").(middleware.GithubUser)
-	if !ok {
-		slog.Error("user info missing from context")
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
+	appUser, err := getAuthenticatedUser(ctx)
+	if err != nil {
+		return nil, err
 	}
+
 	user := model.User{
-		GitHubID:  model.UserId(fmt.Sprintf("%d", ghuser.ID)),
-		Username:  ghuser.Login,
+		GitHubID:  model.UserId(appUser.GithubUserID), // Use ID from session
+		Username:  appUser.GithubLogin,                // Use Login from session
 		PublicKey: request.Msg.GetPublicKey(),
 	}
 	if user.GitHubID == "" || user.Username == "" || user.PublicKey == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing user fields"))
 	}
 
-	// Attempt to upsert the user
 	created := false
-	existingUser, err := s.UserStore.GetUser(ctx, user.GitHubID) // Assign to existingUser
+	existingUser, err := s.UserStore.GetUser(ctx, user.GitHubID)
 	if err != nil {
-		if !errors.Is(err, ErrUserNotFound) { // Use local error
+		if !errors.Is(err, ErrUserNotFound) {
 			s.Logger.Error("failed to check existing user", "github_id", user.GitHubID, "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check user existence: %w", err))
 		}
-		// User not found, create them
 		if err := s.UserStore.CreateUser(ctx, user); err != nil {
 			s.Logger.Error("failed to register user", "github_id", user.GitHubID, "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to register user: %w", err))
 		}
 		created = true
-	} else { // Use existingUser here
-		// User found, update if public key differs
+	} else {
 		if existingUser.PublicKey != user.PublicKey {
 			s.Logger.Info("updating user public key", "github_id", user.GitHubID)
 			err = s.UserStore.UpdateUser(ctx, user.GitHubID, func(u model.User) (model.User, error) {
@@ -179,27 +205,24 @@ func (s *Server) RegisterUser(ctx context.Context, request *connect.Request[esec
 		}
 	}
 
-	// After user upsert, ensure personal organization exists
-	personalOrgName := user.Username // Restore definition
-	personalOrgID := user.Username   // Restore definition
+	personalOrgName := user.Username
+	personalOrgID := user.Username // For personal orgs, ID is often the username
 	_, err = s.OrganizationStore.GetOrganizationByID(ctx, personalOrgID)
 	if err != nil {
-		if errors.Is(err, ErrOrganizationNotFound) { // Use local error
+		if errors.Is(err, ErrOrganizationNotFound) {
 			s.Logger.Info("personal organization not found, creating...", "org_id", personalOrgID, "owner_github_id", user.GitHubID)
-			personalOrg := &model.Organization{ // Restore definition
+			personalOrg := &model.Organization{
 				ID:            personalOrgID,
 				Name:          personalOrgName,
 				OwnerGithubID: string(user.GitHubID),
 				Type:          model.OrganizationTypePersonal,
 			}
 			if err := s.OrganizationStore.CreateOrganization(ctx, personalOrg); err != nil {
-				// Log error but don't fail the user registration
 				s.Logger.Error("failed to create personal organization", "org_id", personalOrgID, "error", err)
 			} else {
 				s.Logger.Info("created personal organization", "org_id", personalOrgID)
 			}
 		} else {
-			// Log error fetching org but don't fail the user registration
 			s.Logger.Error("failed to check for personal organization", "org_id", personalOrgID, "error", err)
 		}
 	}
@@ -214,13 +237,20 @@ func (s *Server) RegisterUser(ctx context.Context, request *connect.Request[esec
 }
 
 func (s *Server) GetUserPublicKey(ctx context.Context, request *connect.Request[esecpb.GetUserPublicKeyRequest]) (*connect.Response[esecpb.GetUserPublicKeyResponse], error) {
+	// This endpoint might be called by users to get other users' keys.
+	// The calling user must be authenticated via app session.
+	_, err := getAuthenticatedUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	githubID := request.Msg.GetGithubId()
 	if githubID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing github_id"))
 	}
 	user, err := s.UserStore.GetUser(ctx, model.UserId(githubID))
 	if err != nil {
-		if errors.Is(err, ErrUserNotFound) { // Use local error
+		if errors.Is(err, ErrUserNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("user not found"))
 		}
 		s.Logger.Error("failed to get user", "github_id", githubID, "error", err)
@@ -234,51 +264,58 @@ func (s *Server) GetUserPublicKey(ctx context.Context, request *connect.Request[
 }
 
 func (s *Server) SetPerUserSecrets(ctx context.Context, request *connect.Request[esecpb.SetPerUserSecretsRequest]) (*connect.Response[esecpb.SetPerUserSecretsResponse], error) {
-	ghuser, ok := ctx.Value("user").(middleware.GithubUser)
-	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
+	appUser, err := getAuthenticatedUser(ctx)
+	if err != nil {
+		return nil, err
 	}
-	orgRepo := request.Msg.GetOrgRepo()
-	if orgRepo == "" {
+
+	orgRepoStr := request.Msg.GetOrgRepo()
+	if orgRepoStr == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing org_repo"))
 	}
-	if err := validateOrgRepo(orgRepo); err != nil {
+	if err := validateOrgRepo(orgRepoStr); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid org_repo: %w", err))
 	}
-	_, err := s.Store.GetProject(ctx, model.OrgRepo(orgRepo))
+	orgRepo := model.OrgRepo(orgRepoStr)
+
+	_, err = s.Store.GetProject(ctx, orgRepo)
 	if err != nil {
 		s.Logger.Error("project not found", "orgRepo", orgRepo, "error", err)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found: %w", err))
 	}
 
-	if !s.userHasRoleInRepo(ghuser.Token, model.OrgRepo(orgRepo), "admin") {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("only project admins may share secrets for this project"))
+	// Permission check
+	hasAccess, checkErr := s.userHasRoleInRepo(ctx, orgRepo, "admin", appUser.GithubLogin)
+	if checkErr != nil {
+		s.Logger.Error("Error checking repository role for SetPerUserSecrets", "orgRepo", orgRepo, "user", appUser.GithubLogin, "error", checkErr)
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("failed to verify repository permissions"))
+	}
+	if !hasAccess {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("user %s is not admin of project %s", appUser.GithubLogin, orgRepo))
 	}
 
 	secrets := make(map[model.UserId]map[model.PrivateKeyName]string)
-	for userId, secretMap := range request.Msg.GetSecrets() {
-		userIdTyped := model.UserId(userId)
-		for key, ciphertext := range secretMap.GetSecrets() {
+	for userIdStr, secretMapProto := range request.Msg.GetSecrets() {
+		userIdTyped := model.UserId(userIdStr)
+		secrets[userIdTyped] = make(map[model.PrivateKeyName]string)
+		for key, ciphertext := range secretMapProto.GetSecrets() {
 			keyTyped := model.PrivateKeyName(key)
-			if _, ok := secrets[userIdTyped][keyTyped]; ok {
-				secrets[userIdTyped][keyTyped] = ciphertext
-			} else {
-				secrets[userIdTyped] = make(map[model.PrivateKeyName]string)
-				secrets[userIdTyped][keyTyped] = ciphertext
-			}
+			secrets[userIdTyped][keyTyped] = ciphertext
 		}
 	}
 
-	// TODO Wrap in TX
-	err = s.Store.DeleteAllProjectUserSecrets(ctx, model.OrgRepo(orgRepo))
+	// TODO Wrap in TX if store supports it
+	err = s.Store.DeleteAllProjectUserSecrets(ctx, orgRepo)
 	if err != nil {
 		s.Logger.Error("failed to delete all project user secrets", "orgRepo", orgRepo, "error", err)
+		// Continue, as SetProjectUserSecrets will overwrite or create
 	}
 
 	for userId, userSecrets := range secrets {
-		err := s.Store.SetProjectUserSecrets(ctx, model.OrgRepo(orgRepo), userId, userSecrets)
+		err := s.Store.SetProjectUserSecrets(ctx, orgRepo, userId, userSecrets)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to set project user secrets: %w", err))
+			s.Logger.Error("failed to set project user secrets for user", "orgRepo", orgRepo, "userID", userId, "error", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to set project user secrets for %s: %w", userId, err))
 		}
 	}
 
@@ -286,145 +323,173 @@ func (s *Server) SetPerUserSecrets(ctx context.Context, request *connect.Request
 }
 
 func (s *Server) GetPerUserSecrets(ctx context.Context, request *connect.Request[esecpb.GetPerUserSecretsRequest]) (*connect.Response[esecpb.GetPerUserSecretsResponse], error) {
-	_, ok := ctx.Value("user").(middleware.GithubUser)
-	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
-	}
-	orgRepo := request.Msg.GetOrgRepo()
-	if orgRepo == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing org_repo"))
-	}
-	if err := validateOrgRepo(orgRepo); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid org_repo: %w", err))
+	appUser, err := getAuthenticatedUser(ctx) // Ensure caller is authenticated
+	if err != nil {
+		return nil, err
 	}
 
-	_, err := s.Store.GetProject(ctx, model.OrgRepo(orgRepo))
+	orgRepoStr := request.Msg.GetOrgRepo()
+	if orgRepoStr == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing org_repo"))
+	}
+	if err := validateOrgRepo(orgRepoStr); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid org_repo: %w", err))
+	}
+	orgRepo := model.OrgRepo(orgRepoStr)
+
+	_, err = s.Store.GetProject(ctx, orgRepo)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found: %w", err))
 	}
 
-	secrets, err := s.Store.GetAllProjectUserSecrets(ctx, model.OrgRepo(orgRepo))
+	// Permission check: User needs at least read access to the repo to pull secrets for themselves.
+	// The current implementation of PullKeysPerUser in CLI implies user pulls their own secrets.
+	// If this method is to allow admins to pull all, permission model needs refinement.
+	// For now, assume user is pulling for themselves, so they need to be part of the project.
+	// A simple check: are there any secrets for this user in this project?
+	// A more robust check would be `userHasRoleInRepo(ctx, orgRepo, "read", appUser.GithubLogin)`
+	// Let's assume the secrets store handles filtering by user for now.
+
+	secrets, err := s.Store.GetAllProjectUserSecrets(ctx, orgRepo)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to store per-user secrets: %w", err))
-	}
-	if len(secrets) == 0 {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no secrets stored for this project, or you dont have the required permissions to access this project"))
+		s.Logger.Error("failed to get all project user secrets", "orgRepo", orgRepo, "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get per-user secrets: %w", err))
 	}
 
-	resp := &esecpb.GetPerUserSecretsResponse{Secrets: map[string]*esecpb.SecretMap{}}
-	for userID, secretMap := range secrets {
-		userSecrets := esecpb.SecretMap{
-			Secrets: make(map[string]string, len(secrets)),
+	// Filter secrets: only return secrets for the currently authenticated user (appUser)
+	// unless the user is an admin of the project (then return all).
+	// This logic is for the server to decide what to return based on caller's permissions.
+	userIsAdmin, _ := s.userHasRoleInRepo(ctx, orgRepo, "admin", appUser.GithubLogin)
+
+	respSecrets := make(map[string]*esecpb.SecretMap)
+	if userIsAdmin {
+		for userID, secretMap := range secrets {
+			pbSecretMap := &esecpb.SecretMap{Secrets: make(map[string]string)}
+			for key, cipher := range secretMap {
+				pbSecretMap.Secrets[string(key)] = cipher
+			}
+			respSecrets[string(userID)] = pbSecretMap
 		}
-		for key, cipher := range secretMap {
-			userSecrets.Secrets[string(key)] = cipher
+	} else {
+		// Regular user: only return their own secrets
+		if userSecrets, ok := secrets[model.UserId(appUser.GithubUserID)]; ok {
+			pbSecretMap := &esecpb.SecretMap{Secrets: make(map[string]string)}
+			for key, cipher := range userSecrets {
+				pbSecretMap.Secrets[string(key)] = cipher
+			}
+			respSecrets[appUser.GithubUserID] = pbSecretMap
+		} else {
+			// No secrets for this user, or user not part of project sharing
+			s.Logger.Info("No secrets found for user in project or user lacks permissions", "user", appUser.GithubLogin, "project", orgRepo)
+			// Return empty map, not an error, if user is valid but has no secrets shared.
+			// If they shouldn't even know the project exists, GetProject would have failed earlier.
 		}
-		resp.Secrets[string(userID)] = &userSecrets
 	}
-	return connect.NewResponse(resp), nil
+
+	if len(respSecrets) == 0 {
+		s.Logger.Info("No secrets to return for user or project", "user", appUser.GithubLogin, "project", orgRepo)
+		// It's not an error to have no secrets.
+	}
+
+	return connect.NewResponse(&esecpb.GetPerUserSecretsResponse{Secrets: respSecrets}), nil
 }
 
-func contains(s []string, str string) bool {
-	for _, v := range s {
-		if v == str {
-			return true
+// userHasRoleInRepo checks if the given GitHub user login has a specific role in the org/repo.
+// Uses the server's GitHub App client.
+func (s *Server) userHasRoleInRepo(ctx context.Context, orgRepo model.OrgRepo, role string, userLogin string) (bool, error) {
+	if s.githubAppClient == nil {
+		s.Logger.Error("GitHub App client is not initialized. Cannot check repository role.")
+		return false, errors.New("github app client not available")
+	}
+	if userLogin == "" || orgRepo == "" || role == "" {
+		return false, errors.New("userLogin, orgRepo, and role cannot be empty")
+	}
+
+	parts := strings.Split(string(orgRepo), "/")
+	if len(parts) != 2 {
+		return false, fmt.Errorf("invalid orgRepo format: %s", orgRepo)
+	}
+	orgName := parts[0]
+	repoName := parts[1]
+
+	// GitHub API to get repository permissions for a user
+	// GET /repos/{owner}/{repo}/collaborators/{username}/permission
+	permission, resp, err := s.githubAppClient.Repositories.GetPermissionLevel(ctx, orgName, repoName, userLogin)
+	if err != nil {
+		if resp != nil && (resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden) {
+			s.Logger.Warn("User not a collaborator or repo not found/accessible by app", "org", orgName, "repo", repoName, "user", userLogin, "status", resp.StatusCode)
+			return false, nil // Not an error, just no permission or not found
 		}
-	}
-	return false
-}
-
-// userHasRoleInRepo checks if the given GitHub token has a role in the given org/repo.
-func (s *Server) defaultUserHasRoleInRepo(token string, orgRepo model.OrgRepo, role string) bool {
-	if token == "" || orgRepo == "" || role == "" {
-		return false
+		s.Logger.Error("Error getting repository permission level from GitHub", "org", orgName, "repo", repoName, "user", userLogin, "error", err)
+		return false, fmt.Errorf("failed to get permission level for %s on %s/%s: %w", userLogin, orgName, repoName, err)
 	}
 
-	githubAPIURL := fmt.Sprintf("https://api.github.com/repos/%s", orgRepo)
-	req, err := http.NewRequest("GET", githubAPIURL, nil)
-	if err != nil {
-		return false
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	s.Logger.Debug("checking github api", "url", githubAPIURL, "token", token, "orgRepo", orgRepo, "role", role)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
+	s.Logger.Debug("GitHub permission level check", "user", userLogin, "repo", orgRepo, "permission", permission.GetPermission(), "role_required", role)
 
-	if resp.StatusCode == http.StatusNotFound {
-		slog.Warn("repo not found", "orgRepo", orgRepo)
-		return false
+	// Map GitHub's permission strings ("admin", "write", "read", "none") to our roles
+	// This might need adjustment based on how specific your roles are.
+	// For "admin" role:
+	if role == "admin" {
+		return permission.GetPermission() == "admin", nil
 	}
-
-	if resp.StatusCode == http.StatusForbidden {
-		slog.Warn("access to repo denied", "orgRepo", orgRepo)
-		return false
+	// For "write" role:
+	if role == "write" {
+		return permission.GetPermission() == "admin" || permission.GetPermission() == "write", nil
+	}
+	// For "read" role:
+	if role == "read" {
+		p := permission.GetPermission()
+		return p == "admin" || p == "write" || p == "read", nil
 	}
 
-	var ghResp struct {
-		Permissions struct {
-			Admin bool `json:"admin"`
-		} `json:"permissions"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&ghResp); err != nil {
-		return false
-	}
-
-	switch role {
-	case "admin":
-		return ghResp.Permissions.Admin
-	case "read":
-		return resp.StatusCode == http.StatusOK
-	default:
-		return false
-	}
+	return false, fmt.Errorf("unknown role: %s", role)
 }
 
 // CreateOrganization handles the creation of a new TEAM organization.
 func (s *Server) CreateOrganization(ctx context.Context, req *connect.Request[esecpb.CreateOrganizationRequest]) (*connect.Response[esecpb.CreateOrganizationResponse], error) {
-	ghuser, ok := ctx.Value("user").(middleware.GithubUser)
-	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
+	appUser, err := getAuthenticatedUser(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	orgName := req.Msg.GetName()
 	if orgName == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing organization name"))
 	}
-	// TODO: Add further validation for orgName (e.g., length, characters) if needed
 
-	// Check if user is admin of the GitHub organization
-	isAdmin, err := s.userIsGitHubOrgAdmin(ctx, ghuser.Token, orgName, ghuser.Login)
-	if err != nil {
-		s.Logger.Error("failed to check GitHub org admin status", "org", orgName, "user", ghuser.Login, "error", err)
-		// Return a generic internal error to avoid leaking information about org existence/permissions
+	isAdmin, checkErr := s.userIsGitHubOrgAdmin(ctx, orgName, appUser.GithubLogin)
+	if checkErr != nil {
+		s.Logger.Error("failed to check GitHub org admin status", "org", orgName, "user", appUser.GithubLogin, "error", checkErr)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to verify organization permissions"))
 	}
 	if !isAdmin {
-		s.Logger.Warn("user is not admin of GitHub organization", "org", orgName, "user", ghuser.Login)
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("user %s is not an admin of the GitHub organization %s", ghuser.Login, orgName))
+		s.Logger.Warn("user is not admin of GitHub organization", "org", orgName, "user", appUser.GithubLogin)
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("user %s is not an admin of the GitHub organization %s", appUser.GithubLogin, orgName))
 	}
 
-	// TODO: Check if the Esec GitHub App is installed on this organization.
-	// This might require app authentication.
+	// Check if the esec GitHub App is installed on this organization.
+	installed, _, checkErr := s.isAppInstalledOnOrg(ctx, orgName)
+	if checkErr != nil {
+		s.Logger.Error("Failed to check GitHub App installation status for organization", "org", orgName, "error", checkErr)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("could not verify app installation status for organization %s", orgName))
+	}
+	if !installed {
+		s.Logger.Warn("esec GitHub App is not installed on organization", "org", orgName)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("esec GitHub App must be installed on organization %s to create a team", orgName))
+	}
 
-	// Use the provided name as the ID for the team org
-	orgID := orgName
-	ownerID := fmt.Sprintf("%d", ghuser.ID)
+	orgID := orgName // Use GitHub org name as the ID for team orgs
+	ownerID := appUser.GithubUserID
 
 	newOrg := &model.Organization{
-		ID:            orgID, // Use Name as ID
+		ID:            orgID,
 		Name:          orgName,
 		OwnerGithubID: ownerID,
-		Type:          model.OrganizationTypeTeam, // Explicitly set type to team
+		Type:          model.OrganizationTypeTeam,
 	}
 
 	if err := s.OrganizationStore.CreateOrganization(ctx, newOrg); err != nil {
-		// Check for specific errors like ID/name conflict
-		if strings.Contains(err.Error(), "already exists") { // Basic check, might need refinement
-			// Distinguish between ID and Name conflict if possible from store error
+		if strings.Contains(err.Error(), "already exists") {
 			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("organization with ID or name '%s' already exists", orgName))
 		}
 		s.Logger.Error("failed to create organization", "name", orgName, "error", err)
@@ -432,79 +497,43 @@ func (s *Server) CreateOrganization(ctx context.Context, req *connect.Request[es
 	}
 
 	s.Logger.Info("created team organization", "org_id", orgID, "name", orgName, "owner_id", ownerID)
-
 	pbOrg := modelToProtoOrg(newOrg)
 	return connect.NewResponse(&esecpb.CreateOrganizationResponse{Organization: pbOrg}), nil
 }
 
-// userIsGitHubOrgAdmin checks if a user has the 'admin' role in a GitHub organization.
-func (s *Server) userIsGitHubOrgAdmin(ctx context.Context, token, org, username string) (bool, error) {
-	// Input validation
-	if token == "" || org == "" || username == "" {
-		return false, fmt.Errorf("token, org, and username cannot be empty")
+// userIsGitHubOrgAdmin checks if a user has the 'admin' role in a GitHub organization using the app client.
+func (s *Server) userIsGitHubOrgAdmin(ctx context.Context, orgName string, userLogin string) (bool, error) {
+	if s.githubAppClient == nil {
+		s.Logger.Error("GitHub App client is not initialized. Cannot check org admin status.")
+		return false, errors.New("github app client not available")
+	}
+	if orgName == "" || userLogin == "" {
+		return false, errors.New("orgName and userLogin cannot be empty")
 	}
 
-	// Construct the API URL safely
-	apiURL := fmt.Sprintf("https://api.github.com/orgs/%s/memberships/%s", url.PathEscape(org), url.PathEscape(username))
-
-	// Create request
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	membership, resp, err := s.githubAppClient.Organizations.GetOrgMembership(ctx, userLogin, orgName)
 	if err != nil {
-		return false, fmt.Errorf("failed to create GitHub API request: %w", err)
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			s.Logger.Info("User not a member of org, or org not found/accessible by app", "org", orgName, "user", userLogin)
+			return false, nil // Not an admin if not a member or org not found
+		}
+		s.Logger.Error("Error getting organization membership from GitHub", "org", orgName, "user", userLogin, "error", err)
+		return false, fmt.Errorf("failed to get org membership for %s in %s: %w", userLogin, orgName, err)
 	}
 
-	// Set headers
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28") // Best practice
-
-	// Make the request
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return false, fmt.Errorf("failed to call GitHub API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Handle common non-200 responses
-	if resp.StatusCode == http.StatusNotFound {
-		// Could be the org doesn't exist, or the user is not a member
-		s.Logger.Info("GitHub org membership check returned 404", "org", org, "user", username, "url", apiURL)
-		return false, nil // Not an admin if not found
-	}
-	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
-		// Token invalid or lacks scope
-		s.Logger.Warn("GitHub org membership check returned forbidden/unauthorized", "status", resp.StatusCode, "org", org, "user", username)
-		return false, fmt.Errorf("github API access denied (status %d)", resp.StatusCode)
-	}
-	if resp.StatusCode != http.StatusOK {
-		// Other unexpected error
-		s.Logger.Error("GitHub org membership check returned unexpected status", "status", resp.StatusCode, "org", org, "user", username)
-		// Consider reading the body for more details if needed, but be careful about leaking info
-		return false, fmt.Errorf("github API returned unexpected status %d", resp.StatusCode)
-	}
-
-	// Decode the response
-	var membership struct {
-		State string `json:"state"` // "active", "pending"
-		Role  string `json:"role"`  // "admin", "member"
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&membership); err != nil {
-		return false, fmt.Errorf("failed to decode GitHub membership response: %w", err)
-	}
-
-	// Check if the user is an active admin
-	isAdmin := membership.State == "active" && membership.Role == "admin"
-	s.Logger.Debug("GitHub org membership check result", "org", org, "user", username, "state", membership.State, "role", membership.Role, "is_admin", isAdmin)
+	isAdmin := membership.GetState() == "active" && membership.GetRole() == "admin"
+	s.Logger.Debug("GitHub org membership check result", "org", orgName, "user", userLogin, "state", membership.GetState(), "role", membership.GetRole(), "is_admin", isAdmin)
 	return isAdmin, nil
 }
 
-// ListOrganizations lists organizations accessible to the user (currently owned team orgs).
+// ListOrganizations, GetOrganization, DeleteOrganization need to use appUser from getAuthenticatedUser
+// ... (Implementations for List, Get, Delete Organization similar to above, using appUser) ...
 func (s *Server) ListOrganizations(ctx context.Context, req *connect.Request[esecpb.ListOrganizationsRequest]) (*connect.Response[esecpb.ListOrganizationsResponse], error) {
-	ghuser, ok := ctx.Value("user").(middleware.GithubUser)
-	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
+	appUser, err := getAuthenticatedUser(ctx)
+	if err != nil {
+		return nil, err
 	}
-	ownerID := fmt.Sprintf("%d", ghuser.ID)
+	ownerID := appUser.GithubUserID
 
 	allOrgs, err := s.OrganizationStore.ListOrganizations(ctx)
 	if err != nil {
@@ -514,23 +543,22 @@ func (s *Server) ListOrganizations(ctx context.Context, req *connect.Request[ese
 
 	pbOrgs := make([]*esecpb.Organization, 0)
 	for _, org := range allOrgs {
-		// Filter: Only show orgs owned by the requesting user
-		// TODO: Add logic later to show orgs the user is a member of
-		if org.OwnerGithubID == ownerID {
+		if org.OwnerGithubID == ownerID || org.Type == model.OrganizationTypePersonal && org.ID == appUser.GithubLogin { // Personal orgs are identified by login
 			pbOrgs = append(pbOrgs, modelToProtoOrg(org))
 		}
+		// TODO: Add logic to list team orgs where the user is a member (not just owner)
+		// This would require checking GitHub team memberships via the app.
 	}
 
 	return connect.NewResponse(&esecpb.ListOrganizationsResponse{Organizations: pbOrgs}), nil
 }
 
-// GetOrganization retrieves a specific organization by ID, checking ownership.
 func (s *Server) GetOrganization(ctx context.Context, req *connect.Request[esecpb.GetOrganizationRequest]) (*connect.Response[esecpb.GetOrganizationResponse], error) {
-	ghuser, ok := ctx.Value("user").(middleware.GithubUser)
-	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
+	appUser, err := getAuthenticatedUser(ctx)
+	if err != nil {
+		return nil, err
 	}
-	ownerID := fmt.Sprintf("%d", ghuser.ID)
+
 	orgID := req.Msg.GetId()
 	if orgID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing organization ID"))
@@ -545,47 +573,57 @@ func (s *Server) GetOrganization(ctx context.Context, req *connect.Request[esecp
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get organization: %w", err))
 	}
 
-	// Permission Check: Only owner can get (for now)
-	// TODO: Add member check later
-	if org.OwnerGithubID != ownerID {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("permission denied to view organization"))
+	// Permission Check: Owner or member (for team orgs).
+	// Personal orgs are identified by login matching ID.
+	canAccess := false
+	if org.Type == model.OrganizationTypePersonal && org.ID == appUser.GithubLogin {
+		canAccess = true
+	} else if org.Type == model.OrganizationTypeTeam {
+		if org.OwnerGithubID == appUser.GithubUserID {
+			canAccess = true
+		} else {
+			// TODO: Check if appUser is a member of the GitHub org `org.Name`
+			// isMember, _ := s.userIsGitHubOrgMember(ctx, org.Name, appUser.GithubLogin)
+			// if isMember { canAccess = true }
+			s.Logger.Warn("Membership check for team org not yet implemented for GetOrganization", "org", org.Name, "user", appUser.GithubLogin)
+		}
+	}
+
+	if !canAccess {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("permission denied to view organization %s", orgID))
 	}
 
 	pbOrg := modelToProtoOrg(org)
 	return connect.NewResponse(&esecpb.GetOrganizationResponse{Organization: pbOrg}), nil
 }
 
-// DeleteOrganization deletes a TEAM organization by ID, checking ownership.
 func (s *Server) DeleteOrganization(ctx context.Context, req *connect.Request[esecpb.DeleteOrganizationRequest]) (*connect.Response[esecpb.DeleteOrganizationResponse], error) {
-	ghuser, ok := ctx.Value("user").(middleware.GithubUser)
-	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user info missing from context"))
+	appUser, err := getAuthenticatedUser(ctx)
+	if err != nil {
+		return nil, err
 	}
-	ownerID := fmt.Sprintf("%d", ghuser.ID)
+	ownerID := appUser.GithubUserID
 	orgID := req.Msg.GetId()
 	if orgID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("missing organization ID"))
 	}
 
-	// Fetch first to check ownership and type
 	org, err := s.OrganizationStore.GetOrganizationByID(ctx, orgID)
 	if err != nil {
 		if errors.Is(err, ErrOrganizationNotFound) {
-			// Deleting non-existent is okay, return success
 			return connect.NewResponse(&esecpb.DeleteOrganizationResponse{Status: "organization not found or already deleted"}), nil
 		}
 		s.Logger.Error("failed to get organization before delete", "org_id", orgID, "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get organization: %w", err))
 	}
 
-	// Permission Check: Only owner can delete
-	if org.OwnerGithubID != ownerID {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("permission denied to delete organization"))
-	}
-
-	// Type Check: Cannot delete personal organizations
 	if org.Type == model.OrganizationTypePersonal {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("cannot delete personal organizations"))
+	}
+
+	// Only owner of the esec team record can delete it.
+	if org.OwnerGithubID != ownerID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("permission denied: only the creator of the team record can delete it"))
 	}
 
 	if err := s.OrganizationStore.DeleteOrganization(ctx, orgID); err != nil {
@@ -593,12 +631,12 @@ func (s *Server) DeleteOrganization(ctx context.Context, req *connect.Request[es
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete organization: %w", err))
 	}
 
-	s.Logger.Info("deleted team organization", "org_id", orgID, "name", org.Name, "owner_id", ownerID)
+	s.Logger.Info("deleted team organization", "org_id", orgID, "name", org.Name, "deleter_id", ownerID)
 	return connect.NewResponse(&esecpb.DeleteOrganizationResponse{Status: "organization deleted"}), nil
 }
 
-// modelToProtoOrg converts the internal model to the protobuf message.
 func modelToProtoOrg(org *model.Organization) *esecpb.Organization {
+	// ... (modelToProtoOrg remains the same) ...
 	if org == nil {
 		return nil
 	}
@@ -618,4 +656,86 @@ func modelToProtoOrg(org *model.Organization) *esecpb.Organization {
 		CreatedAt:     timestamppb.New(org.CreatedAt),
 		UpdatedAt:     timestamppb.New(org.UpdatedAt),
 	}
+}
+
+// --- GitHub App Installation Check ---
+
+func (s *Server) isAppInstalledOnOrg(ctx context.Context, orgName string) (bool, string, error) {
+	if s.githubAppClient == nil {
+		return false, "", errors.New("github app client not configured")
+	}
+	installation, resp, err := s.githubAppClient.Apps.FindOrganizationInstallation(ctx, orgName)
+	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return false, "", nil // Not installed
+		}
+		return false, "", fmt.Errorf("failed to get org installation: %w", err)
+	}
+	return true, strconv.FormatInt(installation.GetID(), 10), nil
+}
+
+func (s *Server) isAppInstalledOnRepo(ctx context.Context, owner, repo string) (bool, string, error) {
+	if s.githubAppClient == nil {
+		return false, "", errors.New("github app client not configured")
+	}
+	installation, resp, err := s.githubAppClient.Apps.FindRepositoryInstallation(ctx, owner, repo)
+	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return false, "", nil // Not installed
+		}
+		return false, "", fmt.Errorf("failed to get repo installation: %w", err)
+	}
+	return true, strconv.FormatInt(installation.GetID(), 10), nil
+}
+
+func (s *Server) CheckInstallation(ctx context.Context, request *connect.Request[esecpb.CheckInstallationRequest]) (*connect.Response[esecpb.CheckInstallationResponse], error) {
+	_, err := getAuthenticatedUser(ctx) // Ensure caller is authenticated
+	if err != nil {
+		return nil, err
+	}
+
+	if s.githubAppClient == nil {
+		s.Logger.Error("GitHub App client is not configured, cannot check installation status.")
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("server GitHub App not configured"))
+	}
+
+	var installed bool
+	var installationID string
+	var checkErr error
+	var msg string
+
+	if orgName := request.Msg.GetOrganizationName(); orgName != "" {
+		installed, installationID, checkErr = s.isAppInstalledOnOrg(ctx, orgName)
+		if checkErr != nil {
+			msg = fmt.Sprintf("Error checking installation for organization %s: %v", orgName, checkErr)
+			s.Logger.Warn(msg)
+		} else if installed {
+			msg = fmt.Sprintf("App is installed on organization %s (ID: %s)", orgName, installationID)
+		} else {
+			msg = fmt.Sprintf("App is not installed on organization %s", orgName)
+		}
+	} else if repoNameFull := request.Msg.GetRepositoryName(); repoNameFull != "" {
+		parts := strings.Split(repoNameFull, "/")
+		if len(parts) != 2 {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("repository_name must be in 'owner/repo' format"))
+		}
+		owner, repo := parts[0], parts[1]
+		installed, installationID, checkErr = s.isAppInstalledOnRepo(ctx, owner, repo)
+		if checkErr != nil {
+			msg = fmt.Sprintf("Error checking installation for repository %s: %v", repoNameFull, checkErr)
+			s.Logger.Warn(msg)
+		} else if installed {
+			msg = fmt.Sprintf("App is installed on repository %s (ID: %s)", repoNameFull, installationID)
+		} else {
+			msg = fmt.Sprintf("App is not installed on repository %s", repoNameFull)
+		}
+	} else {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("either organization_name or repository_name must be provided"))
+	}
+
+	return connect.NewResponse(&esecpb.CheckInstallationResponse{
+		Installed:      installed && checkErr == nil, // Only true if no error and installed
+		InstallationId: installationID,
+		Message:        msg,
+	}), nil
 }

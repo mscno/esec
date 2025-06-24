@@ -33,6 +33,13 @@ service EsecService {
 
   // Deletes a team organization by ID
   rpc DeleteOrganization(DeleteOrganizationRequest) returns (DeleteOrganizationResponse);
+
+
+  // Initiates a new app-managed session using a GitHub user token
+  rpc InitiateSession(InitiateSessionRequest) returns (InitiateSessionResponse);
+
+  // Checks if the GitHub App is installed on an org or repo
+  rpc CheckInstallation(CheckInstallationRequest) returns (CheckInstallationResponse);
 }
 
 // Project information
@@ -167,4 +174,31 @@ message DeleteOrganizationRequest {
 // Response for deleting an organization
 message DeleteOrganizationResponse {
   string status = 1; // e.g., "organization deleted"
+}
+
+
+// Request to initiate a session
+message InitiateSessionRequest {
+  string github_user_token = 1; // The token obtained from GitHub device flow
+}
+
+// Response for initiating a session
+message InitiateSessionResponse {
+  string session_token = 1;    // The app-managed session token
+  int64 expires_at_unix = 2; // Unix timestamp for session expiry
+}
+
+// Request to check GitHub App installation
+message CheckInstallationRequest {
+  oneof target {
+    string organization_name = 1;
+    string repository_name = 2; // Format: "owner/repo"
+  }
+}
+
+// Response for checking GitHub App installation
+message CheckInstallationResponse {
+  bool installed = 1;
+  string installation_id = 2; // The ID of the installation, if found
+  string message = 3;         // Additional info, e.g., error message
 }

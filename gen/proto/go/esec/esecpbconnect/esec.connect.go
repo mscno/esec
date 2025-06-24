@@ -60,6 +60,12 @@ const (
 	// EsecServiceDeleteOrganizationProcedure is the fully-qualified name of the EsecService's
 	// DeleteOrganization RPC.
 	EsecServiceDeleteOrganizationProcedure = "/esec.EsecService/DeleteOrganization"
+	// EsecServiceInitiateSessionProcedure is the fully-qualified name of the EsecService's
+	// InitiateSession RPC.
+	EsecServiceInitiateSessionProcedure = "/esec.EsecService/InitiateSession"
+	// EsecServiceCheckInstallationProcedure is the fully-qualified name of the EsecService's
+	// CheckInstallation RPC.
+	EsecServiceCheckInstallationProcedure = "/esec.EsecService/CheckInstallation"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -74,6 +80,8 @@ var (
 	esecServiceListOrganizationsMethodDescriptor  = esecServiceServiceDescriptor.Methods().ByName("ListOrganizations")
 	esecServiceGetOrganizationMethodDescriptor    = esecServiceServiceDescriptor.Methods().ByName("GetOrganization")
 	esecServiceDeleteOrganizationMethodDescriptor = esecServiceServiceDescriptor.Methods().ByName("DeleteOrganization")
+	esecServiceInitiateSessionMethodDescriptor    = esecServiceServiceDescriptor.Methods().ByName("InitiateSession")
+	esecServiceCheckInstallationMethodDescriptor  = esecServiceServiceDescriptor.Methods().ByName("CheckInstallation")
 )
 
 // EsecServiceClient is a client for the esec.EsecService service.
@@ -95,6 +103,10 @@ type EsecServiceClient interface {
 	GetOrganization(context.Context, *connect.Request[esec.GetOrganizationRequest]) (*connect.Response[esec.GetOrganizationResponse], error)
 	// Deletes a team organization by ID
 	DeleteOrganization(context.Context, *connect.Request[esec.DeleteOrganizationRequest]) (*connect.Response[esec.DeleteOrganizationResponse], error)
+	// Initiates a new app-managed session using a GitHub user token
+	InitiateSession(context.Context, *connect.Request[esec.InitiateSessionRequest]) (*connect.Response[esec.InitiateSessionResponse], error)
+	// Checks if the GitHub App is installed on an org or repo
+	CheckInstallation(context.Context, *connect.Request[esec.CheckInstallationRequest]) (*connect.Response[esec.CheckInstallationResponse], error)
 }
 
 // NewEsecServiceClient constructs a client for the esec.EsecService service. By default, it uses
@@ -161,6 +173,18 @@ func NewEsecServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(esecServiceDeleteOrganizationMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		initiateSession: connect.NewClient[esec.InitiateSessionRequest, esec.InitiateSessionResponse](
+			httpClient,
+			baseURL+EsecServiceInitiateSessionProcedure,
+			connect.WithSchema(esecServiceInitiateSessionMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		checkInstallation: connect.NewClient[esec.CheckInstallationRequest, esec.CheckInstallationResponse](
+			httpClient,
+			baseURL+EsecServiceCheckInstallationProcedure,
+			connect.WithSchema(esecServiceCheckInstallationMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -175,6 +199,8 @@ type esecServiceClient struct {
 	listOrganizations  *connect.Client[esec.ListOrganizationsRequest, esec.ListOrganizationsResponse]
 	getOrganization    *connect.Client[esec.GetOrganizationRequest, esec.GetOrganizationResponse]
 	deleteOrganization *connect.Client[esec.DeleteOrganizationRequest, esec.DeleteOrganizationResponse]
+	initiateSession    *connect.Client[esec.InitiateSessionRequest, esec.InitiateSessionResponse]
+	checkInstallation  *connect.Client[esec.CheckInstallationRequest, esec.CheckInstallationResponse]
 }
 
 // CreateProject calls esec.EsecService.CreateProject.
@@ -222,6 +248,16 @@ func (c *esecServiceClient) DeleteOrganization(ctx context.Context, req *connect
 	return c.deleteOrganization.CallUnary(ctx, req)
 }
 
+// InitiateSession calls esec.EsecService.InitiateSession.
+func (c *esecServiceClient) InitiateSession(ctx context.Context, req *connect.Request[esec.InitiateSessionRequest]) (*connect.Response[esec.InitiateSessionResponse], error) {
+	return c.initiateSession.CallUnary(ctx, req)
+}
+
+// CheckInstallation calls esec.EsecService.CheckInstallation.
+func (c *esecServiceClient) CheckInstallation(ctx context.Context, req *connect.Request[esec.CheckInstallationRequest]) (*connect.Response[esec.CheckInstallationResponse], error) {
+	return c.checkInstallation.CallUnary(ctx, req)
+}
+
 // EsecServiceHandler is an implementation of the esec.EsecService service.
 type EsecServiceHandler interface {
 	// Project management
@@ -241,6 +277,10 @@ type EsecServiceHandler interface {
 	GetOrganization(context.Context, *connect.Request[esec.GetOrganizationRequest]) (*connect.Response[esec.GetOrganizationResponse], error)
 	// Deletes a team organization by ID
 	DeleteOrganization(context.Context, *connect.Request[esec.DeleteOrganizationRequest]) (*connect.Response[esec.DeleteOrganizationResponse], error)
+	// Initiates a new app-managed session using a GitHub user token
+	InitiateSession(context.Context, *connect.Request[esec.InitiateSessionRequest]) (*connect.Response[esec.InitiateSessionResponse], error)
+	// Checks if the GitHub App is installed on an org or repo
+	CheckInstallation(context.Context, *connect.Request[esec.CheckInstallationRequest]) (*connect.Response[esec.CheckInstallationResponse], error)
 }
 
 // NewEsecServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -303,6 +343,18 @@ func NewEsecServiceHandler(svc EsecServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(esecServiceDeleteOrganizationMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	esecServiceInitiateSessionHandler := connect.NewUnaryHandler(
+		EsecServiceInitiateSessionProcedure,
+		svc.InitiateSession,
+		connect.WithSchema(esecServiceInitiateSessionMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	esecServiceCheckInstallationHandler := connect.NewUnaryHandler(
+		EsecServiceCheckInstallationProcedure,
+		svc.CheckInstallation,
+		connect.WithSchema(esecServiceCheckInstallationMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/esec.EsecService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EsecServiceCreateProjectProcedure:
@@ -323,6 +375,10 @@ func NewEsecServiceHandler(svc EsecServiceHandler, opts ...connect.HandlerOption
 			esecServiceGetOrganizationHandler.ServeHTTP(w, r)
 		case EsecServiceDeleteOrganizationProcedure:
 			esecServiceDeleteOrganizationHandler.ServeHTTP(w, r)
+		case EsecServiceInitiateSessionProcedure:
+			esecServiceInitiateSessionHandler.ServeHTTP(w, r)
+		case EsecServiceCheckInstallationProcedure:
+			esecServiceCheckInstallationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -366,4 +422,12 @@ func (UnimplementedEsecServiceHandler) GetOrganization(context.Context, *connect
 
 func (UnimplementedEsecServiceHandler) DeleteOrganization(context.Context, *connect.Request[esec.DeleteOrganizationRequest]) (*connect.Response[esec.DeleteOrganizationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("esec.EsecService.DeleteOrganization is not implemented"))
+}
+
+func (UnimplementedEsecServiceHandler) InitiateSession(context.Context, *connect.Request[esec.InitiateSessionRequest]) (*connect.Response[esec.InitiateSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("esec.EsecService.InitiateSession is not implemented"))
+}
+
+func (UnimplementedEsecServiceHandler) CheckInstallation(context.Context, *connect.Request[esec.CheckInstallationRequest]) (*connect.Response[esec.CheckInstallationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("esec.EsecService.CheckInstallation is not implemented"))
 }

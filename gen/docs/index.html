@@ -179,6 +179,14 @@
             <ul>
               
                 <li>
+                  <a href="#esec.CheckInstallationRequest"><span class="badge">M</span>CheckInstallationRequest</a>
+                </li>
+              
+                <li>
+                  <a href="#esec.CheckInstallationResponse"><span class="badge">M</span>CheckInstallationResponse</a>
+                </li>
+              
+                <li>
                   <a href="#esec.CreateOrganizationRequest"><span class="badge">M</span>CreateOrganizationRequest</a>
                 </li>
               
@@ -228,6 +236,14 @@
               
                 <li>
                   <a href="#esec.GetUserPublicKeyResponse"><span class="badge">M</span>GetUserPublicKeyResponse</a>
+                </li>
+              
+                <li>
+                  <a href="#esec.InitiateSessionRequest"><span class="badge">M</span>InitiateSessionRequest</a>
+                </li>
+              
+                <li>
+                  <a href="#esec.InitiateSessionResponse"><span class="badge">M</span>InitiateSessionResponse</a>
                 </li>
               
                 <li>
@@ -311,6 +327,75 @@
       </div>
       <p></p>
 
+      
+        <h3 id="esec.CheckInstallationRequest">CheckInstallationRequest</h3>
+        <p>Request to check GitHub App installation</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>organization_name</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>repository_name</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>Format: &#34;owner/repo&#34; </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="esec.CheckInstallationResponse">CheckInstallationResponse</h3>
+        <p>Response for checking GitHub App installation</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>installed</td>
+                  <td><a href="#bool">bool</a></td>
+                  <td></td>
+                  <td><p> </p></td>
+                </tr>
+              
+                <tr>
+                  <td>installation_id</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>The ID of the installation, if found </p></td>
+                </tr>
+              
+                <tr>
+                  <td>message</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>Additional info, e.g., error message </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
       
         <h3 id="esec.CreateOrganizationRequest">CreateOrganizationRequest</h3>
         <p>Request to create a new TEAM organization</p>
@@ -643,6 +728,61 @@
                   <td><a href="#string">string</a></td>
                   <td></td>
                   <td><p> </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="esec.InitiateSessionRequest">InitiateSessionRequest</h3>
+        <p>Request to initiate a session</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>github_user_token</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>The token obtained from GitHub device flow </p></td>
+                </tr>
+              
+            </tbody>
+          </table>
+
+          
+
+        
+      
+        <h3 id="esec.InitiateSessionResponse">InitiateSessionResponse</h3>
+        <p>Response for initiating a session</p>
+
+        
+          <table class="field-table">
+            <thead>
+              <tr><td>Field</td><td>Type</td><td>Label</td><td>Description</td></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>session_token</td>
+                  <td><a href="#string">string</a></td>
+                  <td></td>
+                  <td><p>The app-managed session token </p></td>
+                </tr>
+              
+                <tr>
+                  <td>expires_at_unix</td>
+                  <td><a href="#int64">int64</a></td>
+                  <td></td>
+                  <td><p>Unix timestamp for session expiry </p></td>
                 </tr>
               
             </tbody>
@@ -1201,6 +1341,20 @@
                 <td><a href="#esec.DeleteOrganizationRequest">DeleteOrganizationRequest</a></td>
                 <td><a href="#esec.DeleteOrganizationResponse">DeleteOrganizationResponse</a></td>
                 <td><p>Deletes a team organization by ID</p></td>
+              </tr>
+            
+              <tr>
+                <td>InitiateSession</td>
+                <td><a href="#esec.InitiateSessionRequest">InitiateSessionRequest</a></td>
+                <td><a href="#esec.InitiateSessionResponse">InitiateSessionResponse</a></td>
+                <td><p>Initiates a new app-managed session using a GitHub user token</p></td>
+              </tr>
+            
+              <tr>
+                <td>CheckInstallation</td>
+                <td><a href="#esec.CheckInstallationRequest">CheckInstallationRequest</a></td>
+                <td><a href="#esec.CheckInstallationResponse">CheckInstallationResponse</a></td>
+                <td><p>Checks if the GitHub App is installed on an org or repo</p></td>
               </tr>
             
           </tbody>

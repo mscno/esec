@@ -4,6 +4,8 @@
 ## Table of Contents
 
 - [esec/esec.proto](#esec_esec-proto)
+    - [CheckInstallationRequest](#esec-CheckInstallationRequest)
+    - [CheckInstallationResponse](#esec-CheckInstallationResponse)
     - [CreateOrganizationRequest](#esec-CreateOrganizationRequest)
     - [CreateOrganizationResponse](#esec-CreateOrganizationResponse)
     - [CreateProjectRequest](#esec-CreateProjectRequest)
@@ -17,6 +19,8 @@
     - [GetPerUserSecretsResponse.SecretsEntry](#esec-GetPerUserSecretsResponse-SecretsEntry)
     - [GetUserPublicKeyRequest](#esec-GetUserPublicKeyRequest)
     - [GetUserPublicKeyResponse](#esec-GetUserPublicKeyResponse)
+    - [InitiateSessionRequest](#esec-InitiateSessionRequest)
+    - [InitiateSessionResponse](#esec-InitiateSessionResponse)
     - [ListOrganizationsRequest](#esec-ListOrganizationsRequest)
     - [ListOrganizationsResponse](#esec-ListOrganizationsResponse)
     - [Organization](#esec-Organization)
@@ -44,6 +48,39 @@
 <p align="right"><a href="#top">Top</a></p>
 
 ## esec/esec.proto
+
+
+
+<a name="esec-CheckInstallationRequest"></a>
+
+### CheckInstallationRequest
+Request to check GitHub App installation
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| organization_name | [string](#string) |  |  |
+| repository_name | [string](#string) |  | Format: &#34;owner/repo&#34; |
+
+
+
+
+
+
+<a name="esec-CheckInstallationResponse"></a>
+
+### CheckInstallationResponse
+Response for checking GitHub App installation
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| installed | [bool](#bool) |  |  |
+| installation_id | [string](#string) |  | The ID of the installation, if found |
+| message | [string](#string) |  | Additional info, e.g., error message |
+
+
+
 
 
 
@@ -240,6 +277,37 @@ Request/response for getting a user&#39;s public key
 | github_id | [string](#string) |  |  |
 | username | [string](#string) |  |  |
 | public_key | [string](#string) |  |  |
+
+
+
+
+
+
+<a name="esec-InitiateSessionRequest"></a>
+
+### InitiateSessionRequest
+Request to initiate a session
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| github_user_token | [string](#string) |  | The token obtained from GitHub device flow |
+
+
+
+
+
+
+<a name="esec-InitiateSessionResponse"></a>
+
+### InitiateSessionResponse
+Response for initiating a session
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| session_token | [string](#string) |  | The app-managed session token |
+| expires_at_unix | [int64](#int64) |  | Unix timestamp for session expiry |
 
 
 
@@ -506,6 +574,8 @@ ESEC main service
 | ListOrganizations | [ListOrganizationsRequest](#esec-ListOrganizationsRequest) | [ListOrganizationsResponse](#esec-ListOrganizationsResponse) | Lists organizations (currently TEAM organizations) |
 | GetOrganization | [GetOrganizationRequest](#esec-GetOrganizationRequest) | [GetOrganizationResponse](#esec-GetOrganizationResponse) | Gets a specific organization by ID |
 | DeleteOrganization | [DeleteOrganizationRequest](#esec-DeleteOrganizationRequest) | [DeleteOrganizationResponse](#esec-DeleteOrganizationResponse) | Deletes a team organization by ID |
+| InitiateSession | [InitiateSessionRequest](#esec-InitiateSessionRequest) | [InitiateSessionResponse](#esec-InitiateSessionResponse) | Initiates a new app-managed session using a GitHub user token |
+| CheckInstallation | [CheckInstallationRequest](#esec-CheckInstallationRequest) | [CheckInstallationResponse](#esec-CheckInstallationResponse) | Checks if the GitHub App is installed on an org or repo |
 
  
 
