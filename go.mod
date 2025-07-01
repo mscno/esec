@@ -9,7 +9,7 @@ require (
 	connectrpc.com/connect v1.18.1
 	connectrpc.com/cors v0.1.0
 	github.com/alecthomas/assert/v2 v2.11.0
-	github.com/alecthomas/kong v1.10.0
+	github.com/alecthomas/kong v1.12.0
 	github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad
 	github.com/go-michi/michi v0.0.1
 	github.com/joho/godotenv v1.5.1
