@@ -1,12 +1,10 @@
 module github.com/mscno/esec
 
-go 1.23.0
-
-toolchain go1.23.6
+go 1.24.0
 
 require (
 	cloud.google.com/go/datastore v1.20.0
-	connectrpc.com/connect v1.18.1
+	connectrpc.com/connect v1.19.0
 	connectrpc.com/cors v0.1.0
 	github.com/alecthomas/assert/v2 v2.11.0
 	github.com/alecthomas/kong v1.10.0
@@ -23,7 +21,7 @@ require (
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/time v0.11.0
 	google.golang.org/api v0.203.0
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/protobuf v1.36.9
 )
 
 require (
