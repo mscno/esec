@@ -1,8 +1,6 @@
 module github.com/mscno/esec
 
-go 1.23.0
-
-toolchain go1.23.6
+go 1.24.0
 
 require (
 	cloud.google.com/go/datastore v1.20.0
@@ -20,7 +18,7 @@ require (
 	go.etcd.io/bbolt v1.4.0
 	golang.org/x/crypto v0.38.0
 	golang.org/x/net v0.40.0
-	golang.org/x/oauth2 v0.30.0
+	golang.org/x/oauth2 v0.33.0
 	golang.org/x/time v0.11.0
 	google.golang.org/api v0.203.0
 	google.golang.org/protobuf v1.36.6
