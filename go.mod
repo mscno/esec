@@ -1,8 +1,6 @@
 module github.com/mscno/esec
 
-go 1.23.0
-
-toolchain go1.23.6
+go 1.24.0
 
 require (
 	cloud.google.com/go/datastore v1.20.0
@@ -18,8 +16,8 @@ require (
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/zalando/go-keyring v0.2.6
 	go.etcd.io/bbolt v1.4.0
-	golang.org/x/crypto v0.38.0
-	golang.org/x/net v0.40.0
+	golang.org/x/crypto v0.46.0
+	golang.org/x/net v0.48.0
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/time v0.11.0
 	google.golang.org/api v0.203.0
@@ -51,9 +49,9 @@ require (
 	go.opentelemetry.io/otel v1.29.0 // indirect
 	go.opentelemetry.io/otel/metric v1.29.0 // indirect
 	go.opentelemetry.io/otel/trace v1.29.0 // indirect
-	golang.org/x/sync v0.14.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/genproto v0.0.0-20241015192408-796eee8c2d53 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241007155032-5fefd90f89a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241015192408-796eee8c2d53 // indirect
