@@ -2,5 +2,5 @@ package testdata
 
 import "embed"
 
-//go:embed .ejson*
+//go:embed .ejson* .eyaml*
 var TestEmbed embed.FS

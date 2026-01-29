@@ -1,0 +1,56 @@
+# ESEC Test File - Default Environment
+# This file tests various YAML features with encryption
+
+_ESEC_PUBLIC_KEY: 493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d
+# Simple string value
+MY_VALUE: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:y1NytreUFKE04i69GUEABnFaPmQ+yKxT:Q9aF6IEto9nmcJZq/nkUgfKK4JpGlltz2ei2ins/1Q==]"
+# Numeric values should NOT be encrypted
+MY_NUMBER: 123
+MY_FLOAT: 3.14159
+MY_SCIENTIFIC: 1.5e10
+# Boolean values should NOT be encrypted
+MY_BOOL_TRUE: true
+MY_BOOL_FALSE: false
+# Null value should NOT be encrypted
+MY_NULL: null
+# Array of strings (all elements encrypted)
+MY_ARRAY:
+    - "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:irkeRgYRvflSWi2EVDqI5Cm+SP6btuiY:zmxzVAmoE9Mb3PB3+4+dlSk2Grno40j2UcUAeA==]"
+    - "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:wPUiFmzyWJQQqUjL/DArwW8vOfpJoVur:KFshRJc16qG4fE7/RqULVQkGTMkCBfWlXOGViQ==]"
+# Nested object
+MY_OBJECT:
+    hello: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:5n2u8gDJF2Uzw18Wy3vF7hQU+deRGb3E:k5/oMuPubkFXRNMGan6PlEMVdlnN]"
+    nested:
+        deep: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:c7/xg6fCqQzuseguL0Shk0MRUvm7AzkF:PrpHJZbu/wDLKFeEYYoAo0VeLH1O]"
+# Underscore prefix - value NOT encrypted
+_MY_COMMENT: this_is_not_encrypted
+# Underscore prefix on parent - children ARE encrypted
+_MY_METADATA:
+    version: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:OMXXaP61oOu8dTwvLQL+EuJhC8ETRU7C:0RiMoICn6FfN8a7isHW9C/vIKQ==]"
+    secret: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:gqWoOxihafsRLF/DPd5zT5Fixzx96UP4:IkqlDTRsQSylXoqcFzEDMkz4H5txuN6UjTFFRHvO1LqDs9qXekw+gw==]"
+# Mixed array with numbers and strings
+MIXED_ARRAY:
+    - "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:lRxfFd3zT2FpKUu1tblkiwFIiJyKiYXs:Cv3uYTUtW1AkXFqGRYTraSBwF6Z8mdrgEilmRg==]"
+    - 42
+    - true
+    - "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:svIhzXYP2LLicyFVBZvbhiLY31XoQ5HW:+BxwYDfIufvKqyh6ObJ7M+UYUSJHxIjIJ+aFzYp+]"
+# Multiline string (literal block scalar)
+MULTILINE_LITERAL: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:YchR60wvizDAipe9k5ZSD0EWa+fZCvem:QOFY/0JDHOsrFDpkKVxAoA0+vpAjHu1/FUmrcFOJNzHIoBoKl3SfX3lqfkvCr9Ek7nBtqKV8CbY8AEBL0EZxBO91THh3LBma5ri1SJ8blgTBHFMq4E6Ks5Sf3lHa]"
+# Multiline string (folded block scalar)
+MULTILINE_FOLDED: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:q2m0g5Xko0kyF2dHJHwrdPXD0P7WYpbp:soQnRJVDdYrcdM+nwvgD1aZhacpXsI26hDYdR1GUus0cMcO9/phmu6neqyAb1id52Ku87S/cbbWGz2zbG/8GNzUEZQ2AX1/jJt3o1N39SR0Yv7/bVSXc5FE=]"
+# Quoted strings
+SINGLE_QUOTED: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:4wl6yHfMpsq2Q43MWVeQI7nhfqapFKyO:RhORtP0YANNjm1rmG7gMB5gfZ2WoOAVCeJk0JNf23dKOYwo=]"
+DOUBLE_QUOTED: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:fcX0WWM1WW2xe6ENTlwYA/K/Y7j9pl3U:+XBGTEmoVwvxduiq2sQLgzXC37nESfv8FkUM+/AFq4wJhxU=]"
+# Special characters in strings
+SPECIAL_CHARS: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:GlAvfsUvx7GZta8HhESoGxubZeXFCFIn:u0khrX4O4uDBZF6aYq34sktKRcMfcBeZVHrBFjou9tYvsulwyHKBwIoJiO66ec7a/BFGBZnM6xGi]"
+# Empty string
+EMPTY_STRING: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:pX/omy0wSDbmWoU/AHEUeZw8puD/B6ME:5yugoNct2WPqx0Wo9L0vmg==]"
+# Unicode content
+UNICODE: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:GaB9vWLKV1WgRmDF8tytckYNoJHn66QD:sdealpPJ7mlSGlpyzLb5rv36PAD8VafYs/06I1RyPm/C]"
+# Deeply nested structure
+DEEP_NESTING:
+    level1:
+        level2:
+            level3:
+                level4:
+                    secret: "ESEC[1:RRT8xJIFg8Jzc8lfzHnE9IK8XKGi0+XoAFlH+w2xw3Y=:EWqZp0JmKxize8+qyGGRqKtAxMWZZHtI:1bLET7NuuD4PlLjiVVx2z5Kjb/BJVKEqQfNxrXgo2t4n5FS3]"

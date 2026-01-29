@@ -37,6 +37,7 @@ import (
 	"github.com/mscno/esec/pkg/fileutils"
 	"github.com/mscno/esec/pkg/format"
 	"github.com/mscno/esec/pkg/json"
+	"github.com/mscno/esec/pkg/yaml"
 )
 
 const (
@@ -292,6 +293,38 @@ func DecryptFromEmbedFSWithConfig(v embed.FS, config DecryptFromEmbedConfig) ([]
 	return decryptData(privkey, data, config.Format)
 }
 
+// DecryptFromEmbedFS is a convenience function that decrypts an embedded file.
+// If envName is empty, it attempts to auto-detect the environment from ESEC_PRIVATE_KEY* env vars.
+// If envName is provided, it uses that environment directly.
+func DecryptFromEmbedFS(v embed.FS, envName string, format FileFormat) ([]byte, error) {
+	// If envName is empty, try to auto-detect from environment variables
+	if envName == "" {
+		detected, err := sniffEnvName(slog.New(slog.NewTextHandler(io.Discard, nil)))
+		if err != nil {
+			return nil, fmt.Errorf("error sniffing environment name: %v", err)
+		}
+		envName = detected
+	}
+
+	// Generate the filename based on the format and environment name
+	fileName := fileutils.GenerateFilename(fileutils.FileFormat(format), envName)
+
+	// Attempt to read the file from the embedded filesystem
+	data, err := v.ReadFile(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("error reading file from vault: %v", err)
+	}
+
+	// Find the private key
+	privkey, err := findPrivateKey("", envName, "")
+	if err != nil {
+		return nil, err
+	}
+
+	// Decrypt the file data and return the decrypted bytes
+	return decryptData(privkey, data, format)
+}
+
 // DecryptFromEmbedOption is a functional option for configuring DecryptFromEmbedFSWithOptions.
 //
 // Deprecated: Use DecryptFromEmbedConfig with DecryptFromEmbedFSWithConfig instead.
@@ -534,6 +567,8 @@ func getFormatter(fileFormat FileFormat) (format.FormatHandler, error) {
 		return &dotenv.DotEnvFormatter{}, nil
 	case FileFormatEjson:
 		return &json.JsonFormatter{}, nil
+	case FileFormatEyaml, FileFormatEyml:
+		return &yaml.YamlFormatter{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported format: %s", fileFormat)
 	}

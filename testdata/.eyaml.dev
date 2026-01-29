@@ -1,0 +1,54 @@
+# ESEC Test File - Dev Environment
+# This file tests various YAML features with encryption
+
+_ESEC_PUBLIC_KEY: 493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d
+# Simple string value (dev environment)
+MY_VALUE: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:BzYu2VWSyQuznxYIJRhT5CtwtequVpDf:orukI/kuqvKClB4DXyI/CaBnRmESO5ZVxFGBZWLXl3H1QoA=]"
+# Numeric values should NOT be encrypted
+MY_NUMBER: 456
+MY_FLOAT: 2.71828
+# Boolean values should NOT be encrypted
+MY_BOOL: true
+# Array of strings
+MY_ARRAY:
+    - "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:Jk1cvMM+Oh8Mm1uyRKUBVNOtltmgSMuT:QjD/NGhWckzOtbzdhaR05SQoMZHroa2vREo=]"
+    - "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:UobB2OLlc3chyv6wa2LgKtl9Sz18r6aT:PdyCGtJkuunRWcKZVO+XBRz4iA6L3lZsvQs=]"
+    - "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:Tz0zs8d40mss/MGso5AsKonp4foo4GnP:m/rjkwxmrIPmRaYYi7Dcn0AteU1I5pdZvmM=]"
+# Nested object
+MY_OBJECT:
+    hello: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:S3ou2knUGsZC6lFODs5O8MjEDJ5Ne0gf:SeIfoxdWS4zcGHefRolc2o8vFcHktah3nQ==]"
+    environment: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:Y28BwrgTIDz0mPjdAW6xKzzV0Eedv6LG:IYDlk17S4bMT/NRD08ySZ5iHInb/sZf1PS0b]"
+# Inline comment preservation test
+DATABASE_HOST: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:dHK6q3hL+Hg9ug8UUI1a4oOv1FwP9UMs:SV6Ng/uXGy4L4VUGzjYZfKBz+BDsnuSD4g==]" # This is the dev database
+DATABASE_PASSWORD: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:qHCqlr/PzyMam3R/cqd+sKcyoP7YqNs1:x2phcucKD8p6FyZYxHCxicgzR1uVQ1BZ2TExAvDsqI0=]" # sensitive!
+# Block comment above a key
+# This is a configuration section
+# with multiple comment lines
+CONFIG_SECTION:
+    # Nested comment
+    api_key: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:NndCxeGCs5Jl7eQi54bzVrNC8C/U+c/J:CerL9PAF7dAiu1ex3M4KAK9rQ/T8ZUUrHDXzOm4TYhzXGQ==]"
+    timeout: 30 # seconds
+# Flow style array (should work)
+INLINE_ARRAY: ["ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:ySwlpY5fmpZHPJMsKthws7dne/uwkEUv:uWUSYhFcaFsgIyEoSJkXJu1fS0Fm5nc=]", "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:LNdwsVkJHHS9hoZS6BV2FB6R0phRUpoP:xMt25Qe632xU+s5eTBnM8DDdkI+sR68=]", "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:UgSZaqnEg5BHBWhKx2MXLiAZLSwqS8hs:Wzo6dJ0L95JB+7Lu8Rkdp/3NEp/S3/Q=]"]
+# Flow style mapping
+INLINE_MAP: {key1: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:yPRXU6ejolzv3YbA+4DwD+/3i7pwbB6V:y7nCIgTEzakM36DI/40Jv/v0SHESOQ==]", key2: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:u7ZRzCytU2OaatUL2Zw0LZDthSuVyeDi:7cPc0IScWcx+J8Ew1SKfM/WuqYFuqg==]"}
+# Anchor and alias should be REJECTED during transformation
+# (commented out since we can't include them in test files that get encrypted)
+# defaults: &defaults
+#   adapter: postgres
+# development:
+#   <<: *defaults
+
+# Long string value
+LONG_VALUE: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:p3yh5WO2wGEyekkCN/jesIPPjYLGWIhk:d2b8VIbdFbB1jzCVatqDfX+XpugzTHqapGtGz7M+C4CnnLVRbJACoOGBc3yqnT4gvsy1WuqK2qzJwD7FFY2MYdqoVKQcrWL/yv088jQfMAMUdWveNFY+2O0vOoDOpiG4a6Wj0gnAziCnyXH4sVRMAByPJBx1ShcO5jPIgc8wp8OtMtOcyP/LnqUDcH+xufpsIdRH3TszH3ywGRBXdUhnoCcsjqYHWSe5q1AmM1TBru5gEMPrS4SQdJHJUKcSZ9oD]"
+# String that looks like other types but is quoted
+STRING_THAT_LOOKS_LIKE_NUMBER: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:9RUgtBki8hjgHDap2ReUlu6SVXGizpjo:6GqxnoqDOxHxKk4AScQCtaMgkw==]"
+STRING_THAT_LOOKS_LIKE_BOOL: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:8aBJ12Cq2kaXY9EAimzVKYhiFactov4D:8xgMXDv/0Gnb4ZNicM9hsVWMl0E=]"
+STRING_THAT_LOOKS_LIKE_NULL: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:DYHxdUABhqXmrI6p0s2LR59T8lk5zCCi:9bM4hIaNxLboYVpH2VbFplg5G0A=]"
+# Escaped characters
+ESCAPED_CHARS: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:9OKMROUIgwyAU1Db3/OBI7Qd4UMbd6Mx:OJkqtffdZq4zG7n3WZntCn3dYgV4cA2G8fwsylsbHhIOug==]"
+# Underscore prefix variations
+_SKIP_THIS: not_encrypted_at_all
+_SKIP_NESTED:
+    but_encrypt_this: "ESEC[1:hWyQhait9Gub+2I+Z+x+YCmigH5Yb1kFht3laZB/o34=:QhBS+SUcOVtHYIaAXfKf7NZTJl/llzz7:vklEA9EgT+aITdubxQboXs9ZC+hk+HZNDo4kGKhUIhSms60=]"
+    _and_skip_this: not_encrypted
