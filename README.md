@@ -9,7 +9,7 @@ Main differences are that **esec** is more opinionated on the file naming conven
 ## Features
 
 - **Secure secrets storage** using public/private key encryption (NaCl box)
-- **Support for multiple formats** (`.env`, `.ejson`)
+- **Support for multiple formats** (`.env`, `.ejson`, `.eyaml`, `.yaml`)
 - **Decryption of secrets in embedded or external vaults**
 - **CLI tool for encryption & decryption**
 - **Run commands with decrypted environment variables**
@@ -30,6 +30,16 @@ go get github.com/mscno/esec
 ```sh
 go install github.com/mscno/esec/cmd/esec@latest
 ```
+
+### Verifying Releases
+
+All release artifacts are signed and include provenance attestations. To verify a downloaded release:
+
+```bash
+gh attestation verify esec_*.tar.gz --owner mscno
+```
+
+For detailed verification instructions including checksum verification and SBOM inspection, see [VERIFICATION.md](VERIFICATION.md).
 
 ---
 

@@ -25,6 +25,10 @@ jobs:
               uses: actions/setup-go@v5
               with:
                   go-version: "${{ steps.gover.outputs.goversion }}"
+            - name: Install Cosign
+              uses: sigstore/cosign-installer@v3
+            - name: Install Syft
+              uses: anchore/sbom-action/download-syft@v0
             - name: Extract release changelog
               run: |
                   version=${GITHUB_REF#refs/tags/v*}
@@ -46,3 +50,15 @@ jobs:
               uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
               with:
                   subject-path: "dist/*.deb"
+            - name: "Attest checksums"
+              uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+              with:
+                  subject-path: "dist/checksums.txt"
+            - name: "Attest SBOMs"
+              uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+              with:
+                  subject-path: "dist/*.sbom.json"
+            - name: "Attest source archive"
+              uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+              with:
+                  subject-path: "dist/*_source.tar.gz"
