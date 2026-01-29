@@ -201,8 +201,23 @@ func validateCommand(command []string) error {
 
 	// Validate that the command doesn't contain suspicious characters
 	for _, arg := range command {
+		// Unix shell metacharacters
 		if strings.Contains(arg, "$(") || strings.Contains(arg, "`") {
 			return fmt.Errorf("command contains potentially unsafe shell metacharacters")
+		}
+
+		// Windows-specific metacharacters
+		if runtime.GOOS == "windows" {
+			// Check for Windows variable expansion
+			if strings.Contains(arg, "%") {
+				return fmt.Errorf("command contains potentially unsafe Windows metacharacters")
+			}
+			// Check for Windows shell operators
+			for _, char := range []string{"&", "|", "^", "<", ">"} {
+				if strings.Contains(arg, char) {
+					return fmt.Errorf("command contains potentially unsafe Windows metacharacter: %s", char)
+				}
+			}
 		}
 	}
 

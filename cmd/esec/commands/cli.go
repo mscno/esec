@@ -3,21 +3,18 @@ package commands
 import (
 	"context"
 	"fmt"
-
-	"github.com/alecthomas/kong"
-	"github.com/mscno/esec/pkg/fileutils"
-	"github.com/mscno/esec/pkg/oskeyring"
-
 	"log/slog"
 	"os"
 	"path"
 	"strings"
+
+	"github.com/alecthomas/kong"
+	"github.com/mscno/esec/pkg/fileutils"
 )
 
 type cliCtx struct {
 	Logger *slog.Logger
 	context.Context
-	OSKeyring oskeyring.Service
 }
 
 type cli struct {
@@ -27,27 +24,8 @@ type cli struct {
 	Get     GetCmd     `cmd:"" help:"Decrypt a secret and extract a specific key"`
 	Run     RunCmd     `cmd:"" help:"Decrypt a secret, set environment variables, and run a command"`
 
-	// Cloud commands grouped under 'cloud'
-	Cloud CloudCmd `cmd:"cloud" help:"Commands interacting with the cloud sync server"`
-
 	Version kong.VersionFlag `help:"Show version"`
 	Debug   bool             `help:"Enable debug mode"`
-}
-
-type CloudCmd struct {
-	// Global flags for cloud commands (inherited by subcommands)
-	ServerURL  string `help:"Sync server URL" env:"ESEC_SERVER_URL" default:"https://esec-server-1072520634286.europe-west1.run.app" group:"Cloud Flags:"`
-	AuthToken  string `help:"Auth token (GitHub)" env:"ESEC_AUTH_TOKEN" group:"Cloud Flags:"`
-	ProjectDir string `help:"Directory containing the projects file" env:"ESEC_PROJECTS_FILE_DIR" default:"." group:"Cloud Flags:"`
-
-	// Cloud subcommands
-	Auth     AuthCmd     `cmd:"" help:"Authentication commands"`
-	Sync     SyncCmd     `cmd:"" help:"Sync commands"`
-	Share    ShareCmd    `cmd:"" help:"Share a secret key with other users"`
-	Unshare  UnshareCmd  `cmd:"" help:"Unshare a secret key with other users"`
-	Projects ProjectsCmd `cmd:"" help:"Project commands"`
-	Keys     KeysCmd     `cmd:"" help:"Key management commands"`
-	Orgs     OrgsCmd     `cmd:"" help:"Manage team organizations"`
 }
 
 func Execute(version string) {
@@ -70,10 +48,7 @@ func Execute(version string) {
 		Level: logLevel,
 	}))
 
-	// Instantiate the OS keyring service
-	keyringSvc := oskeyring.NewDefaultService()
-
-	err := ctx.Run(&cliCtx{Context: context.Background(), Logger: logger, OSKeyring: keyringSvc})
+	err := ctx.Run(&cliCtx{Context: context.Background(), Logger: logger})
 	ctx.FatalIfErrorf(err)
 }
 
@@ -81,12 +56,32 @@ func processFileOrEnv(input string, defaultFileFormat fileutils.FileFormat) (fil
 	// This is a helper function, so we can't use the context logger directly
 	// Debug logs for this function will be handled by the calling functions
 
-	// Check if input starts with any valid format
+	// Check if input is a file path (contains path separator) or starts with a valid format
+	baseName := path.Base(input)
 	isFile := false
-	for _, format := range fileutils.ValidFormats() {
-		if strings.Contains(path.Base(input), string(format)) {
-			isFile = true
-			break
+
+	// If input contains a path separator, treat it as a file path
+	if strings.Contains(input, "/") || strings.Contains(input, string(os.PathSeparator)) {
+		// It's a path - check if basename starts with a valid format
+		for _, format := range fileutils.ValidFormats() {
+			if strings.HasPrefix(baseName, string(format)) {
+				isFile = true
+				break
+			}
+		}
+	} else {
+		// No path separator - check for format prefix with proper suffix validation
+		// This prevents "my.env.backup" from matching as ".env"
+		for _, format := range fileutils.ValidFormats() {
+			formatStr := string(format)
+			if strings.HasPrefix(baseName, formatStr) {
+				remainder := strings.TrimPrefix(baseName, formatStr)
+				// Valid if nothing follows or if it's followed by a dot (e.g., ".env.dev")
+				if remainder == "" || strings.HasPrefix(remainder, ".") {
+					isFile = true
+					break
+				}
+			}
 		}
 	}
 

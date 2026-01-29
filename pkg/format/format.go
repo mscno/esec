@@ -24,7 +24,7 @@ var ErrPublicKeyMissing = errors.New("public key not present in ecfg file")
 // value could not be parsed into a valid key.
 var ErrPublicKeyInvalid = errors.New("public key has invalid format")
 
-func ExtractPublicKeyHelper(obj map[string]interface{}) ([32]byte, error) {
+func ExtractPublicKeyHelper[T any](obj map[string]T) ([32]byte, error) {
 	var (
 		ks string
 		ok bool
@@ -37,6 +37,7 @@ func ExtractPublicKeyHelper(obj map[string]interface{}) ([32]byte, error) {
 			return [32]byte{}, ErrPublicKeyMissing
 		}
 	}
+
 	ks, ok = k.(string)
 	if !ok {
 		return [32]byte{}, fmt.Errorf("%w: public key is not a string", ErrPublicKeyInvalid)

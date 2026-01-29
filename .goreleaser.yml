@@ -1,29 +1,29 @@
 version: 2
 
 builds:
-    - main: ./cmd/esec/
-      flags:
-          - -trimpath
-      ldflags: >
-            -X main.Version={{.Version}}
-            -s
-            -w
-            -extldflags "-static"
-      env:
-          - CGO_ENABLED=0
-      goos:
-          - darwin
-          - freebsd
-          - linux
-      goarch:
-          - amd64
-          - arm64
+  - main: ./cmd/esec/
+    flags:
+      - -trimpath
+    ldflags: >
+      -X main.Version={{.Version}}
+      -s
+      -w
+      -extldflags "-static"
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - freebsd
+      - linux
+    goarch:
+      - amd64
+      - arm64
 
 nfpms:
-    - id: goreleaser
-      maintainer: "mscno <mscno@.com>"
-      description: "esec is a small and opinionated library to make it easy to manage encrypted secrets using public key asymmetric elliptic curve encryption."
-      license: "MIT"
-      homepage: "https://github.com/mscno/esec"
-      formats:
-          - deb
+  - id: goreleaser
+    maintainer: "Mads Schou-Andreasen <oss@mscno.dev>"
+    description: "esec is a small and opinionated library to make it easy to manage encrypted secrets using public key asymmetric elliptic curve encryption."
+    license: "MIT"
+    homepage: "https://github.com/mscno/esec"
+    formats:
+      - deb

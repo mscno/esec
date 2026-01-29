@@ -6,19 +6,21 @@ import (
 	gojson "encoding/json"
 	"errors"
 	"fmt"
-	"github.com/joho/godotenv"
-	"github.com/mscno/esec/pkg/crypto"
-	"github.com/mscno/esec/pkg/dotenv"
-	"github.com/mscno/esec/pkg/fileutils"
-	"github.com/mscno/esec/pkg/format"
-	"github.com/mscno/esec/pkg/json"
 	"io"
 	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
+
+	"github.com/joho/godotenv"
+	"github.com/mscno/esec/pkg/crypto"
+	"github.com/mscno/esec/pkg/dotenv"
+	"github.com/mscno/esec/pkg/fileutils"
+	"github.com/mscno/esec/pkg/format"
+	"github.com/mscno/esec/pkg/json"
 )
 
 const (
@@ -45,10 +47,6 @@ const (
 	FileFormatEyml  FileFormat = ".eyml"
 	FileFormatEtoml FileFormat = ".etoml"
 )
-
-func validFormats() []FileFormat {
-	return []FileFormat{FileFormatEnv, FileFormatEjson, FileFormatEyaml, FileFormatEyml, FileFormatEtoml}
-}
 
 // EncryptFileInPlace takes a path to a file on disk, which must be a valid ecfg file
 // (see README.md for more on what constitutes a valid ecfg file). Any
@@ -442,13 +440,16 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 	if privKeyString, exists := os.LookupEnv(keyToLookup); exists {
 		return format.ParseKey(privKeyString)
 	}
-	cleanPath := filepath.Clean(keyPath)
-	if strings.Contains(cleanPath, "..") || !strings.HasPrefix(cleanPath, filepath.Clean(keyPath)) {
-		return privKey, fmt.Errorf("invalid keyPath containing directory traversal sequences: %s", keyPath)
+	// Validate keyPath to prevent directory traversal attacks
+	if err := validateKeyPath(keyPath); err != nil {
+		return privKey, err
 	}
 
 	// If not found in env vars, try reading from the keyring file.
 	keyringPath := filepath.Join(keyPath, DefaultKeyringFilename)
+
+	// Check keyring file permissions on non-Windows systems
+	checkKeyringPermissions(keyringPath)
 	privateKeyFile, err := os.ReadFile(keyringPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -657,9 +658,6 @@ func DotEnvToEnv(payload []byte) (map[string]string, error) {
 	return godotenv.Parse(bytes.NewBuffer(payload))
 }
 
-var errNoEnv = errors.New("environment is not set in ejson")
-var errEnvNotMap = errors.New("environment is not a map[string]interface{}")
-
 var validIdentifierPattern = regexp.MustCompile(`\A[a-zA-Z_][a-zA-Z0-9_]*\z`)
 
 func extractEnv(envMap map[string]interface{}) (map[string]string, error) {
@@ -684,4 +682,38 @@ func extractEnv(envMap map[string]interface{}) (map[string]string, error) {
 	}
 
 	return envSecrets, nil
+}
+
+// validateKeyPath checks for directory traversal attempts in key paths
+func validateKeyPath(keyPath string) error {
+	if strings.Contains(keyPath, "..") {
+		return fmt.Errorf("invalid keyPath containing directory traversal sequences: %s", keyPath)
+	}
+	if keyPath == "" {
+		return nil
+	}
+	absPath, err := filepath.Abs(keyPath)
+	if err != nil {
+		return fmt.Errorf("invalid keyPath: %w", err)
+	}
+	if strings.Contains(filepath.Clean(absPath), "..") {
+		return fmt.Errorf("invalid keyPath after resolution: %s", keyPath)
+	}
+	return nil
+}
+
+// checkKeyringPermissions warns if the keyring file has insecure permissions
+func checkKeyringPermissions(path string) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	mode := info.Mode().Perm()
+	if mode&0077 != 0 {
+		slog.Warn("keyring file has insecure permissions",
+			"path", path, "mode", fmt.Sprintf("%04o", mode), "recommended", "0600")
+	}
 }

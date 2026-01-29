@@ -4,10 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"regexp"
+	"strings"
+
 	"github.com/joho/godotenv"
 	"github.com/mscno/esec/pkg/format"
-	"strings"
 )
+
+// validIdentifierPattern matches valid environment variable identifiers
+var validIdentifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 type DotEnvFormatter struct{}
 
@@ -16,12 +21,7 @@ func (d *DotEnvFormatter) ExtractPublicKey(data []byte) ([32]byte, error) {
 	if err != nil {
 		return [32]byte{}, err
 	}
-	pubKeyString, ok := envs[format.PublicKeyField]
-	if !ok {
-		return [32]byte{}, format.ErrPublicKeyMissing
-	}
-
-	return format.ParseKey(pubKeyString)
+	return format.ExtractPublicKeyHelper(envs)
 }
 
 func (d *DotEnvFormatter) TransformScalarValues(data []byte, fn func([]byte) ([]byte, error)) ([]byte, error) {
@@ -42,6 +42,10 @@ func (d *DotEnvFormatter) TransformScalarValues(data []byte, fn func([]byte) ([]
 		// Split key and value by the first '=' to handle cases where '=' is in the value
 		parts := strings.SplitN(trimmedLine, "=", 2)
 		if len(parts) != 2 {
+			// Warn if line looks like a malformed key-value pair (valid identifier without '=')
+			if isLikelyMalformedEntry(trimmedLine) {
+				return nil, fmt.Errorf("line appears malformed (no '=' found): %q", trimmedLine)
+			}
 			// If line does not match key=value pattern, write it as-is
 			buffer.WriteString(line + "\n")
 			continue
@@ -69,4 +73,19 @@ func (d *DotEnvFormatter) TransformScalarValues(data []byte, fn func([]byte) ([]
 	}
 
 	return buffer.Bytes(), nil
+}
+
+// isLikelyMalformedEntry checks if a line looks like an intended key-value pair
+// but is missing the '=' sign. This helps catch typos like "SECRET_KEY" instead of "SECRET_KEY=value"
+func isLikelyMalformedEntry(line string) bool {
+	// Skip lines that start with export (shell syntax)
+	if strings.HasPrefix(line, "export ") {
+		return false
+	}
+	// Skip very short lines
+	if len(line) < 3 {
+		return false
+	}
+	// If line matches a valid identifier pattern, it's likely a malformed entry
+	return validIdentifierPattern.MatchString(line)
 }

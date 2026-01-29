@@ -7,6 +7,9 @@ import (
 	"strconv"
 )
 
+// CurrentSchemaVersion is the only supported schema version for boxed messages
+const CurrentSchemaVersion = 1
+
 var messageParser = regexp.MustCompile("\\AESEC\\[(\\d):([A-Za-z0-9+=/]{44}):([A-Za-z0-9+=/]{32}):(.+)\\]\\z")
 
 // boxedMessage dumps and loads the wire format for encrypted messages. The
@@ -68,6 +71,11 @@ func (b *boxedMessage) Load(from []byte) error {
 	b.SchemaVersion, err = strconv.Atoi(ssver)
 	if err != nil {
 		return err
+	}
+
+	if b.SchemaVersion != CurrentSchemaVersion {
+		return fmt.Errorf("unsupported schema version %d, only version %d is supported",
+			b.SchemaVersion, CurrentSchemaVersion)
 	}
 
 	pub, err := base64.StdEncoding.DecodeString(spub)
