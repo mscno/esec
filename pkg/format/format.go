@@ -1,3 +1,4 @@
+// Package format provides common types and utilities for handling encrypted file formats.
 package format
 
 import (
@@ -6,13 +7,22 @@ import (
 	"fmt"
 )
 
+// Public key field names used in encrypted files.
 const (
-	PublicKeyField            = "ESEC_PUBLIC_KEY"
+	// PublicKeyField is the standard key name for the public key in encrypted files.
+	PublicKeyField = "ESEC_PUBLIC_KEY"
+	// UnderscoredPublicKeyField is the alternative key name (with underscore prefix)
+	// that prevents the key itself from being encrypted in JSON format.
 	UnderscoredPublicKeyField = "_ESEC_PUBLIC_KEY"
 )
 
+// FormatHandler defines the interface for format-specific encryption/decryption handlers.
+// Each supported file format (dotenv, JSON, etc.) implements this interface.
 type FormatHandler interface {
+	// TransformScalarValues walks the data and applies the given function to each
+	// encryptable value. The function is typically an encrypt or decrypt operation.
 	TransformScalarValues([]byte, func([]byte) ([]byte, error)) ([]byte, error)
+	// ExtractPublicKey parses the data and returns the embedded public key.
 	ExtractPublicKey([]byte) ([32]byte, error)
 }
 
@@ -24,6 +34,9 @@ var ErrPublicKeyMissing = errors.New("public key not present in ecfg file")
 // value could not be parsed into a valid key.
 var ErrPublicKeyInvalid = errors.New("public key has invalid format")
 
+// ExtractPublicKeyHelper extracts the public key from a parsed data structure.
+// It looks for either "_ESEC_PUBLIC_KEY" (preferred) or "ESEC_PUBLIC_KEY" fields.
+// The type parameter T allows this to work with both map[string]interface{} and map[string]string.
 func ExtractPublicKeyHelper[T any](obj map[string]T) ([32]byte, error) {
 	var (
 		ks string
@@ -51,6 +64,8 @@ func ExtractPublicKeyHelper[T any](obj map[string]T) ([32]byte, error) {
 	return key, nil
 }
 
+// ParseKey parses a hex-encoded 32-byte key string into a [32]byte array.
+// The input must be exactly 64 hex characters (representing 32 bytes).
 func ParseKey(ks string) ([32]byte, error) {
 	if len(ks) != 64 {
 		return [32]byte{}, errors.New("public key is not 64 characters long")

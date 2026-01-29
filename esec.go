@@ -1,3 +1,19 @@
+// Package esec provides encrypted secrets management using public-key cryptography.
+//
+// esec supports encrypting and decrypting secrets in various file formats including
+// .env (dotenv) and .ejson (JSON). It uses NaCl box encryption (Curve25519, XSalsa20, Poly1305)
+// for secure secret storage.
+//
+// Basic usage for encryption:
+//
+//	data := []byte(`{"_ESEC_PUBLIC_KEY": "...", "secret": "myvalue"}`)
+//	var output bytes.Buffer
+//	esec.Encrypt(bytes.NewReader(data), &output, esec.FileFormatEjson)
+//
+// Basic usage for decryption:
+//
+//	os.Setenv("ESEC_PRIVATE_KEY", "your-private-key")
+//	data, err := esec.DecryptFile(".ejson", ".", "")
 package esec
 
 import (
@@ -24,12 +40,17 @@ import (
 )
 
 const (
-	EsecPublicKey  = "ESEC_PUBLIC_KEY"
+	// EsecPublicKey is the key name used to store the public key in encrypted files.
+	EsecPublicKey = "ESEC_PUBLIC_KEY"
+	// EsecPrivateKey is the base name for private key environment variables.
+	// For environment-specific keys, use ESEC_PRIVATE_KEY_<ENV> (e.g., ESEC_PRIVATE_KEY_PROD).
 	EsecPrivateKey = "ESEC_PRIVATE_KEY"
-	// DefaultKeyringFilename is the default name for the file storing the private key.
+	// DefaultKeyringFilename is the default name for the file storing private keys.
 	DefaultKeyringFilename = ".esec-keyring"
 )
 
+// GenerateKeypair generates a new Curve25519 keypair for use with esec encryption.
+// It returns the public and private keys as hex-encoded strings (64 characters each).
 func GenerateKeypair() (pub string, priv string, err error) {
 	var kp crypto.Keypair
 	if err := kp.Generate(); err != nil {
@@ -38,13 +59,20 @@ func GenerateKeypair() (pub string, priv string, err error) {
 	return kp.PublicString(), kp.PrivateString(), nil
 }
 
+// FileFormat represents the supported encrypted file formats.
 type FileFormat string
 
+// Supported file formats for encrypted secrets.
 const (
-	FileFormatEnv   FileFormat = ".env"
+	// FileFormatEnv represents the .env (dotenv) file format.
+	FileFormatEnv FileFormat = ".env"
+	// FileFormatEjson represents the .ejson (encrypted JSON) file format.
 	FileFormatEjson FileFormat = ".ejson"
+	// FileFormatEyaml represents the .eyaml (encrypted YAML) file format (not yet implemented).
 	FileFormatEyaml FileFormat = ".eyaml"
-	FileFormatEyml  FileFormat = ".eyml"
+	// FileFormatEyml represents the .eyml (encrypted YAML) file format (not yet implemented).
+	FileFormatEyml FileFormat = ".eyml"
+	// FileFormatEtoml represents the .etoml (encrypted TOML) file format (not yet implemented).
 	FileFormatEtoml FileFormat = ".etoml"
 )
 
@@ -81,6 +109,10 @@ func EncryptFileInPlace(filePath string) (int, error) {
 	return len(newdata), nil
 }
 
+// Encrypt reads data from the input reader, encrypts all encryptable values using the
+// public key embedded in the data, and writes the encrypted result to the output writer.
+// The fileFormat parameter determines how the data is parsed and which fields are encrypted.
+// It returns the number of bytes written and any error encountered.
 func Encrypt(in io.Reader, out io.Writer, fileFormat FileFormat) (int, error) {
 	// Read the input data
 	data, err := io.ReadAll(in)
@@ -128,19 +160,23 @@ func encryptData(data []byte, fileFormat FileFormat) ([]byte, error) {
 // Returns the environment name (empty string for default environment) and any error encountered
 type EnvironmentLookupFn func() (string, error)
 
-// DecryptFromEmbedConfig defines the configuration options for DecryptFromEmbedFS
+// DecryptFromEmbedConfig defines the configuration options for DecryptFromEmbedFSWithConfig.
 type DecryptFromEmbedConfig struct {
-	// EnvName specifies an environment name override
+	// EnvName specifies an explicit environment name (e.g., "dev", "prod").
+	// If set, this overrides automatic environment detection.
 	EnvName string
-	// Format specifies the file format (defaults to FileFormatEjson if not set)
+	// Format specifies the file format. Defaults to FileFormatEjson if not set.
 	Format FileFormat
-	// Logger for outputting debug and info messages
+	// Logger for outputting debug and info messages. If nil, logging is disabled.
 	Logger *slog.Logger
-
-	// EnvironmentLookuper is a function that finds the environment name
-	// If not provided, EnvironmentVarLookup will be used
-	EnvironmentLookuper    EnvironmentLookupFn
-	Keydir                 string
+	// EnvironmentLookuper is a function that determines the environment name.
+	// If not provided, EnvironmentVarLookup will be used.
+	EnvironmentLookuper EnvironmentLookupFn
+	// Keydir is the directory containing the .esec-keyring file.
+	// Defaults to the current directory if empty.
+	Keydir string
+	// UserSuppliedPrivateKey allows passing the private key directly as a hex string.
+	// If set, this takes precedence over environment variables and keyring file.
 	UserSuppliedPrivateKey string
 }
 
@@ -256,7 +292,9 @@ func DecryptFromEmbedFSWithConfig(v embed.FS, config DecryptFromEmbedConfig) ([]
 	return decryptData(privkey, data, config.Format)
 }
 
-// Legacy option-based API for backward compatibility
+// DecryptFromEmbedOption is a functional option for configuring DecryptFromEmbedFSWithOptions.
+//
+// Deprecated: Use DecryptFromEmbedConfig with DecryptFromEmbedFSWithConfig instead.
 type DecryptFromEmbedOption func(*decryptFromEmbedOptions) error
 
 type decryptFromEmbedOptions struct {
@@ -267,6 +305,9 @@ type decryptFromEmbedOptions struct {
 	format         FileFormat
 }
 
+// WithEnvOverride sets an explicit environment name, overriding automatic detection.
+//
+// Deprecated: Use DecryptFromEmbedConfig.EnvName instead.
 func WithEnvOverride(envOverride string) DecryptFromEmbedOption {
 	return func(o *decryptFromEmbedOptions) error {
 		o.envOverride = envOverride
@@ -274,6 +315,9 @@ func WithEnvOverride(envOverride string) DecryptFromEmbedOption {
 	}
 }
 
+// WithLogger sets a logger for debug and info messages.
+//
+// Deprecated: Use DecryptFromEmbedConfig.Logger instead.
 func WithLogger(logger *slog.Logger) DecryptFromEmbedOption {
 	return func(o *decryptFromEmbedOptions) error {
 		o.logger = logger
@@ -281,6 +325,9 @@ func WithLogger(logger *slog.Logger) DecryptFromEmbedOption {
 	}
 }
 
+// WithFormat sets the file format to use.
+//
+// Deprecated: Use DecryptFromEmbedConfig.Format instead.
 func WithFormat(format FileFormat) DecryptFromEmbedOption {
 	return func(o *decryptFromEmbedOptions) error {
 		o.format = format
@@ -288,6 +335,9 @@ func WithFormat(format FileFormat) DecryptFromEmbedOption {
 	}
 }
 
+// WithEnvSniffer enables automatic environment detection from environment variables.
+//
+// Deprecated: Use DecryptFromEmbedConfig.EnvironmentLookuper with EnvironmentVarLookup instead.
 func WithEnvSniffer() DecryptFromEmbedOption {
 	return func(o *decryptFromEmbedOptions) error {
 		o.envSniffer = true
@@ -295,6 +345,9 @@ func WithEnvSniffer() DecryptFromEmbedOption {
 	}
 }
 
+// WithKeyringSniffer enables automatic environment detection from the keyring file.
+//
+// Deprecated: Use DecryptFromEmbedConfig.EnvironmentLookuper with KeyringLookup instead.
 func WithKeyringSniffer() DecryptFromEmbedOption {
 	return func(o *decryptFromEmbedOptions) error {
 		o.keyringSniffer = true
@@ -513,7 +566,12 @@ func sniffEnvName(logger *slog.Logger) (string, error) {
 	}
 }
 
+// ActiveKey is the keyring variable name that specifies which private key to use.
+// Its value should be a private key variable name (e.g., "ESEC_PRIVATE_KEY_DEV").
 const ActiveKey = "ESEC_ACTIVE_KEY"
+
+// ActiveEnvironment is the keyring variable name that specifies the active environment.
+// Its value should be an environment name (e.g., "dev", "prod").
 const ActiveEnvironment = "ESEC_ACTIVE_ENVIRONMENT"
 
 func sniffFromKeyring(logger *slog.Logger, keyPath string, envName string) (string, error) {
@@ -640,10 +698,9 @@ func parseEnvironment(filename string) (string, error) {
 	return parts[len(parts)-1], nil
 }
 
-/*
-	HELPER FUNCTIONS
-*/
-
+// EjsonToEnv parses decrypted EJSON data and returns a map of environment variables.
+// It extracts all top-level string values, excluding the ESEC_PUBLIC_KEY field.
+// Non-string values (numbers, booleans, objects, arrays) are skipped.
 func EjsonToEnv(payload []byte) (map[string]string, error) {
 	var data map[string]interface{}
 	err := gojson.Unmarshal(payload, &data)
@@ -654,6 +711,8 @@ func EjsonToEnv(payload []byte) (map[string]string, error) {
 	return extractEnv(data)
 }
 
+// DotEnvToEnv parses decrypted dotenv data and returns a map of environment variables.
+// It uses the standard dotenv parsing rules.
 func DotEnvToEnv(payload []byte) (map[string]string, error) {
 	return godotenv.Parse(bytes.NewBuffer(payload))
 }

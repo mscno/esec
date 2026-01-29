@@ -1,3 +1,4 @@
+// Package dotenv provides a FormatHandler implementation for .env (dotenv) files.
 package dotenv
 
 import (
@@ -14,8 +15,13 @@ import (
 // validIdentifierPattern matches valid environment variable identifiers
 var validIdentifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+// DotEnvFormatter implements format.FormatHandler for .env (dotenv) files.
+// It handles encryption and decryption of values in dotenv format while
+// preserving comments, blank lines, and the overall file structure.
 type DotEnvFormatter struct{}
 
+// ExtractPublicKey parses the dotenv data and returns the ESEC_PUBLIC_KEY value.
+// It looks for either "ESEC_PUBLIC_KEY" or "_ESEC_PUBLIC_KEY" fields.
 func (d *DotEnvFormatter) ExtractPublicKey(data []byte) ([32]byte, error) {
 	envs, err := godotenv.Parse(bytes.NewReader(data))
 	if err != nil {
@@ -24,6 +30,10 @@ func (d *DotEnvFormatter) ExtractPublicKey(data []byte) ([32]byte, error) {
 	return format.ExtractPublicKeyHelper(envs)
 }
 
+// TransformScalarValues processes each key=value pair in the dotenv data,
+// applying the given function to transform each value. Comments, blank lines,
+// and the ESEC_PUBLIC_KEY field are preserved unchanged.
+// Returns an error if a line appears to be a malformed key-value pair.
 func (d *DotEnvFormatter) TransformScalarValues(data []byte, fn func([]byte) ([]byte, error)) ([]byte, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	var buffer bytes.Buffer

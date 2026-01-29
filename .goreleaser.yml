@@ -21,7 +21,7 @@ builds:
 
 nfpms:
   - id: goreleaser
-    maintainer: "Mads Schou-Andreasen <oss@mscno.dev>"
+    maintainer: "Mads Schou <oss@mscno.dev>"
     description: "esec is a small and opinionated library to make it easy to manage encrypted secrets using public key asymmetric elliptic curve encryption."
     license: "MIT"
     homepage: "https://github.com/mscno/esec"
