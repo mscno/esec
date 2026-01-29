@@ -59,10 +59,8 @@ func TestValidateCommand(t *testing.T) {
 				if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
 					t.Errorf("validateCommand() error = %q, want error containing %q", err.Error(), tt.errMsg)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("validateCommand() unexpected error = %v", err)
-				}
+			} else if err != nil {
+				t.Errorf("validateCommand() unexpected error = %v", err)
 			}
 		})
 	}
@@ -128,10 +126,8 @@ func TestValidateCommandWindows(t *testing.T) {
 				if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
 					t.Errorf("validateCommand() error = %q, want error containing %q", err.Error(), tt.errMsg)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("validateCommand() unexpected error = %v", err)
-				}
+			} else if err != nil {
+				t.Errorf("validateCommand() unexpected error = %v", err)
 			}
 		})
 	}

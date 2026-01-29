@@ -34,7 +34,7 @@ import (
 //   - In {"k": {"a": ["b"]}, Action will run on "b".
 //   - In {"_k": {"a": ["b"]}, Action run on "b".
 //   - In {"k": {"_a": ["b"]}, Action will not run.
-func (h *JsonFormatter) TransformScalarValues(
+func (f *Formatter) TransformScalarValues(
 	data []byte,
 	action func([]byte) ([]byte, error),
 ) ([]byte, error) {

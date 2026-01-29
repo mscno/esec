@@ -5,7 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -29,6 +29,7 @@ func TestKeygenCmd(t *testing.T) {
 	assert.Contains(t, out, "Private Key:")
 }
 
+//nolint:dupl // Test functions have similar structure but test different scenarios
 func TestEncryptCmd(t *testing.T) {
 	// Create a temporary file
 	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")
@@ -53,6 +54,7 @@ func TestEncryptCmd(t *testing.T) {
 	assert.Equal(t, out, "Encrypted 347 bytes\n")
 }
 
+//nolint:dupl // Test functions have similar structure but test different scenarios
 func TestEncryptCmdBadFile(t *testing.T) {
 	// Create a temporary file
 	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")
@@ -82,7 +84,7 @@ func TestDecryptCmd(t *testing.T) {
 	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")
 	assert.NoError(t, err)
 	defer os.Remove(tmpFile.Name()) // Clean up after test
-	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	t.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 	// Write test data
 	_, err = tmpFile.WriteString(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`)
 	assert.NoError(t, err)
@@ -106,7 +108,7 @@ func TestGetCmdOk(t *testing.T) {
 	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")
 	assert.NoError(t, err)
 	defer os.Remove(tmpFile.Name()) // Clean up after test
-	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	t.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 	// Write test data
 	_, err = tmpFile.WriteString(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`)
 	assert.NoError(t, err)
@@ -126,11 +128,12 @@ func TestGetCmdOk(t *testing.T) {
 }
 
 func TestGetCmdOkWithEnv(t *testing.T) {
-	// Create a temporary file
-	tmpFile, err := os.Create(path.Join(os.TempDir(), ".ejson.production"))
+	// Create a temporary file with fixed name (not CreateTemp which adds random suffix)
+	tmpFilePath := filepath.Join(t.TempDir(), ".ejson.production")
+	tmpFile, err := os.Create(tmpFilePath) //nolint:gosec // Test file with fixed name needed for env parsing
 	assert.NoError(t, err)
 	defer os.Remove(tmpFile.Name()) // Clean up after test
-	os.Setenv("ESEC_PRIVATE_KEY_PRODUCTION", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	t.Setenv("ESEC_PRIVATE_KEY_PRODUCTION", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 	// Write test data
 	_, err = tmpFile.WriteString(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`)
 	assert.NoError(t, err)
@@ -154,7 +157,7 @@ func TestGetCmdMissing(t *testing.T) {
 	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")
 	assert.NoError(t, err)
 	defer os.Remove(tmpFile.Name()) // Clean up after test
-	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	t.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 	// Write test data
 	_, err = tmpFile.WriteString(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`)
 	assert.NoError(t, err)
@@ -320,8 +323,8 @@ func captureOutput(f func() error) (string, string) {
 
 	// Read output from pipes
 	var outBuf, errBuf bytes.Buffer
-	io.Copy(&outBuf, rOut)
-	io.Copy(&errBuf, rErr)
+	_, _ = io.Copy(&outBuf, rOut)
+	_, _ = io.Copy(&errBuf, rErr)
 
 	// Restore original stdout and stderr
 	os.Stdout = oldOut

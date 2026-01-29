@@ -14,7 +14,7 @@ import (
 	"github.com/mscno/esec/pkg/fileutils"
 )
 
-// Add this command struct
+// RunCmd decrypts a secrets file and runs a command with the environment variables.
 type RunCmd struct {
 	File         string   `arg:"" help:"File or Environment to decrypt" default:""`
 	Format       string   `help:"File format" default:".ejson" short:"f"`
@@ -23,7 +23,9 @@ type RunCmd struct {
 	Command      []string `arg:"" optional:"" name:"command" help:"Command to run with the decrypted environment variables"`
 }
 
-// Implement the Run method
+// Run executes the run command, decrypting secrets and running the specified command.
+//
+//nolint:gocyclo // Complex but necessary for signal handling and process management
 func (c *RunCmd) Run(ctx *cliCtx) error {
 	// Validate that a command is specified
 	if len(c.Command) == 0 {
@@ -168,10 +170,10 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 		if runtime.GOOS != "windows" {
 			// Just forward the signal and exit immediately
 			// This works better for terminal applications
-			syscall.Kill(pid, sig.(syscall.Signal))
+			_ = syscall.Kill(pid, sig.(syscall.Signal)) //nolint:forcetypeassert // Signal is always syscall.Signal on non-Windows
 		} else {
 			// Windows handling
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill()
 		}
 
 		// Return to let the terminal clean up properly

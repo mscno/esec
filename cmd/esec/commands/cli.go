@@ -1,3 +1,4 @@
+// Package commands implements the CLI commands for the esec tool.
 package commands
 
 import (
@@ -14,7 +15,7 @@ import (
 
 type cliCtx struct {
 	Logger *slog.Logger
-	context.Context
+	Ctx    context.Context //nolint:containedctx // CLI context needs to pass context to subcommands
 }
 
 type cli struct {
@@ -28,6 +29,7 @@ type cli struct {
 	Debug   bool             `help:"Enable debug mode"`
 }
 
+// Execute runs the CLI with the given version string.
 func Execute(version string) {
 	var cli cli
 	ctx := kong.Parse(&cli,
@@ -48,7 +50,7 @@ func Execute(version string) {
 		Level: logLevel,
 	}))
 
-	err := ctx.Run(&cliCtx{Context: context.Background(), Logger: logger})
+	err := ctx.Run(&cliCtx{Ctx: context.Background(), Logger: logger})
 	ctx.FatalIfErrorf(err)
 }
 
@@ -97,7 +99,7 @@ func processFileOrEnv(input string, defaultFileFormat fileutils.FileFormat) (fil
 	}
 
 	for _, char := range environment {
-		if !strings.Contains("abcdefghijklmnopqrstuvwxyz0123456789", string(char)) {
+		if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyz0123456789", char) {
 			return "", fmt.Errorf("invalid environment name: %s - should be lowercase alphanumeric", input)
 		}
 	}

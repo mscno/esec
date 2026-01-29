@@ -10,6 +10,7 @@ import (
 	"github.com/mscno/esec/pkg/fileutils"
 )
 
+// DecryptCmd decrypts a secrets file.
 type DecryptCmd struct {
 	File         string `arg:"" help:"File or Environment to decrypt" default:""`
 	Format       string `help:"File format" default:".ejson" short:"f"`
@@ -17,6 +18,7 @@ type DecryptCmd struct {
 	KeyDir       string `help:"Directory containing the '.esec_keyring' file" default:"." short:"d"`
 }
 
+// Run executes the decrypt command.
 func (c *DecryptCmd) Run(ctx *cliCtx) error {
 	ctx.Logger.Debug("decrypting secret", "file", c.File, "format", c.Format, "key_dir", c.KeyDir, "key_from_stdin", c.KeyFromStdin)
 

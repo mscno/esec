@@ -16,14 +16,14 @@ const (
 	UnderscoredPublicKeyField = "_ESEC_PUBLIC_KEY"
 )
 
-// FormatHandler defines the interface for format-specific encryption/decryption handlers.
+// Handler defines the interface for format-specific encryption/decryption handlers.
 // Each supported file format (dotenv, JSON, etc.) implements this interface.
-type FormatHandler interface {
+type Handler interface {
 	// TransformScalarValues walks the data and applies the given function to each
 	// encryptable value. The function is typically an encrypt or decrypt operation.
-	TransformScalarValues([]byte, func([]byte) ([]byte, error)) ([]byte, error)
+	TransformScalarValues(data []byte, fn func([]byte) ([]byte, error)) ([]byte, error)
 	// ExtractPublicKey parses the data and returns the embedded public key.
-	ExtractPublicKey([]byte) ([32]byte, error)
+	ExtractPublicKey(data []byte) ([32]byte, error)
 }
 
 // ErrPublicKeyMissing indicates that the PublicKeyField key was not found

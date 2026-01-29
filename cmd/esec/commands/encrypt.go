@@ -8,12 +8,14 @@ import (
 	"github.com/mscno/esec/pkg/fileutils"
 )
 
+// EncryptCmd encrypts a secrets file.
 type EncryptCmd struct {
 	File   string `arg:"" help:"File or Environment to encrypt" default:""`
 	Format string `help:"File format" default:".ejson" short:"f"`
 	DryRun bool   `help:"Print the encrypted message without writing to file" short:"d"`
 }
 
+// Run executes the encrypt command.
 func (c *EncryptCmd) Run(ctx *cliCtx) error {
 	ctx.Logger.Debug("encrypting secret", "file", c.File, "format", c.Format, "dry_run", c.DryRun)
 

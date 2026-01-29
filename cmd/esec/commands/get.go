@@ -11,6 +11,7 @@ import (
 	"github.com/mscno/esec/pkg/fileutils"
 )
 
+// GetCmd decrypts a secrets file and extracts a specific key.
 type GetCmd struct {
 	File         string `arg:"" help:"File or Environment to decrypt" default:""`
 	Key          string `arg:"" help:"Key to extract from decrypted content" default:""`
@@ -19,6 +20,7 @@ type GetCmd struct {
 	KeyDir       string `help:"Directory containing the '.esec_keyring' file" default:"." short:"d"`
 }
 
+// Run executes the get command.
 func (c *GetCmd) Run(ctx *cliCtx) error {
 	ctx.Logger.Debug("getting key from secret", "file", c.File, "key", c.Key, "format", c.Format, "key_dir", c.KeyDir, "key_from_stdin", c.KeyFromStdin)
 

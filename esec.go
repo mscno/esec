@@ -84,7 +84,7 @@ const (
 // public key embdded in the file, and the resulting text will be written over
 // the file present on disk.
 func EncryptFileInPlace(filePath string) (int, error) {
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) //nolint:gosec // File path is user-provided
 	if err != nil {
 		return -1, err
 	}
@@ -389,7 +389,9 @@ func WithKeyringSniffer() DecryptFromEmbedOption {
 	}
 }
 
-// Deprecated: Use the new config-based DecryptFromEmbedFS instead
+// DecryptFromEmbedFSWithOptions retrieves and decrypts a file from an embedded filesystem using functional options.
+//
+// Deprecated: Use DecryptFromEmbedFSWithConfig instead.
 func DecryptFromEmbedFSWithOptions(v embed.FS, opts ...DecryptFromEmbedOption) ([]byte, error) {
 	// Create a new options struct and apply the provided options
 	o := &decryptFromEmbedOptions{
@@ -416,11 +418,8 @@ func DecryptFromEmbedFSWithOptions(v embed.FS, opts ...DecryptFromEmbedOption) (
 		Logger:  o.logger,
 	}
 
-	// Create additional lookupers based on options
-	var additionalLookupers []EnvironmentLookupFn
-	if o.keyringSniffer {
-		additionalLookupers = append(additionalLookupers, KeyringLookup(""))
-	}
+	// Note: keyringSniffer option is deprecated and no longer used
+	// The new config-based API should be used instead
 
 	// Call the new implementation
 	return DecryptFromEmbedFSWithConfig(v, config)
@@ -433,7 +432,7 @@ func DecryptFile(filePath string, keydir string, userSuppliedPrivateKey string) 
 		return nil, fmt.Errorf("error parsing env from file: %w", err)
 	}
 
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) //nolint:gosec // File path is user-provided
 	if err != nil {
 		return nil, err
 	}
@@ -536,7 +535,7 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 
 	// Check keyring file permissions on non-Windows systems
 	checkKeyringPermissions(keyringPath)
-	privateKeyFile, err := os.ReadFile(keyringPath)
+	privateKeyFile, err := os.ReadFile(keyringPath) //nolint:gosec // File path is constructed from user-provided keyPath
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return privKey, fmt.Errorf("private key %q not found in environment variables, and keyring file does not exist at %q", keyToLookup, keyringPath)
@@ -560,15 +559,15 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 	return format.ParseKey(privKeyString)
 }
 
-// getFormatter returns the appropriate FormatHandler based on the given file format.
-func getFormatter(fileFormat FileFormat) (format.FormatHandler, error) {
+// getFormatter returns the appropriate Handler based on the given file format.
+func getFormatter(fileFormat FileFormat) (format.Handler, error) {
 	switch fileFormat {
 	case FileFormatEnv:
-		return &dotenv.DotEnvFormatter{}, nil
+		return &dotenv.Formatter{}, nil
 	case FileFormatEjson:
-		return &json.JsonFormatter{}, nil
+		return &json.Formatter{}, nil
 	case FileFormatEyaml, FileFormatEyml:
-		return &yaml.YamlFormatter{}, nil
+		return &yaml.Formatter{}, nil
 	case FileFormatEtoml:
 		return &toml.Formatter{}, nil
 	default:
@@ -619,7 +618,7 @@ func sniffFromKeyring(logger *slog.Logger, keyPath string, envName string) (stri
 
 	// If not found in env vars, try reading from the keyring file.
 	keyringPath := filepath.Join(keyPath, DefaultKeyringFilename)
-	privateKeyFile, err := os.ReadFile(keyringPath)
+	privateKeyFile, err := os.ReadFile(keyringPath) //nolint:gosec // File path is constructed from user-provided keyPath
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", fmt.Errorf("keyring file does not exist at %q", keyringPath)

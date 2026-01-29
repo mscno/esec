@@ -29,7 +29,7 @@ import (
 //
 // YAML anchors and aliases are rejected as they break authentication.
 // Top-level arrays are rejected as a mapping is required for the public key.
-func (f *YamlFormatter) TransformScalarValues(
+func (f *Formatter) TransformScalarValues(
 	data []byte,
 	action func([]byte) ([]byte, error),
 ) ([]byte, error) {
@@ -80,6 +80,8 @@ func (f *YamlFormatter) TransformScalarValues(
 
 // walkNode recursively walks the YAML node tree and applies the action function
 // to actionable string scalar values.
+//
+//nolint:gocyclo // Complex but well-structured switch statement for YAML node types
 func walkNode(node *yaml.Node, action func([]byte) ([]byte, error), parentKeyIsComment bool) error {
 	switch node.Kind {
 	case yaml.DocumentNode:

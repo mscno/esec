@@ -10,7 +10,7 @@ import (
 // CurrentSchemaVersion is the only supported schema version for boxed messages
 const CurrentSchemaVersion = 1
 
-var messageParser = regexp.MustCompile("\\AESEC\\[(\\d):([A-Za-z0-9+=/]{44}):([A-Za-z0-9+=/]{32}):(.+)\\]\\z")
+var messageParser = regexp.MustCompile(`\AESEC\[(\d):([A-Za-z0-9+=/]{44}):([A-Za-z0-9+=/]{32}):(.+)\]\z`)
 
 // boxedMessage dumps and loads the wire format for encrypted messages. The
 // schema is fairly simple:

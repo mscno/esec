@@ -1,3 +1,4 @@
 package main
 
-var VERSION string = "1.0.0"
+// VERSION is the version of the esec CLI tool, set at build time.
+var VERSION = "1.0.0"

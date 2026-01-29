@@ -10,7 +10,7 @@ import (
 // ExtractPublicKey parses the YAML data and returns the ESEC_PUBLIC_KEY value.
 // It looks for either "_ESEC_PUBLIC_KEY" (preferred) or "ESEC_PUBLIC_KEY" fields
 // at the top level of the YAML document.
-func (f *YamlFormatter) ExtractPublicKey(data []byte) ([32]byte, error) {
+func (f *Formatter) ExtractPublicKey(data []byte) ([32]byte, error) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return [32]byte{}, fmt.Errorf("invalid yaml: %v", err)

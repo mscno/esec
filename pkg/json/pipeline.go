@@ -30,15 +30,16 @@ func newPipeline() *pipeline {
 
 func (p *pipeline) run() {
 	for qi := range p.queue {
-		if qi.term {
+		switch {
+		case qi.term:
 			close(p.done)
-		} else if qi.pr != nil {
+		case qi.pr != nil:
 			res := <-qi.pr
 			if res.err != nil {
 				p.err = res.err
 			}
 			p.final = append(p.final, res.bytes...)
-		} else {
+		default:
 			p.final = append(p.final, qi.bs...)
 		}
 	}

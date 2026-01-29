@@ -7,7 +7,7 @@ import (
 )
 
 func TestKeyExtraction(t *testing.T) {
-	fh := YamlFormatter{}
+	fh := Formatter{}
 	in := `_ESEC_PUBLIC_KEY: 6d79b7e50073e5e66a4581ed08bf1d9a03806cc4648cffeb6df71b5775e5eb08`
 	expected := [32]byte{109, 121, 183, 229, 0, 115, 229, 230, 106, 69, 129, 237, 8, 191, 29, 154, 3, 128, 108, 196, 100, 140, 255, 235, 109, 247, 27, 87, 117, 229, 235, 8}
 	key, err := fh.ExtractPublicKey([]byte(in))
@@ -20,7 +20,7 @@ func TestKeyExtraction(t *testing.T) {
 }
 
 func TestKeyExtractionWithoutUnderscore(t *testing.T) {
-	fh := YamlFormatter{}
+	fh := Formatter{}
 	in := `ESEC_PUBLIC_KEY: 6d79b7e50073e5e66a4581ed08bf1d9a03806cc4648cffeb6df71b5775e5eb08`
 	expected := [32]byte{109, 121, 183, 229, 0, 115, 229, 230, 106, 69, 129, 237, 8, 191, 29, 154, 3, 128, 108, 196, 100, 140, 255, 235, 109, 247, 27, 87, 117, 229, 235, 8}
 	key, err := fh.ExtractPublicKey([]byte(in))
@@ -33,7 +33,7 @@ func TestKeyExtractionWithoutUnderscore(t *testing.T) {
 }
 
 func TestKeyExtractionMissing(t *testing.T) {
-	fh := YamlFormatter{}
+	fh := Formatter{}
 	in := `some_key: some_value`
 	_, err := fh.ExtractPublicKey([]byte(in))
 	if err == nil {
@@ -42,7 +42,7 @@ func TestKeyExtractionMissing(t *testing.T) {
 }
 
 func TestKeyExtractionInvalidYaml(t *testing.T) {
-	fh := YamlFormatter{}
+	fh := Formatter{}
 	in := `{invalid yaml`
 	_, err := fh.ExtractPublicKey([]byte(in))
 	if err == nil {
@@ -51,7 +51,7 @@ func TestKeyExtractionInvalidYaml(t *testing.T) {
 }
 
 func TestKeyExtractionEmptyDocument(t *testing.T) {
-	fh := YamlFormatter{}
+	fh := Formatter{}
 	in := ``
 	_, err := fh.ExtractPublicKey([]byte(in))
 	if err == nil {
@@ -60,7 +60,7 @@ func TestKeyExtractionEmptyDocument(t *testing.T) {
 }
 
 func TestKeyExtractionTopLevelArray(t *testing.T) {
-	fh := YamlFormatter{}
+	fh := Formatter{}
 	in := `- item1
 - item2`
 	_, err := fh.ExtractPublicKey([]byte(in))
@@ -76,7 +76,7 @@ func TestScalarValueTransformer(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			fh := &YamlFormatter{}
+			fh := &Formatter{}
 			act, err := fh.TransformScalarValues([]byte(tc.in), action)
 			if tc.expectError {
 				if err == nil {
@@ -234,7 +234,7 @@ database:
     # Connection string
     password: secret  # sensitive`
 
-	fh := &YamlFormatter{}
+	fh := &Formatter{}
 	act, err := fh.TransformScalarValues([]byte(in), action)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -271,7 +271,7 @@ development:
   <<: *defaults
   database: dev_db`
 
-	fh := &YamlFormatter{}
+	fh := &Formatter{}
 	_, err := fh.TransformScalarValues([]byte(in), action)
 	if err == nil {
 		t.Error("expected error for anchors/aliases")
@@ -291,7 +291,7 @@ doc1: value1
 ---
 doc2: value2`
 
-	fh := &YamlFormatter{}
+	fh := &Formatter{}
 	act, err := fh.TransformScalarValues([]byte(in), action)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -316,7 +316,7 @@ func TestQuotedStrings(t *testing.T) {
 double_quoted: "value"
 unquoted: value`
 
-	fh := &YamlFormatter{}
+	fh := &Formatter{}
 	act, err := fh.TransformScalarValues([]byte(in), action)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -346,7 +346,7 @@ func TestMultilineStrings(t *testing.T) {
   line1
   line2`
 
-	fh := &YamlFormatter{}
+	fh := &Formatter{}
 	act, err := fh.TransformScalarValues([]byte(in), action)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -368,7 +368,7 @@ func TestFloatNotEncrypted(t *testing.T) {
 	in := `float: 3.14
 scientific: 1.0e10`
 
-	fh := &YamlFormatter{}
+	fh := &Formatter{}
 	act, err := fh.TransformScalarValues([]byte(in), action)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)

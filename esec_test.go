@@ -3,7 +3,7 @@ package esec
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -80,11 +80,11 @@ func TestDecryptDotEnvFile(t *testing.T) {
 		// valid keypair and a corresponding entry in keydir
 		var out bytes.Buffer
 		_, err := Decrypt(
-			bytes.NewBuffer([]byte(`
+			strings.NewReader(`
 ESEC_PUBLIC_KEY=39e66b09af00d7cce70ef8f41a0f54e652c392e5a34be2702050c9c184a70557
 
 SECRET=ESEC[1:3IbHlK9p1dX8B3dYc3pyl4KmkSHHqCN4jy3TpwCAQww=:7grw6wdWI9yQrd9Sdy1xwS8gNove91JU:WXOFjTE+FGQ8Y8S2ogiIxjKZiAsfZ3H+NkqW]
-`)),
+`),
 			&out,
 			"",
 			FileFormatEnv,
@@ -116,61 +116,51 @@ func TestDecryptFile(t *testing.T) {
 
 	t.Run("missing key", func(t *testing.T) {
 		// invalid json file
-		_, err := Decrypt(bytes.NewBufferString(`{"_missing": "invalid"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
+		_, err := Decrypt(strings.NewReader(`{"_missing": "invalid"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
 		if err == nil {
 			t.Errorf("expected error, but none was received")
-		} else {
-			if !strings.Contains(err.Error(), "public key not present in ecfg file") {
-				t.Errorf("wanted missing key error, but got %v", err)
-			}
+		} else if !strings.Contains(err.Error(), "public key not present in ecfg file") {
+			t.Errorf("wanted missing key error, but got %v", err)
 		}
 	})
 
 	t.Run("invalid key", func(t *testing.T) {
 		// invalid json file
-		_, err := Decrypt(bytes.NewBufferString(`{"_ESEC_PUBLIC_KEY": "invalid"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
+		_, err := Decrypt(strings.NewReader(`{"_ESEC_PUBLIC_KEY": "invalid"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
 		if err == nil {
 			t.Errorf("expected error, but none was received")
-		} else {
-			if !strings.Contains(err.Error(), "public key has invalid format") {
-				t.Errorf("wanted key error, but got %v", err)
-			}
+		} else if !strings.Contains(err.Error(), "public key has invalid format") {
+			t.Errorf("wanted key error, but got %v", err)
 		}
 	})
 
 	t.Run("invalid file and invalid message format", func(t *testing.T) {
 		// invalid json file
-		_, err := Decrypt(bytes.NewBufferString(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "b"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
+		_, err := Decrypt(strings.NewReader(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "b"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
 		if err == nil {
 			t.Errorf("expected error, but none was received")
-		} else {
-			if !strings.Contains(err.Error(), "invalid message format") {
-				t.Errorf("wanted key error, but got %v", err)
-			}
+		} else if !strings.Contains(err.Error(), "invalid message format") {
+			t.Errorf("wanted key error, but got %v", err)
 		}
 	})
 
 	t.Run("valid file, but invalid keypath", func(t *testing.T) {
 		// invalid json file
-		_, err := Decrypt(bytes.NewBufferString(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "/tmp", "")
+		_, err := Decrypt(strings.NewReader(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "/tmp", "")
 		if err == nil {
 			t.Errorf("expected error, but none was received")
-		} else {
-			if !strings.Contains(err.Error(), "private key \"ESEC_PRIVATE_KEY\" not found in environment variables, and keyring file does not exist at \"/tmp/.esec-keyring\"") {
-				t.Errorf("wanted key error, but got %v", err)
-			}
+		} else if !strings.Contains(err.Error(), "private key \"ESEC_PRIVATE_KEY\" not found in environment variables, and keyring file does not exist at \"/tmp/.esec-keyring\"") {
+			t.Errorf("wanted key error, but got %v", err)
 		}
 	})
 
 	t.Run("valid file, but invalid userkey", func(t *testing.T) {
 		// invalid json file
-		_, err := Decrypt(bytes.NewBufferString(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "586518639ad138d6c0ce76ce6fc30f54a40e3c5e066b93f0151cebe0ee6ea391")
+		_, err := Decrypt(strings.NewReader(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "586518639ad138d6c0ce76ce6fc30f54a40e3c5e066b93f0151cebe0ee6ea391")
 		if err == nil {
 			t.Errorf("expected error, but none was received")
-		} else {
-			if !strings.Contains(err.Error(), "couldn't decrypt message") {
-				t.Errorf("wanted key error, but got %v", err)
-			}
+		} else if !strings.Contains(err.Error(), "couldn't decrypt message") {
+			t.Errorf("wanted key error, but got %v", err)
 		}
 	})
 
@@ -245,7 +235,7 @@ func TestSniffEnvName(t *testing.T) {
 				for _, e := range originalEnv {
 					parts := splitEnvVar(e)
 					if len(parts) == 2 {
-						os.Setenv(parts[0], parts[1])
+						_ = os.Setenv(parts[0], parts[1]) //nolint:usetesting // Manual env restore in defer
 					}
 				}
 			}()
@@ -253,7 +243,7 @@ func TestSniffEnvName(t *testing.T) {
 			// Set up test environment variables
 			os.Clearenv()
 			for key, value := range tt.envVars {
-				os.Setenv(key, value)
+				_ = os.Setenv(key, value) //nolint:usetesting // Manual env control needed for test
 			}
 
 			// Run SniffEnvName()
@@ -295,7 +285,7 @@ func TestDecryptFromEmbedFS(t *testing.T) {
 		for _, e := range originalEnv {
 			parts := splitEnvVar(e)
 			if len(parts) == 2 {
-				os.Setenv(parts[0], parts[1])
+				_ = os.Setenv(parts[0], parts[1]) //nolint:usetesting // Manual env restore in defer
 			}
 		}
 	}()
@@ -306,11 +296,11 @@ func TestDecryptFromEmbedFS(t *testing.T) {
 		config := DecryptFromEmbedConfig{
 			EnvName: "",
 			Format:  FileFormatEjson,
-			Logger:  slog.New(slog.NewTextHandler(ioutil.Discard, nil)),
+			Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
 		}
 
 		// Set up private key in environment
-		os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+		t.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 
 		// Call the function under test
 		_, err := DecryptFromEmbedFSWithConfig(testFS, config)
@@ -326,12 +316,12 @@ func TestDecryptFromEmbedFS(t *testing.T) {
 		// Create test configuration with custom lookuper
 		config := DecryptFromEmbedConfig{
 			Format:              FileFormatEjson,
-			Logger:              slog.New(slog.NewTextHandler(ioutil.Discard, nil)),
+			Logger:              slog.New(slog.NewTextHandler(io.Discard, nil)),
 			EnvironmentLookuper: customLookuper,
 		}
 
 		// Set up private key for "test" environment in environment variables
-		os.Setenv("ESEC_PRIVATE_KEY_TEST", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+		t.Setenv("ESEC_PRIVATE_KEY_TEST", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 
 		// Call the function under test (this should use the custom lookuper)
 		_, err := DecryptFromEmbedFSWithConfig(testFS, config)
@@ -354,12 +344,12 @@ func TestDecryptFromEmbedFS(t *testing.T) {
 		// Create test configuration with multiple lookupers
 		config := DecryptFromEmbedConfig{
 			Format:              FileFormatEjson,
-			Logger:              slog.New(slog.NewTextHandler(ioutil.Discard, nil)),
+			Logger:              slog.New(slog.NewTextHandler(io.Discard, nil)),
 			EnvironmentLookuper: CombineLookupers(failingLookuper, successLookuper),
 		}
 
 		// Set up private key in environment
-		os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+		t.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 
 		// Call the function under test
 		_, err := DecryptFromEmbedFSWithConfig(testFS, config)
@@ -371,7 +361,7 @@ func TestDecryptFromEmbedFS(t *testing.T) {
 		// Clear environment variables to prevent multiple key issues
 		os.Clearenv()
 		// Set up private key in environment
-		os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+		t.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 
 		// Call the legacy function
 		_, err := DecryptFromEmbedFSWithOptions(testFS, WithFormat(FileFormatEjson))
@@ -439,22 +429,16 @@ func TestCombineLookupers(t *testing.T) {
 
 func TestSniffFromKeyring(t *testing.T) {
 	// Setup a logger that doesn't output anything for tests
-	logger := slog.New(slog.NewTextHandler(ioutil.Discard, nil))
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	// Helper to create a temporary directory with a keyring file
 	setupKeyring := func(t *testing.T, content string) string {
 		t.Helper()
-		dir, err := ioutil.TempDir("", "esec-test-")
-		assert.NoError(t, err)
-
-		// Register cleanup function
-		t.Cleanup(func() {
-			os.RemoveAll(dir)
-		})
+		dir := t.TempDir()
 
 		// Write the keyring file
 		keyringPath := filepath.Join(dir, ".esec-keyring")
-		err = ioutil.WriteFile(keyringPath, []byte(content), 0600)
+		err := os.WriteFile(keyringPath, []byte(content), 0600)
 		assert.NoError(t, err)
 
 		return dir
@@ -474,12 +458,10 @@ func TestSniffFromKeyring(t *testing.T) {
 
 	t.Run("Error when keyring file doesn't exist", func(t *testing.T) {
 		// Use a temporary directory without creating a keyring file
-		dir, err := ioutil.TempDir("", "esec-test-")
-		assert.NoError(t, err)
-		t.Cleanup(func() { os.RemoveAll(dir) })
+		dir := t.TempDir()
 
 		// Call the function
-		_, err = sniffFromKeyring(logger, dir, "")
+		_, err := sniffFromKeyring(logger, dir, "")
 
 		// Verify we get an error
 		assert.Error(t, err)

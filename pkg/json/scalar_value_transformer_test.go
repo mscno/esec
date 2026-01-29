@@ -10,7 +10,7 @@ func TestScalarValueTransformer(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		fh := &JsonFormatter{}
+		fh := &Formatter{}
 		act, err := fh.TransformScalarValues([]byte(tc.in), action)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)

@@ -6,9 +6,11 @@ import (
 	"github.com/mscno/esec"
 )
 
+// KeygenCmd generates a new keypair for encryption.
 type KeygenCmd struct {
 }
 
+// Run executes the keygen command.
 func (c *KeygenCmd) Run(ctx *cliCtx) error {
 	ctx.Logger.Debug("generating new keypair")
 
