@@ -1,0 +1,31 @@
+# Git hooks for esec
+# Install: lefthook install
+# Skip: LEFTHOOK=0 git commit -m "message"
+
+min_version: 1.5.0
+
+output:
+  - meta
+  - summary
+  - success
+  - failure
+  - execution_info
+
+pre-commit:
+  parallel: true
+  commands:
+    fmt:
+      glob: "*.go"
+      run: goimports -w {staged_files}
+      stage_fixed: true
+
+    lint:
+      glob: "*.go"
+      run: golangci-lint run --fix ./...
+      stage_fixed: true
+
+pre-push:
+  commands:
+    test:
+      glob: "*.go"
+      run: go test -race -count=1 ./...

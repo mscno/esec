@@ -2,8 +2,9 @@ package crypto
 
 import (
 	"fmt"
-	"github.com/alecthomas/assert/v2"
 	"testing"
+
+	"github.com/alecthomas/assert/v2"
 )
 
 func TestKeypairGeneration(t *testing.T) {

@@ -12,3 +12,4 @@ coverage.txt
 esec.db
 llm-prompt.txt
 .env.test
+lefthook-local.yml

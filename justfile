@@ -1,3 +1,16 @@
+# Format Go files
+fmt:
+    goimports -w .
+    go fmt ./...
+
+# Run linter
+lint:
+    golangci-lint run ./...
+
+# Install git hooks
+hooks:
+    lefthook install
+
 test:
     TEST_DATASTORE_PROJECT=esec-prod go test ./...
 

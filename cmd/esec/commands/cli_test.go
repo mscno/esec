@@ -2,14 +2,15 @@ package commands
 
 import (
 	"bytes"
-	"github.com/alecthomas/assert/v2"
-	"github.com/mscno/esec/pkg/fileutils"
 	"io"
 	"log/slog"
 	"os"
 	"path"
 	"strings"
 	"testing"
+
+	"github.com/alecthomas/assert/v2"
+	"github.com/mscno/esec/pkg/fileutils"
 )
 
 func TestKeygenCmd(t *testing.T) {
@@ -30,12 +31,12 @@ func TestKeygenCmd(t *testing.T) {
 
 func TestEncryptCmd(t *testing.T) {
 	// Create a temporary file
-	tmpFile, err := os.CreateTemp("", ".ejson")
+	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")
 	assert.NoError(t, err)
 	defer os.Remove(tmpFile.Name()) // Clean up after test
 
 	// Write test data
-	_, err = tmpFile.Write([]byte(`{"ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "test123"}`))
+	_, err = tmpFile.WriteString(`{"ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "test123"}`)
 	assert.NoError(t, err)
 	tmpFile.Close()
 
@@ -54,12 +55,12 @@ func TestEncryptCmd(t *testing.T) {
 
 func TestEncryptCmdBadFile(t *testing.T) {
 	// Create a temporary file
-	tmpFile, err := os.CreateTemp("", ".ejson")
+	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")
 	assert.NoError(t, err)
 	defer os.Remove(tmpFile.Name()) // Clean up after test
 
 	// Write test data
-	_, err = tmpFile.Write([]byte(`{"secret": "test123"}`))
+	_, err = tmpFile.WriteString(`{"secret": "test123"}`)
 	assert.NoError(t, err)
 	tmpFile.Close()
 
@@ -78,12 +79,12 @@ func TestEncryptCmdBadFile(t *testing.T) {
 
 func TestDecryptCmd(t *testing.T) {
 	// Create a temporary file
-	tmpFile, err := os.CreateTemp("", ".ejson")
+	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")
 	assert.NoError(t, err)
 	defer os.Remove(tmpFile.Name()) // Clean up after test
 	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 	// Write test data
-	_, err = tmpFile.Write([]byte(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`))
+	_, err = tmpFile.WriteString(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`)
 	assert.NoError(t, err)
 	tmpFile.Close()
 
@@ -102,12 +103,12 @@ func TestDecryptCmd(t *testing.T) {
 
 func TestGetCmdOk(t *testing.T) {
 	// Create a temporary file
-	tmpFile, err := os.CreateTemp("", ".ejson")
+	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")
 	assert.NoError(t, err)
 	defer os.Remove(tmpFile.Name()) // Clean up after test
 	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 	// Write test data
-	_, err = tmpFile.Write([]byte(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`))
+	_, err = tmpFile.WriteString(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`)
 	assert.NoError(t, err)
 	tmpFile.Close()
 
@@ -131,7 +132,7 @@ func TestGetCmdOkWithEnv(t *testing.T) {
 	defer os.Remove(tmpFile.Name()) // Clean up after test
 	os.Setenv("ESEC_PRIVATE_KEY_PRODUCTION", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 	// Write test data
-	_, err = tmpFile.Write([]byte(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`))
+	_, err = tmpFile.WriteString(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`)
 	assert.NoError(t, err)
 	tmpFile.Close()
 
@@ -150,12 +151,12 @@ func TestGetCmdOkWithEnv(t *testing.T) {
 
 func TestGetCmdMissing(t *testing.T) {
 	// Create a temporary file
-	tmpFile, err := os.CreateTemp("", ".ejson")
+	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")
 	assert.NoError(t, err)
 	defer os.Remove(tmpFile.Name()) // Clean up after test
 	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 	// Write test data
-	_, err = tmpFile.Write([]byte(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`))
+	_, err = tmpFile.WriteString(`{"_ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "ESEC[1:HMvqzjm4wFgQzL0qo6fDsgfiS1e7y1knsTvgskUEvRo=:gwjm0ng6DE3FlL8F617cRMb8cBeJ2v1b:KryYDmzxT0OxjuLlIgZHx73DhNvE]"}`)
 	assert.NoError(t, err)
 	tmpFile.Close()
 
@@ -288,7 +289,7 @@ func TestProcessFileOrEnv(t *testing.T) {
 				t.Errorf("ProcessFileOrEnv() filename = %v, want %v", gotFilename, tt.wantFilename)
 			}
 
-			//if gotEnv != tt.wantEnv {
+			// if gotEnv != tt.wantEnv {
 			//	t.Errorf("ProcessFileOrEnv() env = %v, want %v", gotEnv, tt.wantEnv)
 			//}
 		})

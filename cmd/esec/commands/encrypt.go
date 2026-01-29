@@ -2,9 +2,10 @@ package commands
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/mscno/esec"
 	"github.com/mscno/esec/pkg/fileutils"
-	"os"
 )
 
 type EncryptCmd struct {

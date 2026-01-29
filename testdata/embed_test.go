@@ -304,6 +304,213 @@ func TestEmbedDecryptEymlFormatGoodKey(t *testing.T) {
 	assert.Contains(t, err.Error(), ".eyml")
 }
 
+// TOML Format Tests
+
+func TestEmbedDecryptTomlWithNoVars(t *testing.T) {
+	clearEnvVars(t)
+	_, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no private key found in environment variables")
+}
+
+func TestEmbedDecryptTomlGoodKey(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+	assert.True(t, len(data) > 0)
+
+	// Verify decrypted content
+	content := string(data)
+	assert.Contains(t, content, "MY_VALUE")
+	assert.Contains(t, content, "my_secret_value")
+	assert.Contains(t, content, "MY_NUMBER = 123")
+	assert.Contains(t, content, "MY_BOOL_TRUE = true")
+}
+
+func TestEmbedDecryptTomlDevEnvironment(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY_DEV", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// Verify dev-specific content
+	assert.Contains(t, content, "my_dev_secret_value")
+	assert.Contains(t, content, "MY_NUMBER = 456")
+}
+
+func TestEmbedDecryptTomlPreservesComments(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// Verify comments are preserved
+	assert.Contains(t, content, "# ESEC Test File")
+	assert.Contains(t, content, "# Simple string value")
+	assert.Contains(t, content, "# Numeric values should NOT be encrypted")
+}
+
+func TestEmbedDecryptTomlPreservesNonStringTypes(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// Numbers should be unchanged
+	assert.Contains(t, content, "MY_NUMBER = 123")
+	assert.Contains(t, content, "MY_FLOAT = 3.14159")
+	assert.Contains(t, content, "MY_SCIENTIFIC = 1.5e10")
+
+	// Booleans should be unchanged
+	assert.Contains(t, content, "MY_BOOL_TRUE = true")
+	assert.Contains(t, content, "MY_BOOL_FALSE = false")
+}
+
+func TestEmbedDecryptTomlUnderscorePrefixNotEncrypted(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// Underscore prefix value should not be encrypted (raw value)
+	assert.Contains(t, content, `_MY_COMMENT = "this_is_not_encrypted"`)
+}
+
+func TestEmbedDecryptTomlNestedUnderUnderscoreKeyIsEncrypted(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// Children under _MY_METADATA should be encrypted (and thus decrypted)
+	assert.Contains(t, content, "this_should_be_encrypted")
+	// The version should also be decrypted
+	assert.Contains(t, content, `version = "1.0"`)
+}
+
+func TestEmbedDecryptTomlArraysDecrypted(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// Array elements should be decrypted
+	assert.Contains(t, content, "array_item_1")
+	assert.Contains(t, content, "array_item_2")
+}
+
+func TestEmbedDecryptTomlNestedObjectsDecrypted(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// Nested object values should be decrypted (inline table)
+	assert.Contains(t, content, `hello = "world"`)
+	assert.Contains(t, content, `deep = "value"`)
+}
+
+func TestEmbedDecryptTomlDeepNesting(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// Deeply nested value should be decrypted
+	assert.Contains(t, content, "deeply_nested_secret")
+}
+
+func TestEmbedDecryptTomlUnicodeContent(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// Unicode content should be preserved
+	assert.Contains(t, content, "Hello 世界")
+}
+
+func TestEmbedDecryptTomlSpecialCharacters(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// Special characters should be preserved
+	assert.Contains(t, content, "SPECIAL_CHARS")
+	assert.Contains(t, content, "@#$%")
+}
+
+func TestEmbedDecryptTomlDevInlineComments(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY_DEV", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// Inline comments should be preserved
+	assert.Contains(t, content, "# This is the dev database")
+	assert.Contains(t, content, "# sensitive!")
+	assert.Contains(t, content, "# seconds")
+}
+
+func TestEmbedDecryptTomlDevFlowStyleCollections(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY_DEV", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// Inline arrays should be decrypted
+	assert.Contains(t, content, "secret1")
+	assert.Contains(t, content, "secret2")
+	// Inline tables should be decrypted
+	assert.Contains(t, content, "value1")
+	assert.Contains(t, content, "value2")
+}
+
+func TestEmbedDecryptTomlDevNestedUnderscoreVariations(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY_DEV", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	data, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.NoError(t, err)
+
+	content := string(data)
+	// _SKIP_THIS should not be encrypted
+	assert.Contains(t, content, `_SKIP_THIS = "not_encrypted_at_all"`)
+	// Children under _SKIP_NESTED should be encrypted
+	assert.Contains(t, content, "should_be_encrypted")
+	// But _and_skip_this should not be encrypted
+	assert.Contains(t, content, `_and_skip_this = "not_encrypted"`)
+}
+
+func TestEmbedDecryptTomlBadKey(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
+	_, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "couldn't decrypt message")
+}
+
+func TestEmbedDecryptTomlMissingFile(t *testing.T) {
+	clearEnvVars(t)
+	os.Setenv("ESEC_PRIVATE_KEY_STAGING", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
+	_, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "error reading file from vault: open .etoml.staging: file does not exist")
+}
+
 // Helper to clean up environment variables between tests
 func clearEnvVars(t *testing.T) {
 	t.Helper()

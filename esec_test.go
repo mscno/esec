@@ -3,8 +3,6 @@ package esec
 import (
 	"bytes"
 	"fmt"
-	"github.com/alecthomas/assert/v2"
-	"github.com/mscno/esec/testdata"
 	"io/ioutil"
 	"log/slog"
 	"os"
@@ -12,6 +10,9 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/alecthomas/assert/v2"
+	"github.com/mscno/esec/testdata"
 )
 
 func TestGenerateKeypair(t *testing.T) {
@@ -44,7 +45,7 @@ func TestEncryptFileInPlace(t *testing.T) {
 
 func TestEncrypt(t *testing.T) {
 	t.Run("invalid json file", func(t *testing.T) {
-		_, err := Encrypt(bytes.NewBuffer([]byte(`{"a": "b"]`)), bytes.NewBuffer(nil), FileFormatEjson)
+		_, err := Encrypt(bytes.NewBufferString(`{"a": "b"]`), bytes.NewBuffer(nil), FileFormatEjson)
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else if !strings.Contains(err.Error(), "invalid character") {
@@ -54,7 +55,7 @@ func TestEncrypt(t *testing.T) {
 
 	t.Run("invalid key", func(t *testing.T) {
 		// invalid key
-		_, err := Encrypt(bytes.NewBuffer([]byte(`{"_ESEC_PUBLIC_KEY": "invalid"}`)), bytes.NewBuffer(nil), FileFormatEjson)
+		_, err := Encrypt(bytes.NewBufferString(`{"_ESEC_PUBLIC_KEY": "invalid"}`), bytes.NewBuffer(nil), FileFormatEjson)
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else if !strings.Contains(err.Error(), "public key has invalid format") {
@@ -65,7 +66,7 @@ func TestEncrypt(t *testing.T) {
 	t.Run("valid keypair", func(t *testing.T) {
 		// valid keypair
 		var output bytes.Buffer
-		_, err := Encrypt(bytes.NewBuffer([]byte(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "b"}`)), &output, FileFormatEjson)
+		_, err := Encrypt(bytes.NewBufferString(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "b"}`), &output, FileFormatEjson)
 		assertNoError(t, err)
 		match := regexp.MustCompile(`{"_ESEC_PUBLIC_KEY": "8d8.*", "a": "ESEC.*"}`)
 		if match.Find(output.Bytes()) == nil {
@@ -105,7 +106,7 @@ SECRET="my_secret"
 func TestDecryptFile(t *testing.T) {
 	t.Run("invalid json file", func(t *testing.T) {
 		// invalid json file
-		_, err := Decrypt(bytes.NewBuffer([]byte(`{"a": "b"]`)), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
+		_, err := Decrypt(bytes.NewBufferString(`{"a": "b"]`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else if !strings.Contains(err.Error(), "invalid character") {
@@ -115,7 +116,7 @@ func TestDecryptFile(t *testing.T) {
 
 	t.Run("missing key", func(t *testing.T) {
 		// invalid json file
-		_, err := Decrypt(bytes.NewBuffer([]byte(`{"_missing": "invalid"}`)), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
+		_, err := Decrypt(bytes.NewBufferString(`{"_missing": "invalid"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {
@@ -127,7 +128,7 @@ func TestDecryptFile(t *testing.T) {
 
 	t.Run("invalid key", func(t *testing.T) {
 		// invalid json file
-		_, err := Decrypt(bytes.NewBuffer([]byte(`{"_ESEC_PUBLIC_KEY": "invalid"}`)), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
+		_, err := Decrypt(bytes.NewBufferString(`{"_ESEC_PUBLIC_KEY": "invalid"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {
@@ -139,7 +140,7 @@ func TestDecryptFile(t *testing.T) {
 
 	t.Run("invalid file and invalid message format", func(t *testing.T) {
 		// invalid json file
-		_, err := Decrypt(bytes.NewBuffer([]byte(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "b"}`)), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
+		_, err := Decrypt(bytes.NewBufferString(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "b"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "c5caa31a5b8cb2be0074b37c56775f533b368b81d8fd33b94181f79bd6e47f87")
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {
@@ -151,7 +152,7 @@ func TestDecryptFile(t *testing.T) {
 
 	t.Run("valid file, but invalid keypath", func(t *testing.T) {
 		// invalid json file
-		_, err := Decrypt(bytes.NewBuffer([]byte(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`)), bytes.NewBuffer(nil), "", FileFormatEjson, "/tmp", "")
+		_, err := Decrypt(bytes.NewBufferString(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "/tmp", "")
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {
@@ -163,7 +164,7 @@ func TestDecryptFile(t *testing.T) {
 
 	t.Run("valid file, but invalid userkey", func(t *testing.T) {
 		// invalid json file
-		_, err := Decrypt(bytes.NewBuffer([]byte(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`)), bytes.NewBuffer(nil), "", FileFormatEjson, "", "586518639ad138d6c0ce76ce6fc30f54a40e3c5e066b93f0151cebe0ee6ea391")
+		_, err := Decrypt(bytes.NewBufferString(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "", "586518639ad138d6c0ce76ce6fc30f54a40e3c5e066b93f0151cebe0ee6ea391")
 		if err == nil {
 			t.Errorf("expected error, but none was received")
 		} else {
@@ -177,7 +178,7 @@ func TestDecryptFile(t *testing.T) {
 		// valid keypair and a corresponding entry in keydir
 		var out bytes.Buffer
 		_, err := Decrypt(
-			bytes.NewBuffer([]byte(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`)),
+			bytes.NewBufferString(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`),
 			&out,
 			"",
 			FileFormatEjson,
@@ -287,7 +288,6 @@ func TestSniffEnvName(t *testing.T) {
 var testFS = testdata.TestEmbed
 
 func TestDecryptFromEmbedFS(t *testing.T) {
-
 	// Set up environment variables for testing
 	originalEnv := os.Environ()
 	defer func() {

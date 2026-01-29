@@ -40,6 +40,7 @@ linters:
     - err113
     - intrange
     - nakedret
+    - tenv        # deprecated, replaced by usetesting
 
 linters-settings:
   govet:

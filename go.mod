@@ -16,5 +16,6 @@ require (
 require (
 	github.com/alecthomas/repr v0.4.0 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
+	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 )

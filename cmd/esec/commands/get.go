@@ -3,11 +3,12 @@ package commands
 import (
 	gojson "encoding/json"
 	"fmt"
-	"github.com/mscno/esec"
-	"github.com/mscno/esec/pkg/fileutils"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/mscno/esec"
+	"github.com/mscno/esec/pkg/fileutils"
 )
 
 type GetCmd struct {

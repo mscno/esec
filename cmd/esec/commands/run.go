@@ -2,8 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"github.com/mscno/esec"
-	"github.com/mscno/esec/pkg/fileutils"
 	"io"
 	"os"
 	"os/exec"
@@ -11,6 +9,9 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+
+	"github.com/mscno/esec"
+	"github.com/mscno/esec/pkg/fileutils"
 )
 
 // Add this command struct

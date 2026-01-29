@@ -1,0 +1,58 @@
+# ESEC Test File - Dev Environment
+# This file tests various TOML features with encryption
+
+_ESEC_PUBLIC_KEY = "493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d"
+
+# Simple string value (dev environment)
+MY_VALUE = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:eiEb8b4ghymzNYS7jqYE+u5zZg8VdjmS:F1lD77I08YlC7ulDp4iW+2YpyzrxZPLSwqOvPQ0AuqY7+tY=]"
+
+# Numeric values should NOT be encrypted
+MY_NUMBER = 456
+MY_FLOAT = 2.71828
+
+# Boolean values should NOT be encrypted
+MY_BOOL = true
+
+# Array of strings
+MY_ARRAY = ["ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:4gMBk9UkWmu53MLYBeD00bUl0VNl8/ZQ:GZ/hSQB8GjLbAJe4Rg4ahvS4zPca8611g3c=]", "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:qiZUsYhjsyDz9fkQJoQL7rlsgdRB/E5t:XGoBPW/u3TyTdO1NOqdEXYhKCs/RAxyB8xU=]", "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:W8sQwJ7M7wa3l6AWsQ1qYlVqtRqYVjjd:GaB+z3GIKkpG76HUEIqMWxMK7dZ+nCmzwSk=]"]
+
+# Nested object
+[MY_OBJECT]
+hello = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:OTCvp6QDCFQFnWORsU2WKn3AdKtA14lH:0lvrOnvPKwZt9b0GnPfebpwR+Z2IcxoAlA==]"
+environment = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:b9Yv4eORn2erh1YFkEoYxWeRqm6J62+F:Lx8j0GqNNYNQdoASKbZNM+fFm5emCfkIBtIu]"
+
+# Inline comment preservation test
+DATABASE_HOST = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:zD42plEE9/Q2U5DmTuYyUMME2LPg18RM:BNi3XizWebl2EcSalStEtPhLB3HU4pufJQ==]"  # This is the dev database
+DATABASE_PASSWORD = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:jiLQieeBAhpiq466xFBsP0MeFOKum73a:Ra4VHFFUalF0v9dXpe/SzGwjJVhmG6TyGzXJKw==]"  # sensitive!
+
+# Block comment above a key
+# This is a configuration section
+# with multiple comment lines
+[CONFIG_SECTION]
+# Nested comment
+api_key = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:l+CU6JNsUu2YmlxfuMZ6/ZEcKZEpVC+q:6RR0g1+CmM17SVABP2MdWAKtfTGPCvt4vRABgCUMtE9c]"
+timeout = 30  # seconds
+
+# Long string value
+LONG_VALUE = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:QkGCBEVoDU1IOl6oYOSQZv1eUpOaacFS:wk5OA5wR9uQ7tGqBqcRWv5hTE44AebZOfSzMW9TRdL4mIa0Q6dOwIrqwGKvpXwm0LMn6h3LH3adbvaRlhXyQ6iHb4RnMnwHk8m7eznuTYFAy5f/3a/aSGTvHcfJuWkJ+q3qB/s4dARhuAXVtMqZfF9j0S5qah2MCGwRN+3Z9XoCQiQ0esVlVq+u5tUt6C0Lhqtk=]"
+
+# String that looks like other types but is quoted
+STRING_THAT_LOOKS_LIKE_NUMBER = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:1ttNgyXCPqW1lb2ncZtc6zcN3GSB2RMm:SgQqPDnSHHdPOotFxP6fyNMmsg==]"
+STRING_THAT_LOOKS_LIKE_BOOL = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:JjMB3dy6bOj9gAKrkS6E1RcYb8OpfSdq:pokZ3R20YINQNTGAfu0ywm1sGcA=]"
+STRING_THAT_LOOKS_LIKE_NULL = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:FO+zxUx0481z4vAEP7xvn/rR7Jahekxm:2sE4RfwgolkoD+CaJh4lINJTw/w=]"
+
+# Escaped characters
+ESCAPED_CHARS = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:0G4M4pykZPKyf2mfZsOXg6Gng8nixY3f:EOrKHgm+1bELDyIv3rtgrk41gAVY+COoHzWaIwwzXg==]"
+
+# Underscore prefix variations
+_SKIP_THIS = "not_encrypted_at_all"
+
+[_SKIP_NESTED]
+but_encrypt_this = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:GD4IgJo7ey3S9ok31T675t9kr7UcM6WZ:B9mRfjIAtinMKlQMFJj87AJKgOtf9dlhSi5G+cVA2+s0JFg=]"
+_and_skip_this = "not_encrypted"
+
+# Flow style inline array
+INLINE_ARRAY = ["ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:puk8EwDq8E8JXtwLgeMldfjhWGdnWfPn:0NqHSHGHcaKBxD4uNqz7wY70vcnN/z8=]", "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:lTFiIJUt2L/+DfXSYZ8YazBDkUsm3klp:Sgv1458YPgxf3R02bqjCfZCYs52fqKQ=]", "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:hnEZV9Z8FGV4gKv7/rkm6AVplQFQyU1M:ckS85HYMjrbNmIrqsz1AI62mGjs5j98=]"]
+
+# Flow style inline table
+INLINE_MAP = {key1 = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:3uuUdqiyKKE5stmepTUNwXvwH3CnTNbd:M0jlFSH5O+Kbhd22wv+vJs67xuxI/A==]", key2 = "ESEC[1:gfp+YtqAregM6cVfd/cfDkXv9/hxtmxzGhpL4rQCyR0=:tUsCpTPhIDPNxquRrFSnHVEc91SHEnC9:r4wcId5e2W9EAFYbjsCeAfB2YRnzOw==]"}

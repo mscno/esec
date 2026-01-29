@@ -37,6 +37,7 @@ import (
 	"github.com/mscno/esec/pkg/fileutils"
 	"github.com/mscno/esec/pkg/format"
 	"github.com/mscno/esec/pkg/json"
+	"github.com/mscno/esec/pkg/toml"
 	"github.com/mscno/esec/pkg/yaml"
 )
 
@@ -457,7 +458,6 @@ func DecryptFile(filePath string, keydir string, userSuppliedPrivateKey string) 
 
 // Decrypt reads encrypted data from the input reader, decrypts it, and writes the decrypted data to the output writer.
 func Decrypt(in io.Reader, out io.Writer, envName string, fileFormat FileFormat, keydir string, userSuppliedPrivateKey string) (int, error) {
-
 	data, err := io.ReadAll(in)
 	if err != nil {
 		return -1, err
@@ -569,6 +569,8 @@ func getFormatter(fileFormat FileFormat) (format.FormatHandler, error) {
 		return &json.JsonFormatter{}, nil
 	case FileFormatEyaml, FileFormatEyml:
 		return &yaml.YamlFormatter{}, nil
+	case FileFormatEtoml:
+		return &toml.Formatter{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported format: %s", fileFormat)
 	}
@@ -755,9 +757,7 @@ func DotEnvToEnv(payload []byte) (map[string]string, error) {
 var validIdentifierPattern = regexp.MustCompile(`\A[a-zA-Z_][a-zA-Z0-9_]*\z`)
 
 func extractEnv(envMap map[string]interface{}) (map[string]string, error) {
-
 	envSecrets := make(map[string]string, len(envMap))
-
 	for key, rawValue := range envMap {
 		if key == EsecPublicKey {
 			continue

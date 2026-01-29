@@ -13,7 +13,8 @@ package json
 
 import (
 	"fmt"
-	"github.com/dustin/gojson"
+
+	json "github.com/dustin/gojson"
 )
 
 // TransformScalarValues walks a JSON document, replacing all actionable nodes

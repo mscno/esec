@@ -2,8 +2,9 @@ package fileutils
 
 import (
 	"fmt"
-	"github.com/alecthomas/assert/v2"
 	"testing"
+
+	"github.com/alecthomas/assert/v2"
 )
 
 func TestGenerateFilename(t *testing.T) {

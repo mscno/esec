@@ -1,0 +1,46 @@
+# ESEC Test File - Default Environment
+# This file tests various TOML features with encryption
+
+_ESEC_PUBLIC_KEY = "493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d"
+
+# Simple string value
+MY_VALUE = "ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:hsOcmwWyEEGkIs5n7A2tk/C/VGqmq3zx:RyDdTEEOC6FsU0tpHNplColdQt5dQwl+Z9hXgoqJ/w==]"
+
+# Numeric values should NOT be encrypted
+MY_NUMBER = 123
+MY_FLOAT = 3.14159
+MY_SCIENTIFIC = 1.5e10
+
+# Boolean values should NOT be encrypted
+MY_BOOL_TRUE = true
+MY_BOOL_FALSE = false
+
+# Array of strings (all elements encrypted)
+MY_ARRAY = ["ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:6n7/uxQj4rkHl5JUiqnnKzcb1jJC5OO6:x/1dWVfs4MJsKO8Tagi2le7FDh6Hb15JCe5jRA==]", "ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:wWrXhjocgupxdlKmH6kv/j4w6WYNiXQA:tTIwZJxRLRnJ8AbE6GxkCqXtkehXL5ywiaxa6Q==]"]
+
+# Nested object via inline table
+MY_OBJECT = {hello = "ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:tzYgjbMJxj0tJs2tYorHPrY6Wj8WrC2D:MwAvP8sxnkNoG4GO3ClIxOsaWXiD]", nested = {deep = "ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:x0xiD1aSQB4C5MTvbs22foO9aeeJmmfu:2sd2NrVzUs9qhoT9a2h4xNdSejZ8]"}}
+
+# Underscore prefix - value NOT encrypted
+_MY_COMMENT = "this_is_not_encrypted"
+
+# Underscore prefix on parent - children ARE encrypted
+[_MY_METADATA]
+version = "ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:Ll37p+KtQg+dXgfF1kWu2iPSbqwUSJVX:vNRAYNdOl/TKcjkktx7DXwDG9A==]"
+secret = "ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:sLIWGZZ7d1gCgyLyPibp8Rwc2YawjV2P:qQS6OOe1IJOY7AqOpUdXQugZUkbcccvuGQXYvV8RKmF6m9ds5okWIw==]"
+
+# Mixed array with numbers and strings
+MIXED_ARRAY = ["ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:hIvfXBL+WAmqIRYjocmd8L85wJV5bAK0:jVCTsTbyrP4Q8kGP91LjYcl5HYs+/A0fBXyTYw==]", 42, true, "ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:DSt9pKmex9GXst6/RYabnWOvjhhxpu+C:uzBdg2FXwNkhxbI7uceokMixAHeitwI7BWCQV5fI]"]
+
+# Unicode content
+UNICODE = "ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:MDeFAQNGPwxsSPjVzDg8y34OA/Yj3s7n:4GVvU3+gxkhNfAKuq6o4u3updG6Ikelou36Y7w==]"
+
+# Special characters in strings
+SPECIAL_CHARS = "ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:BE2xmBBVNthAmvkHEGrzbYGtHmzq8/wg:HqOEn08nB4Z39jm1IFJk/PA0u82r1SxSeR/H9BXZxvxea6HvKw==]"
+
+# Empty string
+EMPTY_STRING = "ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:wQzHWM9jQ6Zng6fV7d+1PrwoSkEyRtAD:XzVv+gUtQKhl96bfghUUMA==]"
+
+# Deeply nested structure
+[DEEP_NESTING.level1.level2.level3.level4]
+secret = "ESEC[1:1Er7fYzuqrCUVDyqCnIkd67aKPF4ax+mW6iFutqIKgs=:z6HAR2MNjLnQy5x5+XAu6fnOiUrwusOr:3vdB1bKBm3CJqKV7XqXFoqKI7trkCF5PyfLw8ADMQ6onXfS9]"
