@@ -49,7 +49,17 @@ const (
 	EsecPrivateKey = "ESEC_PRIVATE_KEY"
 	// DefaultKeyringFilename is the default name for the file storing private keys.
 	DefaultKeyringFilename = ".esec-keyring"
+	// EsecKeyringPath is the environment variable for the full keyring file path.
+	EsecKeyringPath = "ESEC_KEYRING_PATH"
 )
+
+// resolveKeyringPath returns the keyring path, checking ESEC_KEYRING_PATH first.
+func resolveKeyringPath(keyPath string) string {
+	if envPath := os.Getenv(EsecKeyringPath); envPath != "" {
+		return envPath
+	}
+	return filepath.Join(keyPath, DefaultKeyringFilename)
+}
 
 // GenerateKeypair generates a new Curve25519 keypair for use with esec encryption.
 // It returns the public and private keys as hex-encoded strings (64 characters each).
@@ -531,7 +541,7 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 	}
 
 	// If not found in env vars, try reading from the keyring file.
-	keyringPath := filepath.Join(keyPath, DefaultKeyringFilename)
+	keyringPath := resolveKeyringPath(keyPath)
 
 	// Check keyring file permissions on non-Windows systems
 	checkKeyringPermissions(keyringPath)
@@ -617,7 +627,7 @@ func sniffFromKeyring(logger *slog.Logger, keyPath string, envName string) (stri
 	}
 
 	// If not found in env vars, try reading from the keyring file.
-	keyringPath := filepath.Join(keyPath, DefaultKeyringFilename)
+	keyringPath := resolveKeyringPath(keyPath)
 	privateKeyFile, err := os.ReadFile(keyringPath) //nolint:gosec // File path is constructed from user-provided keyPath
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
