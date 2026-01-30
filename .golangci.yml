@@ -1,83 +1,95 @@
+version: "2"
 run:
   tests: true
-
-output:
-  print-issued-lines: false
-
 linters:
-  enable-all: true
+  default: all
   disable:
-    - lll
-    - gochecknoglobals
-    - wsl
-    - funlen
-    - gocognit
-    - goprintffuncname
-    - paralleltest
-    - nlreturn
-    - testpackage
-    - wrapcheck
-    - forbidigo
-    - gci
-    - godot
-    - gofumpt
     - cyclop
-    - errorlint
-    - nestif
-    - tagliatelle
-    - thelper
-    - godox
-    - goconst
-    - varnamelen
-    - ireturn
-    - exhaustruct
-    - nonamedreturns
-    - nilnil
-    - depguard    # nothing to guard against yet
-    - tagalign    # hurts readability of kong tags
-    - mnd
-    - perfsprint
+    - depguard
     - err113
+    - errorlint
+    - exhaustruct
+    - forbidigo
+    - funlen
+    - gochecknoglobals
+    - gocognit
+    - goconst
+    - godot
+    - godox
+    - goprintffuncname
     - intrange
+    - ireturn
+    - lll
+    - mnd
+    - modernize
     - nakedret
-    - tenv        # deprecated, replaced by usetesting
-
-linters-settings:
-  govet:
-    # These govet checks are disabled by default, but they're useful.
-    enable:
-      - niliness
-      - sortslice
-      - unusedwrite
-  dupl:
-    threshold: 100
-  gocyclo:
-    min-complexity: 20
-  exhaustive:
-    default-signifies-exhaustive: true
-
-issues:
-  max-per-linter: 0
-  max-same: 0
-  exclude-use-default: false
-  exclude:
-    - '^(G104|G204):'
-    # Very commonly not checked.
-    - 'Error return value of .(.*\.Help|.*\.MarkFlagRequired|(os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv). is not checked'
-    - 'exported method (.*\.MarshalJSON|.*\.UnmarshalJSON) should have comment or be unexported'
-    - 'composite literal uses unkeyed fields'
-    - 'bad syntax for struct tag key'
-    - 'bad syntax for struct tag pair'
-    - 'result .* \(error\) is always nil'
-    - 'Error return value of `fmt.Fprintln` is not checked'
-
-  exclude-rules:
-    # Don't warn on unused parameters.
-    # Parameter names are useful for documentation.
-    # Replacing them with '_' hides useful information.
-    - linters: [revive]
-      text: 'unused-parameter: parameter \S+ seems to be unused, consider removing or renaming it as _'
-
-    # Duplicate words are okay in tests.
-    - linters: [dupword]
-      path: _test\.go
+    - nestif
+    - nilnil
+    - nlreturn
+    - noctx
+    - noinlineerr
+    - nonamedreturns
+    - paralleltest
+    - perfsprint
+    - tagalign
+    - tagliatelle
+    - testpackage
+    - thelper
+    - varnamelen
+    - wrapcheck
+    - wsl
+    - wsl_v5
+  settings:
+    dupl:
+      threshold: 100
+    exhaustive:
+      default-signifies-exhaustive: true
+    gocyclo:
+      min-complexity: 20
+    govet:
+      enable:
+        - nilness
+        - sortslice
+        - unusedwrite
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - revive
+        text: 'unused-parameter: parameter \S+ seems to be unused, consider removing or renaming it as _'
+      - linters:
+          - revive
+        text: 'var-naming: avoid package names that conflict with Go standard library package names'
+      - linters:
+          - dupword
+        path: _test\.go
+      - path: (.+)\.go$
+        text: '^(G104|G204):'
+      - path: (.+)\.go$
+        text: Error return value of .(.*\.Help|.*\.MarkFlagRequired|(os\.)?std(out|err)\..*|.*Close|.*[Ff]lush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv). is not checked
+      - path: (.+)\.go$
+        text: exported method (.*\.MarshalJSON|.*\.UnmarshalJSON) should have comment or be unexported
+      - path: (.+)\.go$
+        text: composite literal uses unkeyed fields
+      - path: (.+)\.go$
+        text: bad syntax for struct tag key
+      - path: (.+)\.go$
+        text: bad syntax for struct tag pair
+      - path: (.+)\.go$
+        text: result .* \(error\) is always nil
+      - path: (.+)\.go$
+        text: Error return value of `fmt.Fprintln` is not checked
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

@@ -140,10 +140,6 @@ func (d *Decrypter) Decrypt(message []byte) ([]byte, error) {
 }
 
 func (d *Decrypter) decrypt(bm *boxedMessage) ([]byte, error) {
-	// fmt.Printf("Decrypting message with nonce %x\n", bm.Nonce)
-	// fmt.Printf("Encrypter public key: %x\n", bm.EncrypterPublic)
-	// fmt.Printf("Decrypter public key: %x\n", d.Keypair.Public)
-	// fmt.Printf("Decrypter private key: %x\n", d.Keypair.Private)
 	plaintext, ok := box.Open(nil, bm.Box, &bm.Nonce, &bm.EncrypterPublic, &d.Keypair.Private)
 	if !ok {
 		return nil, ErrDecryptionFailed
