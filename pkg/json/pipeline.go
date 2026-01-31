@@ -2,7 +2,7 @@ package json
 
 type pipeline struct {
 	final        []byte
-	err          error
+	err          error // first error encountered (fail-fast)
 	pendingBytes []byte
 	queue        chan queueItem
 	done         chan struct{}
@@ -35,7 +35,8 @@ func (p *pipeline) run() {
 			close(p.done)
 		case qi.pr != nil:
 			res := <-qi.pr
-			if res.err != nil {
+			if res.err != nil && p.err == nil {
+				// Preserve first error (fail-fast semantics)
 				p.err = res.err
 			}
 			p.final = append(p.final, res.bytes...)

@@ -118,6 +118,10 @@ func (f *Formatter) TransformScalarValues(
 	copy(result, data)
 
 	for _, r := range replacements {
+		// Validate replacement bounds to prevent panic
+		if r.start < 0 || r.end < 0 || r.start > len(result) || r.end > len(result) || r.start > r.end {
+			return nil, fmt.Errorf("invalid replacement bounds: start=%d, end=%d, len=%d", r.start, r.end, len(result))
+		}
 		// Build new content with proper quoting
 		quoted := quoteTomlString(string(r.value))
 		newContent := make([]byte, 0, len(result)-r.end+r.start+len(quoted))

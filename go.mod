@@ -9,6 +9,7 @@ require (
 	github.com/alecthomas/kong v1.10.0
 	github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad
 	github.com/joho/godotenv v1.5.1
+	github.com/pelletier/go-toml/v2 v2.2.3
 	golang.org/x/crypto v0.38.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -16,6 +17,5 @@ require (
 require (
 	github.com/alecthomas/repr v0.4.0 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
-	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 )

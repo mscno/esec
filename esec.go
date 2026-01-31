@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -596,6 +597,9 @@ func sniffEnvName(logger *slog.Logger) (string, error) {
 		}
 	}
 
+	// Sort keys for deterministic behavior (env var order is not guaranteed)
+	sort.Strings(setKeys)
+
 	switch len(setKeys) {
 	case 0:
 		logger.Debug("no private key found in environment variables")
@@ -799,7 +803,16 @@ func validateKeyPath(keyPath string) error {
 	if err != nil {
 		return fmt.Errorf("invalid keyPath: %w", err)
 	}
-	if strings.Contains(filepath.Clean(absPath), "..") {
+	// Resolve symlinks to prevent symlink bypass attacks
+	resolvedPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		// If path doesn't exist yet, fall back to checking the cleaned absolute path
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("invalid keyPath (symlink resolution failed): %w", err)
+		}
+		resolvedPath = absPath
+	}
+	if strings.Contains(filepath.Clean(resolvedPath), "..") {
 		return fmt.Errorf("invalid keyPath after resolution: %s", keyPath)
 	}
 	return nil

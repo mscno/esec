@@ -84,18 +84,19 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	var envVars map[string]string
 	switch format {
 	case fileutils.Env:
-		// Sanitize variables to prevent injection
 		envVars, err = esec.DotEnvToEnv(data)
-		envVars = sanitizeEnvVars(envVars)
 		if err != nil {
 			return fmt.Errorf("error parsing decrypted .env: %v", err)
 		}
+		// Sanitize variables to prevent injection (after error check)
+		envVars = sanitizeEnvVars(envVars)
 	case fileutils.Ejson:
 		envVars, err = esec.EjsonToEnv(data)
-		envVars = sanitizeEnvVars(envVars)
 		if err != nil {
 			return fmt.Errorf("error parsing decrypted EJSON: %v", err)
 		}
+		// Sanitize variables to prevent injection (after error check)
+		envVars = sanitizeEnvVars(envVars)
 	default:
 		return fmt.Errorf("unsupported format for run command: %s", format)
 	}

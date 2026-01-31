@@ -98,6 +98,10 @@ func walkNode(node *yaml.Node, action func([]byte) ([]byte, error), parentKeyIsC
 	case yaml.MappingNode:
 		// Process key-value pairs
 		for i := 0; i < len(node.Content); i += 2 {
+			// Bounds check: ensure we have both key and value nodes
+			if i+1 >= len(node.Content) {
+				return fmt.Errorf("invalid yaml: mapping node has odd number of elements (missing value for key)")
+			}
 			keyNode := node.Content[i]
 			valueNode := node.Content[i+1]
 
