@@ -5,7 +5,7 @@ builds:
     flags:
       - -trimpath
     ldflags: >
-      -X main.Version={{.Version}}
+      -X main.version={{.Version}}
       -s
       -w
       -extldflags "-static"
