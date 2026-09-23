@@ -115,7 +115,7 @@ func EncryptFileInPlace(filePath string) (int, error) {
 		return -1, err
 	}
 
-	if err := os.WriteFile(filePath, newdata, fileMode.Mode()); err != nil {
+	if err := os.WriteFile(filePath, newdata, fileMode.Mode()); err != nil { //nolint:gosec // File path is user-provided
 		return -1, err
 	}
 
@@ -254,11 +254,7 @@ func DecryptFromEmbedFSWithConfig(v embed.FS, config DecryptFromEmbedConfig) ([]
 	}
 
 	if config.Logger == nil {
-		config.Logger = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
-			AddSource:   false,
-			Level:       slog.LevelInfo,
-			ReplaceAttr: nil,
-		}))
+		config.Logger = slog.New(slog.DiscardHandler)
 	}
 
 	// Determine environment name
@@ -311,7 +307,7 @@ func DecryptFromEmbedFSWithConfig(v embed.FS, config DecryptFromEmbedConfig) ([]
 func DecryptFromEmbedFS(v embed.FS, envName string, format FileFormat) ([]byte, error) {
 	// If envName is empty, try to auto-detect from environment variables
 	if envName == "" {
-		detected, err := sniffEnvName(slog.New(slog.NewTextHandler(io.Discard, nil)))
+		detected, err := sniffEnvName(slog.New(slog.DiscardHandler))
 		if err != nil {
 			return nil, fmt.Errorf("error sniffing environment name: %v", err)
 		}
@@ -406,12 +402,8 @@ func WithKeyringSniffer() DecryptFromEmbedOption {
 func DecryptFromEmbedFSWithOptions(v embed.FS, opts ...DecryptFromEmbedOption) ([]byte, error) {
 	// Create a new options struct and apply the provided options
 	o := &decryptFromEmbedOptions{
-		format: FileFormatEjson,
-		logger: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
-			AddSource:   false,
-			Level:       slog.LevelInfo,
-			ReplaceAttr: nil,
-		})),
+		format:      FileFormatEjson,
+		logger:      slog.New(slog.DiscardHandler),
 		envOverride: "",
 	}
 

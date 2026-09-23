@@ -9,6 +9,8 @@ linters:
     - err113
     - errorlint
     - exhaustruct
+    - exhaustruct_v5
+    - gomodguard
     - forbidigo
     - funlen
     - gochecknoglobals
@@ -39,6 +41,8 @@ linters:
     - wrapcheck
     - wsl
     - wsl_v5
+  enable:
+    - gomodguard_v2
   settings:
     dupl:
       threshold: 100

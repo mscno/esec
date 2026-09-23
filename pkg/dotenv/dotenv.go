@@ -74,7 +74,7 @@ func (d *Formatter) TransformScalarValues(data []byte, fn func([]byte) ([]byte, 
 		}
 
 		// Write the encrypted key-value pair to the buffer
-		buffer.WriteString(fmt.Sprintf("%s=%s\n", key, value))
+		fmt.Fprintf(&buffer, "%s=%s\n", key, value)
 	}
 
 	// Handle any scanning error

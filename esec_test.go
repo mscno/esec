@@ -3,7 +3,6 @@ package esec
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -296,7 +295,7 @@ func TestDecryptFromEmbedFS(t *testing.T) {
 		config := DecryptFromEmbedConfig{
 			EnvName: "",
 			Format:  FileFormatEjson,
-			Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+			Logger:  slog.New(slog.DiscardHandler),
 		}
 
 		// Set up private key in environment
@@ -316,7 +315,7 @@ func TestDecryptFromEmbedFS(t *testing.T) {
 		// Create test configuration with custom lookuper
 		config := DecryptFromEmbedConfig{
 			Format:              FileFormatEjson,
-			Logger:              slog.New(slog.NewTextHandler(io.Discard, nil)),
+			Logger:              slog.New(slog.DiscardHandler),
 			EnvironmentLookuper: customLookuper,
 		}
 
@@ -344,7 +343,7 @@ func TestDecryptFromEmbedFS(t *testing.T) {
 		// Create test configuration with multiple lookupers
 		config := DecryptFromEmbedConfig{
 			Format:              FileFormatEjson,
-			Logger:              slog.New(slog.NewTextHandler(io.Discard, nil)),
+			Logger:              slog.New(slog.DiscardHandler),
 			EnvironmentLookuper: CombineLookupers(failingLookuper, successLookuper),
 		}
 
@@ -429,7 +428,7 @@ func TestCombineLookupers(t *testing.T) {
 
 func TestSniffFromKeyring(t *testing.T) {
 	// Setup a logger that doesn't output anything for tests
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	// Helper to create a temporary directory with a keyring file
 	setupKeyring := func(t *testing.T, content string) string {

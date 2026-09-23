@@ -56,7 +56,7 @@ func TestTransformScalarValues(t *testing.T) {
 			transformFn: bracketFn,
 			want:        "FOO=[bar]\n\nBAZ=[qux]\n",
 		},
-		{
+		{ //nolint:gosec // Test fixture, not real credentials
 			name:        "handles values with equals sign",
 			input:       "DATABASE_URL=postgres://user:pass@host:5432/db?sslmode=require\n",
 			transformFn: identityFn,
