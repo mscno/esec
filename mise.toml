@@ -1,0 +1,34 @@
+[tools]
+go = "1.27"
+golangci-lint = "latest"
+lefthook = "latest"
+"go:golang.org/x/tools/cmd/goimports" = "latest"
+
+[tasks.fmt]
+description = "Format Go files"
+run = ["goimports -w .", "go fmt ./..."]
+
+[tasks.lint]
+description = "Run linter"
+run = "golangci-lint run ./..."
+
+[tasks.hooks]
+description = "Install git hooks"
+run = "lefthook install"
+
+[tasks.test]
+description = "Run tests"
+env = { TEST_DATASTORE_PROJECT = "esec-prod" }
+run = "go test ./..."
+
+[tasks.cover]
+description = "Run tests and open coverage report"
+run = ["go test -coverprofile=coverage.out ./...", "go tool cover -html=coverage.out"]
+
+[tasks.install]
+description = "Install esec binary"
+run = "go install ./cmd/esec"
+
+[tasks.build]
+description = "Build esec binary and print version"
+run = ['go build -ldflags "-X main.VERSION=0.0.6" -o esec ./cmd/esec', "./esec --version"]
