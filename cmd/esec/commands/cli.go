@@ -44,6 +44,12 @@ type cli struct {
 
 // Execute runs the CLI with the given version string.
 func Execute(version string) {
+	// Git-style subcommand passthrough: `esec <x>` runs `esec-<x>` from PATH
+	// when <x> is not a builtin command (e.g. `esec vault` → `esec-vault`).
+	if code, handled := maybeExecExternal(os.Args); handled {
+		os.Exit(code)
+	}
+
 	var cli cli
 	ctx := kong.Parse(&cli,
 		kong.ShortUsageOnError(),

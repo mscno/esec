@@ -144,6 +144,8 @@ func TestDecryptFile(t *testing.T) {
 	})
 
 	t.Run("valid file, but invalid keypath", func(t *testing.T) {
+		// Isolate from any real global keyring store on the test machine.
+		t.Setenv(EsecKeyringDir, t.TempDir())
 		// invalid json file
 		_, err := Decrypt(strings.NewReader(`{"_ESEC_PUBLIC_KEY": "8d8647e2eeb6d2e31228e6df7da3df921ec3b799c3f66a171cd37a1ed3004e7d", "a": "ESEC[1:KR1IxNZnTZQMP3OR1NdOpDQ1IcLD83FSuE7iVNzINDk=:XnYW1HOxMthBFMnxWULHlnY4scj5mNmX:ls1+kvwwu2ETz5C6apgWE7Q=]"}`), bytes.NewBuffer(nil), "", FileFormatEjson, "/tmp", "")
 		if err == nil {
@@ -456,6 +458,8 @@ func TestSniffFromKeyring(t *testing.T) {
 	})
 
 	t.Run("Error when keyring file doesn't exist", func(t *testing.T) {
+		// Isolate from any real global keyring store on the test machine.
+		t.Setenv(EsecKeyringDir, t.TempDir())
 		// Use a temporary directory without creating a keyring file
 		dir := t.TempDir()
 

@@ -62,6 +62,9 @@ Global Flags:
   -q, --quiet  Suppress non-essential output
 ```
 
+Unknown subcommands are dispatched git-style: if `esec <x>` is not a builtin command, esec
+runs `esec-<x>` from your `PATH` (e.g. `esec vault ...` → `esec-vault ...`).
+
 **Conventions:**
 
 - Data is written to **stdout**, status messages and logs to **stderr**
@@ -235,7 +238,18 @@ export ESEC_PRIVATE_KEY_PROD=your-prod-key         # Prod environment
 
 ### 2. Keyring File (`.esec-keyring`)
 
-If not found in environment variables, esec looks for a `.esec-keyring` file:
+If not found in environment variables, esec looks for a `.esec-keyring` file, first in the
+key directory (default `.`, or set via `--key-dir` / `ESEC_KEY_DIR`), then in the **global
+keyring store**:
+
+1. `~/.config/esec/keyrings/<org>_<repo>.keyring` — when the repo contains an `.esec-project`
+   file (`ESEC_PROJECT=org/repo`), looked up from the current directory upward
+2. `~/.config/esec/keyrings/default.keyring` — project-independent fallback
+
+Set `ESEC_KEYRING_DIR` to use a different global directory, or `ESEC_KEYRING_PATH` to point at
+one exact keyring file (which disables all other file lookups). `XDG_CONFIG_HOME` is respected
+for the default location. The global store keeps private keys out of repository working
+directories entirely.
 
 ```dotenv
 ###########################################################

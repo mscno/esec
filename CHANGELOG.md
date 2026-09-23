@@ -14,6 +14,13 @@ CLI usability and conventions overhaul:
 - Library logging now uses the CLI's logger; keyring permission warnings match CLI log format
 - `--version` shows commit and build date; add Windows release builds
 - Fix error message wrapping (`%w`) and remove "error:" stutter
+- Add global keyring store: after the repo-local `.esec-keyring`, key lookup falls back to
+  `~/.config/esec/keyrings/<org>_<repo>.keyring` (project from `.esec-project`) and
+  `~/.config/esec/keyrings/default.keyring`; override the directory with `ESEC_KEYRING_DIR`
+- Add git-style subcommand passthrough: `esec <x>` runs `esec-<x>` from PATH when `<x>` is not a
+  builtin command (e.g. `esec vault` → `esec-vault`)
+- Add `pkg/crypto` helpers `SealAnonymous`/`OpenAnonymous` (NaCl sealed boxes) and `DeriveKey` (HKDF)
+- Add `pkg/projectfile` for reading and writing `.esec-project` files
 
 # v0.3.0
 

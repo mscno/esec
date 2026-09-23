@@ -38,6 +38,7 @@ import (
 	"github.com/mscno/esec/pkg/fileutils"
 	"github.com/mscno/esec/pkg/format"
 	"github.com/mscno/esec/pkg/json"
+	"github.com/mscno/esec/pkg/projectfile"
 	"github.com/mscno/esec/pkg/toml"
 	"github.com/mscno/esec/pkg/yaml"
 )
@@ -52,14 +53,60 @@ const (
 	DefaultKeyringFilename = ".esec-keyring"
 	// EsecKeyringPath is the environment variable for the full keyring file path.
 	EsecKeyringPath = "ESEC_KEYRING_PATH"
+	// EsecKeyringDir is the environment variable that overrides the global
+	// keyring directory.
+	EsecKeyringDir = "ESEC_KEYRING_DIR"
+	// DefaultKeyringBasename is the project-independent keyring file consulted
+	// last in the global keyring directory.
+	DefaultKeyringBasename = "default.keyring"
 )
 
-// resolveKeyringPath returns the keyring path, checking ESEC_KEYRING_PATH first.
-func resolveKeyringPath(keyPath string) string {
-	if envPath := os.Getenv(EsecKeyringPath); envPath != "" {
-		return envPath
+// GlobalKeyringDir returns the directory of the global keyring store:
+// $ESEC_KEYRING_DIR if set, otherwise $XDG_CONFIG_HOME/esec/keyrings, falling
+// back to ~/.config/esec/keyrings. It returns "" if no directory can be
+// determined.
+func GlobalKeyringDir() string {
+	if dir := os.Getenv(EsecKeyringDir); dir != "" {
+		return dir
 	}
-	return filepath.Join(keyPath, DefaultKeyringFilename)
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "esec", "keyrings")
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".config", "esec", "keyrings")
+	}
+	return ""
+}
+
+// resolveKeyringCandidates returns keyring file paths in priority order:
+// ESEC_KEYRING_PATH alone if set; otherwise the repo-local keyring first,
+// followed by the global keyring store (project-keyed via .esec-project, then
+// the default keyring).
+func resolveKeyringCandidates(keyPath string) []string {
+	if envPath := os.Getenv(EsecKeyringPath); envPath != "" {
+		return []string{envPath}
+	}
+	candidates := []string{filepath.Join(keyPath, DefaultKeyringFilename)}
+	if dir := GlobalKeyringDir(); dir != "" {
+		if project, _, err := projectfile.FindProjectFile(keyPath); err == nil {
+			candidates = append(candidates, filepath.Join(dir, projectfile.KeyringName(project)))
+		}
+		candidates = append(candidates, filepath.Join(dir, DefaultKeyringBasename))
+	}
+	return candidates
+}
+
+// resolveKeyringPath returns the first existing keyring candidate, or the
+// first candidate if none exist (so error messages point at the most specific
+// location).
+func resolveKeyringPath(keyPath string) string {
+	candidates := resolveKeyringCandidates(keyPath)
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return candidates[0]
 }
 
 // GenerateKeypair generates a new Curve25519 keypair for use with esec encryption.
@@ -533,33 +580,39 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string, logger *slo
 		return privKey, err
 	}
 
-	// If not found in env vars, try reading from the keyring file.
-	keyringPath := resolveKeyringPath(keyPath)
-
-	// Check keyring file permissions on non-Windows systems
-	checkKeyringPermissions(logger, keyringPath)
-	privateKeyFile, err := os.ReadFile(keyringPath) //nolint:gosec // File path is constructed from user-provided keyPath
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return privKey, fmt.Errorf("private key %q not found in environment variables, and keyring file does not exist at %q", keyToLookup, keyringPath)
+	// If not found in env vars, try the keyring candidates in priority order:
+	// the repo-local keyring first, then the global keyring store.
+	candidates := resolveKeyringCandidates(keyPath)
+	for _, keyringPath := range candidates {
+		// Check keyring file permissions on non-Windows systems
+		checkKeyringPermissions(logger, keyringPath)
+		privateKeyFile, err := os.ReadFile(keyringPath) //nolint:gosec // File path is constructed from user-provided keyPath
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return privKey, fmt.Errorf("failed to read keyring file at %q: %w", keyringPath, err)
 		}
-		return privKey, fmt.Errorf("failed to read keyring file at %q: %w", keyringPath, err)
+
+		// Parse the keyring file as environment variables.
+		privateKeyEnvs, err := godotenv.Parse(bytes.NewBuffer(privateKeyFile))
+		if err != nil {
+			return privKey, fmt.Errorf("failed to parse keyring file %q: %w", keyringPath, err)
+		}
+
+		// Retrieve the private key from the parsed keyring file. A keyring that
+		// exists but lacks the key is terminal: falling through to a less
+		// specific keyring would mask misconfiguration.
+		privKeyString, found := privateKeyEnvs[keyToLookup]
+		if !found {
+			return privKey, fmt.Errorf("private key %q not found in keyring file %q", keyToLookup, keyringPath)
+		}
+
+		// Parse and return the private key.
+		return format.ParseKey(privKeyString)
 	}
 
-	// Parse the keyring file as environment variables.
-	privateKeyEnvs, err := godotenv.Parse(bytes.NewBuffer(privateKeyFile))
-	if err != nil {
-		return privKey, fmt.Errorf("failed to parse keyring file %q: %w", keyringPath, err)
-	}
-
-	// Retrieve the private key from the parsed keyring file.
-	privKeyString, found := privateKeyEnvs[keyToLookup]
-	if !found {
-		return privKey, fmt.Errorf("private key %q not found in keyring file %q", keyToLookup, keyringPath)
-	}
-
-	// Parse and return the private key.
-	return format.ParseKey(privKeyString)
+	return privKey, fmt.Errorf("private key %q not found in environment variables, and keyring file does not exist at %q", keyToLookup, candidates[0])
 }
 
 // getFormatter returns the appropriate Handler based on the given file format.
