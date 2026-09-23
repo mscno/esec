@@ -12,7 +12,6 @@ import (
 
 	"github.com/mscno/esec"
 	"github.com/mscno/esec/pkg/fileutils"
-	"golang.org/x/term"
 )
 
 // RunCmd decrypts a secrets file and runs a command with the environment variables.
@@ -131,19 +130,8 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	// Ensure proper terminal handling when attached to a real terminal.
-	// In non-TTY contexts (CI pipelines, redirected stdio) we must not
-	// request a controlling terminal, or the child fails with ENOTTY.
-	if runtime.GOOS != "windows" && stdinIsTerminal() {
-		// For Unix-like systems, we'll use a new process group but keep terminal control
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Setpgid: true,
-			// Set the process as the controlling terminal process
-			Ctty: int(os.Stdin.Fd()),
-			// For interactive apps, ensure terminal control is transferred
-			Foreground: true,
-		}
-	}
+	// Platform-specific terminal handling (no-op on Windows and in non-TTY contexts)
+	setProcAttr(cmd)
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
@@ -175,20 +163,9 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 
 		ctx.Logger.Debug("received signal", "signal", sig.String())
 
-		// We're running a terminal app, so just forward the signal and exit.
-		// This lets the terminal handle the subprocess properly.
-		if runtime.GOOS != "windows" {
-			s, ok := sig.(syscall.Signal)
-			if !ok {
-				return &ExitError{Code: 1}
-			}
-			_ = syscall.Kill(pid, s)
-			// Exit with 128+signal per Unix convention (e.g. 130 for SIGINT)
-			return &ExitError{Code: 128 + int(s)}
-		}
-		// Windows handling
-		_ = cmd.Process.Kill()
-		return &ExitError{Code: 1}
+		// Forward the signal to the child and exit with the conventional
+		// code for the signal (e.g. 130 for SIGINT on Unix).
+		return &ExitError{Code: forwardSignal(cmd, sig)}
 
 	case err := <-done:
 		// Command completed on its own
@@ -206,11 +183,6 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 		ctx.Logger.Debug("command completed successfully")
 		return nil
 	}
-}
-
-// stdinIsTerminal reports whether stdin is attached to a terminal.
-func stdinIsTerminal() bool {
-	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // validateCommand checks if the command is safe to execute
