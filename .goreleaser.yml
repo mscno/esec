@@ -6,6 +6,8 @@ builds:
       - -trimpath
     ldflags: >
       -X main.version={{.Version}}
+      -X main.commit={{.Commit}}
+      -X main.date={{.Date}}
       -s
       -w
       -extldflags "-static"
@@ -15,6 +17,7 @@ builds:
       - darwin
       - freebsd
       - linux
+      - windows
     goarch:
       - amd64
       - arm64
@@ -27,6 +30,9 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     builds_info:
       mtime: "{{ .CommitTimestamp }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
 
 # SHA256 checksums
 checksum:

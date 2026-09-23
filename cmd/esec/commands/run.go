@@ -12,14 +12,15 @@ import (
 
 	"github.com/mscno/esec"
 	"github.com/mscno/esec/pkg/fileutils"
+	"golang.org/x/term"
 )
 
 // RunCmd decrypts a secrets file and runs a command with the environment variables.
 type RunCmd struct {
 	File         string   `arg:"" help:"File or Environment to decrypt" default:""`
-	Format       string   `help:"File format" default:".ejson" short:"f"`
+	Format       string   `help:"File format (ejson, env, eyaml, etoml)" default:".ejson" short:"f" env:"ESEC_FORMAT"`
 	KeyFromStdin bool     `help:"Read the key from stdin" short:"k"`
-	KeyDir       string   `help:"Directory containing the '.esec_keyring' file" default:"." short:"d"`
+	KeyDir       string   `help:"Directory containing the '.esec-keyring' file" default:"." short:"d" env:"ESEC_KEY_DIR"`
 	Command      []string `arg:"" optional:"" name:"command" help:"Command to run with the decrypted environment variables"`
 }
 
@@ -45,22 +46,22 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	if c.KeyFromStdin {
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			return err
+			return fmt.Errorf("reading key from stdin: %w", err)
 		}
 		key = strings.TrimSpace(string(data))
 		ctx.Logger.Debug("read private key from stdin")
 	}
 
-	// Parse the file format
+	// Parse the file format (used only to resolve an environment name to a file)
 	format, err := fileutils.ParseFormat(c.Format)
 	if err != nil {
-		return fmt.Errorf("error parsing format flag %q: %v", c.Format, err)
+		return fmt.Errorf("invalid format %q: %w", c.Format, err)
 	}
 
 	// Process the file or environment name to get the actual filename
 	fileName, err := processFileOrEnv(c.File, format)
 	if err != nil {
-		return fmt.Errorf("error processing file or env: %v", err)
+		return fmt.Errorf("invalid file or environment %q: %w", c.File, err)
 	}
 
 	ctx.Logger.Debug("using secrets file", "file", fileName)
@@ -70,40 +71,46 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 		return fmt.Errorf("secrets file %s does not exist", fileName)
 	}
 
+	// The actual format is determined by the file on disk
+	fileFormat, err := fileutils.ParseFormat(fileName)
+	if err != nil {
+		return fmt.Errorf("determining format of %s: %w", fileName, err)
+	}
+
 	// Decrypt the file
 	ctx.Logger.Debug("decrypting file", "file", fileName)
 
 	data, err := esec.DecryptFile(fileName, c.KeyDir, key)
 	if err != nil {
-		return fmt.Errorf("failed to decrypt file: %v", err)
+		return fmt.Errorf("decrypting file %s: %w", fileName, err)
 	}
 
 	ctx.Logger.Debug("successfully decrypted secrets file")
 
 	// Convert decrypted data to environment variables
 	var envVars map[string]string
-	switch format {
+	switch fileFormat {
 	case fileutils.Env:
 		envVars, err = esec.DotEnvToEnv(data)
 		if err != nil {
-			return fmt.Errorf("error parsing decrypted .env: %v", err)
+			return fmt.Errorf("parsing decrypted .env: %w", err)
 		}
 		// Sanitize variables to prevent injection (after error check)
 		envVars = sanitizeEnvVars(envVars)
 	case fileutils.Ejson:
 		envVars, err = esec.EjsonToEnv(data)
 		if err != nil {
-			return fmt.Errorf("error parsing decrypted EJSON: %v", err)
+			return fmt.Errorf("parsing decrypted EJSON: %w", err)
 		}
 		// Sanitize variables to prevent injection (after error check)
 		envVars = sanitizeEnvVars(envVars)
 	default:
-		return fmt.Errorf("unsupported format for run command: %s", format)
+		return fmt.Errorf("unsupported format for run command: %s", fileFormat)
 	}
 
 	// Validate we have environment variables
 	if len(envVars) == 0 {
-		ctx.Logger.Debug("warning: no environment variables found in the decrypted file")
+		ctx.Logger.Warn("no environment variables found in decrypted file", "file", fileName)
 	} else {
 		ctx.Logger.Debug("loaded environment variables", "count", len(envVars))
 	}
@@ -124,8 +131,10 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	// Ensure proper terminal handling
-	if runtime.GOOS != "windows" {
+	// Ensure proper terminal handling when attached to a real terminal.
+	// In non-TTY contexts (CI pipelines, redirected stdio) we must not
+	// request a controlling terminal, or the child fails with ENOTTY.
+	if runtime.GOOS != "windows" && stdinIsTerminal() {
 		// For Unix-like systems, we'll use a new process group but keep terminal control
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			Setpgid: true,
@@ -138,7 +147,7 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("error starting command: %v", err)
+		return fmt.Errorf("starting command: %w", err)
 	}
 
 	// Process ID for signal handling
@@ -166,19 +175,20 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 
 		ctx.Logger.Debug("received signal", "signal", sig.String())
 
-		// We're running a terminal app, so just forward the signal and exit
-		// This lets the terminal handle the subprocess properly
+		// We're running a terminal app, so just forward the signal and exit.
+		// This lets the terminal handle the subprocess properly.
 		if runtime.GOOS != "windows" {
-			// Just forward the signal and exit immediately
-			// This works better for terminal applications
-			_ = syscall.Kill(pid, sig.(syscall.Signal)) //nolint:forcetypeassert // Signal is always syscall.Signal on non-Windows
-		} else {
-			// Windows handling
-			_ = cmd.Process.Kill()
+			s, ok := sig.(syscall.Signal)
+			if !ok {
+				return &ExitError{Code: 1}
+			}
+			_ = syscall.Kill(pid, s)
+			// Exit with 128+signal per Unix convention (e.g. 130 for SIGINT)
+			return &ExitError{Code: 128 + int(s)}
 		}
-
-		// Return to let the terminal clean up properly
-		return nil
+		// Windows handling
+		_ = cmd.Process.Kill()
+		return &ExitError{Code: 1}
 
 	case err := <-done:
 		// Command completed on its own
@@ -187,14 +197,20 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 		if err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				ctx.Logger.Debug("command exited with error", "code", exitErr.ExitCode())
-				os.Exit(exitErr.ExitCode())
+				// Propagate the child exit code, like `make` and `env` do
+				return &ExitError{Code: exitErr.ExitCode()}
 			}
-			return fmt.Errorf("error running command: %v", err)
+			return fmt.Errorf("running command: %w", err)
 		}
 
 		ctx.Logger.Debug("command completed successfully")
 		return nil
 	}
+}
+
+// stdinIsTerminal reports whether stdin is attached to a terminal.
+func stdinIsTerminal() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // validateCommand checks if the command is safe to execute

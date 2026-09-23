@@ -2,8 +2,9 @@
 package commands
 
 import (
-	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path"
@@ -15,18 +16,30 @@ import (
 
 type cliCtx struct {
 	Logger *slog.Logger
-	Ctx    context.Context //nolint:containedctx // CLI context needs to pass context to subcommands
+	Quiet  bool
+}
+
+// ExitError is returned by commands that need to terminate the process with a
+// specific exit code, e.g. to propagate the exit code of a child process.
+type ExitError struct {
+	Code int
+}
+
+// Error implements the error interface.
+func (e *ExitError) Error() string {
+	return fmt.Sprintf("exit status %d", e.Code)
 }
 
 type cli struct {
-	Keygen  KeygenCmd  `cmd:"" help:"Generate key"`
-	Encrypt EncryptCmd `cmd:"" help:"Encrypt a secret"`
-	Decrypt DecryptCmd `cmd:"" help:"Decrypt a secret"`
-	Get     GetCmd     `cmd:"" help:"Decrypt a secret and extract a specific key"`
-	Run     RunCmd     `cmd:"" help:"Decrypt a secret, set environment variables, and run a command"`
+	Keygen  KeygenCmd  `cmd:"" help:"Generate a new keypair"`
+	Encrypt EncryptCmd `cmd:"" help:"Encrypt a secrets file in place"`
+	Decrypt DecryptCmd `cmd:"" help:"Decrypt a secrets file to stdout"`
+	Get     GetCmd     `cmd:"" help:"Decrypt a secrets file and print a single value"`
+	Run     RunCmd     `cmd:"" help:"Run a command with decrypted secrets as environment variables"`
 
 	Version kong.VersionFlag `help:"Show version"`
-	Debug   bool             `help:"Enable debug mode"`
+	Debug   bool             `help:"Enable debug logging" env:"ESEC_DEBUG"`
+	Quiet   bool             `help:"Suppress non-essential output" short:"q"`
 }
 
 // Execute runs the CLI with the given version string.
@@ -35,7 +48,7 @@ func Execute(version string) {
 	ctx := kong.Parse(&cli,
 		kong.ShortUsageOnError(),
 		kong.Name("esec"),
-		kong.Description("esec is a tool for encrypting secrets"),
+		kong.Description("esec encrypts and decrypts secrets files using public-key cryptography"),
 		kong.Vars{"version": version},
 	)
 
@@ -45,19 +58,39 @@ func Execute(version string) {
 		logLevel = slog.LevelDebug
 	}
 
-	// Create logger with handler that respects the level
+	// Create logger with handler that respects the level.
+	// Logs go to stderr so stdout stays clean for piping.
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: logLevel,
 	}))
+	// Make the library package log through the same handler.
+	slog.SetDefault(logger)
 
-	err := ctx.Run(&cliCtx{Ctx: context.Background(), Logger: logger})
+	err := ctx.Run(&cliCtx{Logger: logger, Quiet: cli.Quiet})
+
+	// Commands may request a specific process exit code (e.g. `run` forwarding
+	// the exit code of its child process).
+	var exitErr *ExitError
+	if errors.As(err, &exitErr) {
+		os.Exit(exitErr.Code)
+	}
 	ctx.FatalIfErrorf(err)
 }
 
-func processFileOrEnv(input string, defaultFileFormat fileutils.FileFormat) (filename string, err error) {
-	// This is a helper function, so we can't use the context logger directly
-	// Debug logs for this function will be handled by the calling functions
+// writeData writes data to w, ensuring the output ends with exactly one
+// trailing newline so it displays cleanly on a terminal.
+func writeData(w io.Writer, data []byte) error {
+	if _, err := w.Write(data); err != nil {
+		return err
+	}
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		_, err := io.WriteString(w, "\n")
+		return err
+	}
+	return nil
+}
 
+func processFileOrEnv(input string, defaultFileFormat fileutils.FileFormat) (filename string, err error) {
 	// Check if input is a file path (contains path separator) or starts with a valid format
 	baseName := path.Base(input)
 	isFile := false

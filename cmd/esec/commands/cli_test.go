@@ -29,7 +29,6 @@ func TestKeygenCmd(t *testing.T) {
 	assert.Contains(t, out, "Private Key:")
 }
 
-//nolint:dupl // Test functions have similar structure but test different scenarios
 func TestEncryptCmd(t *testing.T) {
 	// Create a temporary file
 	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")
@@ -49,12 +48,85 @@ func TestEncryptCmd(t *testing.T) {
 		return cmd.Run(&cliCtx{Logger: slog.Default()})
 	})
 
-	// Check expected output
-	assert.Equal(t, errString, "")
-	assert.Equal(t, out, "Encrypted 347 bytes\n")
+	// Status output goes to stderr, stdout stays clean for piping
+	assert.Contains(t, errString, "Encrypted")
+	assert.Contains(t, errString, "347 bytes")
+	assert.Equal(t, out, "")
 }
 
-//nolint:dupl // Test functions have similar structure but test different scenarios
+func TestEncryptCmdQuiet(t *testing.T) {
+	// Create a temporary file
+	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")
+	assert.NoError(t, err)
+	defer os.Remove(tmpFile.Name()) // Clean up after test
+
+	// Write test data
+	_, err = tmpFile.WriteString(`{"ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "test123"}`)
+	assert.NoError(t, err)
+	tmpFile.Close()
+
+	// Create command
+	cmd := &EncryptCmd{File: tmpFile.Name(), Format: ".ejson"}
+
+	// Run command with quiet mode: no status output anywhere
+	out, errString := captureOutput(func() error {
+		return cmd.Run(&cliCtx{Logger: slog.Default(), Quiet: true})
+	})
+
+	assert.Equal(t, errString, "")
+	assert.Equal(t, out, "")
+}
+
+func TestEncryptCmdDryRun(t *testing.T) {
+	// Create a temporary file with a fixed name so format detection works
+	tmpFilePath := filepath.Join(t.TempDir(), ".ejson")
+	plain := `{"ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "test123"}`
+	assert.NoError(t, os.WriteFile(tmpFilePath, []byte(plain), 0o600))
+
+	// Create command with dry run enabled
+	cmd := &EncryptCmd{File: tmpFilePath, Format: ".ejson", DryRun: true}
+
+	// Run command: encrypted content goes to stdout
+	out, errString := captureOutput(func() error {
+		return cmd.Run(&cliCtx{Logger: slog.Default()})
+	})
+
+	assert.Equal(t, errString, "")
+	assert.Contains(t, out, "ESEC[")
+
+	// The file on disk must NOT be modified by a dry run
+	after, err := os.ReadFile(tmpFilePath) //nolint:gosec // Test file path is constructed in-test
+	assert.NoError(t, err)
+	assert.Equal(t, string(after), plain)
+}
+
+func TestEncryptCmdDryRunWithOutput(t *testing.T) {
+	// Create a temporary file with a fixed name so format detection works
+	tmpDir := t.TempDir()
+	tmpFilePath := filepath.Join(tmpDir, ".ejson")
+	plain := `{"ESEC_PUBLIC_KEY":"493ffcfba776a045fba526acb0baff44c9639b98b9f27123cca67c808d4e171d","secret": "test123"}`
+	assert.NoError(t, os.WriteFile(tmpFilePath, []byte(plain), 0o600))
+	outPath := filepath.Join(tmpDir, ".ejson.out")
+
+	// --dry-run and --output are mutually exclusive
+	cmd := &EncryptCmd{File: tmpFilePath, Format: ".ejson", DryRun: true, Output: outPath}
+	err := cmd.Run(&cliCtx{Logger: slog.Default()})
+	assert.Error(t, err)
+
+	// --output writes encrypted content to the target file, source untouched
+	cmd = &EncryptCmd{File: tmpFilePath, Format: ".ejson", Output: outPath}
+	err = cmd.Run(&cliCtx{Logger: slog.Default(), Quiet: true})
+	assert.NoError(t, err)
+
+	src, err := os.ReadFile(tmpFilePath) //nolint:gosec // Test file path is constructed in-test
+	assert.NoError(t, err)
+	assert.Equal(t, string(src), plain)
+
+	written, err := os.ReadFile(outPath) //nolint:gosec // Test file path is constructed in-test
+	assert.NoError(t, err)
+	assert.Contains(t, string(written), "ESEC[")
+}
+
 func TestEncryptCmdBadFile(t *testing.T) {
 	// Create a temporary file
 	tmpFile, err := os.CreateTemp(t.TempDir(), ".ejson")

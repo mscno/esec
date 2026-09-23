@@ -50,16 +50,24 @@ Usage: esec <command> [flags]
 
 Commands:
   keygen     Generate a new keypair
-  encrypt    Encrypt a secrets file
-  decrypt    Decrypt a secrets file
-  get        Decrypt and extract a specific key
-  run        Decrypt secrets and run a command with them as env vars
+  encrypt    Encrypt a secrets file in place
+  decrypt    Decrypt a secrets file to stdout
+  get        Decrypt a secrets file and print a single value
+  run        Run a command with decrypted secrets as environment variables
 
 Global Flags:
   --help       Show help
   --version    Show version
-  --debug      Enable debug logging
+  --debug      Enable debug logging (env: ESEC_DEBUG)
+  -q, --quiet  Suppress non-essential output
 ```
+
+**Conventions:**
+
+- Data is written to **stdout**, status messages and logs to **stderr**
+- `--format` accepts `ejson`, `env`, `eyaml`, `etoml` (a leading dot is optional)
+- `--format` and `--key-dir` can also be set via the `ESEC_FORMAT` and `ESEC_KEY_DIR` environment variables
+- Exit codes: `0` success, `1` error. `run` propagates the child process exit code and exits `130` on `SIGINT`
 
 ### Generate Keys
 
@@ -81,24 +89,28 @@ dfe357ede9f3b42b34ac1fca814a27a99f610e4fde361d09b78adcc659b88b79
 ### Encrypt Secrets
 
 ```sh
-# Encrypt a file directly
+# Encrypt a file directly (in place)
 esec encrypt .ejson.dev
 
 # Encrypt using environment name (resolves to .ejson.dev)
 esec encrypt dev
 
 # Encrypt with a specific format
-esec encrypt dev -f .env
+esec encrypt dev -f env
 
-# Dry run (print without writing)
+# Dry run (print encrypted output to stdout, file is not modified)
 esec encrypt dev --dry-run
+
+# Write encrypted output to a different file
+esec encrypt dev -o .ejson.dev.enc
 ```
 
 **Flags:**
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--format` | `-f` | `.ejson` | File format (`.ejson`, `.env`) |
-| `--dry-run` | `-d` | `false` | Print encrypted output without writing to file |
+| Flag | Short | Default | Env | Description |
+|------|-------|---------|-----|-------------|
+| `--format` | `-f` | `.ejson` | `ESEC_FORMAT` | File format (`ejson`, `env`, `eyaml`, `etoml`) |
+| `--dry-run` | `-n` | `false` | | Print encrypted output to stdout without writing |
+| `--output` | `-o` | | | Write encrypted output to this file instead of in place |
 
 ### Decrypt Secrets
 
@@ -120,11 +132,11 @@ esec decrypt dev -d /path/to/keyring/dir
 ```
 
 **Flags:**
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--format` | `-f` | `.ejson` | File format (`.ejson`, `.env`) |
-| `--key-from-stdin` | `-k` | `false` | Read private key from stdin |
-| `--key-dir` | `-d` | `.` | Directory containing `.esec-keyring` file |
+| Flag | Short | Default | Env | Description |
+|------|-------|---------|-----|-------------|
+| `--format` | `-f` | `.ejson` | `ESEC_FORMAT` | File format (`ejson`, `env`, `eyaml`, `etoml`) |
+| `--key-from-stdin` | `-k` | `false` | | Read private key from stdin |
+| `--key-dir` | `-d` | `.` | `ESEC_KEY_DIR` | Directory containing `.esec-keyring` file |
 
 ### Get a Specific Key
 
@@ -142,11 +154,11 @@ echo "your-private-key" | esec get dev SECRET -k
 ```
 
 **Flags:**
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--format` | `-f` | `.ejson` | File format (`.ejson`, `.env`) |
-| `--key-from-stdin` | `-k` | `false` | Read private key from stdin |
-| `--key-dir` | `-d` | `.` | Directory containing `.esec-keyring` file |
+| Flag | Short | Default | Env | Description |
+|------|-------|---------|-----|-------------|
+| `--format` | `-f` | `.ejson` | `ESEC_FORMAT` | File format (`ejson`, `env`, `eyaml`, `etoml`) |
+| `--key-from-stdin` | `-k` | `false` | | Read private key from stdin |
+| `--key-dir` | `-d` | `.` | `ESEC_KEY_DIR` | Directory containing `.esec-keyring` file |
 
 ### Run Commands with Secrets
 
@@ -168,19 +180,21 @@ echo "your-private-key" | esec run dev -k -- myapp serve
 ```
 
 **Flags:**
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--format` | `-f` | `.ejson` | File format (`.ejson`, `.env`) |
-| `--key-from-stdin` | `-k` | `false` | Read private key from stdin |
-| `--key-dir` | `-d` | `.` | Directory containing `.esec-keyring` file |
+| Flag | Short | Default | Env | Description |
+|------|-------|---------|-----|-------------|
+| `--format` | `-f` | `.ejson` | `ESEC_FORMAT` | File format (`ejson`, `env`, `eyaml`, `etoml`) |
+| `--key-from-stdin` | `-k` | `false` | | Read private key from stdin |
+| `--key-dir` | `-d` | `.` | `ESEC_KEY_DIR` | Directory containing `.esec-keyring` file |
+
+The child process inherits esec's stdio, and esec exits with the child's exit code (or `130` when interrupted with `Ctrl-C`). Works with and without a TTY (e.g. in CI pipelines).
 
 ### Debug Mode
 
-Enable detailed logging with the `--debug` flag:
+Enable detailed logging with the `--debug` flag or the `ESEC_DEBUG` environment variable:
 
 ```sh
 esec --debug decrypt dev
-esec --debug run dev -- myapp serve
+ESEC_DEBUG=1 esec run dev -- myapp serve
 ```
 
 ---

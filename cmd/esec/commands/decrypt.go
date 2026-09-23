@@ -13,9 +13,9 @@ import (
 // DecryptCmd decrypts a secrets file.
 type DecryptCmd struct {
 	File         string `arg:"" help:"File or Environment to decrypt" default:""`
-	Format       string `help:"File format" default:".ejson" short:"f"`
+	Format       string `help:"File format (ejson, env, eyaml, etoml)" default:".ejson" short:"f" env:"ESEC_FORMAT"`
 	KeyFromStdin bool   `help:"Read the key from stdin" short:"k"`
-	KeyDir       string `help:"Directory containing the '.esec_keyring' file" default:"." short:"d"`
+	KeyDir       string `help:"Directory containing the '.esec-keyring' file" default:"." short:"d" env:"ESEC_KEY_DIR"`
 }
 
 // Run executes the decrypt command.
@@ -28,7 +28,7 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			ctx.Logger.Debug("stdin read failed", "error", err)
-			return fmt.Errorf("error reading from stdin: %v", err)
+			return fmt.Errorf("reading key from stdin: %w", err)
 		}
 		key = strings.TrimSpace(string(data))
 		ctx.Logger.Debug("private key read from stdin", "key_length", len(key))
@@ -39,14 +39,14 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 	format, err := fileutils.ParseFormat(c.Format)
 	if err != nil {
 		ctx.Logger.Debug("format parsing failed", "format", c.Format, "error", err)
-		return fmt.Errorf("error parsing format flag %q: %v", c.Format, err)
+		return fmt.Errorf("invalid format %q: %w", c.Format, err)
 	}
 	ctx.Logger.Debug("parsed format", "format_type", format)
 
 	fileName, err := processFileOrEnv(c.File, format)
 	if err != nil {
 		ctx.Logger.Debug("file/env processing failed", "input", c.File, "error", err)
-		return fmt.Errorf("error processing file or env: %v", err)
+		return fmt.Errorf("invalid file or environment %q: %w", c.File, err)
 	}
 	ctx.Logger.Debug("resolved file path", "path", fileName)
 
@@ -58,7 +58,7 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 			return fmt.Errorf("file does not exist: %s", fileName)
 		}
 		ctx.Logger.Debug("error checking file", "path", fileName, "error", err)
-		return fmt.Errorf("error checking file %s: %v", fileName, err)
+		return fmt.Errorf("cannot access file %s: %w", fileName, err)
 	}
 	ctx.Logger.Debug("file details", "path", fileName, "size", fileInfo.Size(), "mode", fileInfo.Mode())
 
@@ -66,10 +66,12 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 	data, err := esec.DecryptFile(fileName, c.KeyDir, key)
 	if err != nil {
 		ctx.Logger.Debug("decryption failed", "path", fileName, "error", err)
-		return fmt.Errorf("error decrypting file %s: %v", fileName, err)
+		return fmt.Errorf("decrypting file %s: %w", fileName, err)
 	}
 
 	ctx.Logger.Debug("decryption successful", "path", fileName, "bytes", len(data))
-	fmt.Println(string(data))
+	if err := writeData(os.Stdout, data); err != nil {
+		return fmt.Errorf("writing decrypted output: %w", err)
+	}
 	return nil
 }

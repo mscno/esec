@@ -292,7 +292,7 @@ func DecryptFromEmbedFSWithConfig(v embed.FS, config DecryptFromEmbedConfig) ([]
 	}
 
 	// Find the private key
-	privkey, err := findPrivateKey(config.Keydir, envName, config.UserSuppliedPrivateKey)
+	privkey, err := findPrivateKey(config.Keydir, envName, config.UserSuppliedPrivateKey, config.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +324,7 @@ func DecryptFromEmbedFS(v embed.FS, envName string, format FileFormat) ([]byte, 
 	}
 
 	// Find the private key
-	privkey, err := findPrivateKey("", envName, "")
+	privkey, err := findPrivateKey("", envName, "", slog.New(slog.DiscardHandler))
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +445,7 @@ func DecryptFile(filePath string, keydir string, userSuppliedPrivateKey string) 
 		return nil, err
 	}
 
-	privkey, err := findPrivateKey(keydir, envName, userSuppliedPrivateKey)
+	privkey, err := findPrivateKey(keydir, envName, userSuppliedPrivateKey, slog.Default())
 	if err != nil {
 		return nil, err
 	}
@@ -465,7 +465,7 @@ func Decrypt(in io.Reader, out io.Writer, envName string, fileFormat FileFormat,
 		return -1, err
 	}
 
-	privkey, err := findPrivateKey(keydir, envName, userSuppliedPrivateKey)
+	privkey, err := findPrivateKey(keydir, envName, userSuppliedPrivateKey, slog.Default())
 	if err != nil {
 		return -1, err
 	}
@@ -510,7 +510,7 @@ func decryptData(privkey [32]byte, data []byte, fileFormat FileFormat) ([]byte, 
 
 // findPrivateKey retrieves a private key from user input, environment variables, or keyring file.
 // It prioritizes user-supplied keys, then environment variables, and finally the keyring file.
-func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, error) {
+func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string, logger *slog.Logger) ([32]byte, error) {
 	var privKey [32]byte
 
 	// If the user supplied a private key, use it directly.
@@ -537,7 +537,7 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string) ([32]byte, 
 	keyringPath := resolveKeyringPath(keyPath)
 
 	// Check keyring file permissions on non-Windows systems
-	checkKeyringPermissions(keyringPath)
+	checkKeyringPermissions(logger, keyringPath)
 	privateKeyFile, err := os.ReadFile(keyringPath) //nolint:gosec // File path is constructed from user-provided keyPath
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -811,7 +811,7 @@ func validateKeyPath(keyPath string) error {
 }
 
 // checkKeyringPermissions warns if the keyring file has insecure permissions
-func checkKeyringPermissions(path string) {
+func checkKeyringPermissions(logger *slog.Logger, path string) {
 	if runtime.GOOS == "windows" {
 		return
 	}
@@ -821,7 +821,7 @@ func checkKeyringPermissions(path string) {
 	}
 	mode := info.Mode().Perm()
 	if mode&0077 != 0 {
-		slog.Warn("keyring file has insecure permissions",
+		logger.Warn("keyring file has insecure permissions",
 			"path", path, "mode", fmt.Sprintf("%04o", mode), "recommended", "0600")
 	}
 }

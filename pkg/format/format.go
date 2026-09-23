@@ -68,14 +68,14 @@ func ExtractPublicKeyHelper[T any](obj map[string]T) ([32]byte, error) {
 // The input must be exactly 64 hex characters (representing 32 bytes).
 func ParseKey(ks string) ([32]byte, error) {
 	if len(ks) != 64 {
-		return [32]byte{}, errors.New("public key is not 64 characters long")
+		return [32]byte{}, errors.New("key is not 64 characters long")
 	}
 	bs, err := hex.DecodeString(ks)
 	if err != nil {
 		return [32]byte{}, err
 	}
 	if len(bs) != 32 {
-		return [32]byte{}, errors.New("public key is not 32 bytes long")
+		return [32]byte{}, errors.New("key is not 32 bytes long")
 	}
 	var key [32]byte
 	copy(key[:], bs)

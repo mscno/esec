@@ -1,22 +1,36 @@
 package main
 
-import "runtime/debug"
+import (
+	"fmt"
+	"runtime/debug"
+)
 
 // Version is the version of the esec CLI tool, set at build time via ldflags.
 // If not set, it attempts to read the version from Go module info (for go install).
-var Version = getVersion()
+var Version = buildVersion()
 
-func getVersion() string {
-	// Check if version was set via ldflags (goreleaser)
-	if version != "" {
-		return version
+// These are set via ldflags, e.g.: -X main.version=x.y.z -X main.commit=abc123 -X main.date=2026-01-01
+var (
+	version string
+	commit  string
+	date    string
+)
+
+func buildVersion() string {
+	v := version
+	if v == "" {
+		// Fall back to Go module version (go install)
+		if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
+			v = info.Main.Version
+		} else {
+			v = "dev"
+		}
 	}
-	// Fall back to Go module version (go install)
-	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
-		return info.Main.Version
+	if commit != "" && date != "" {
+		return fmt.Sprintf("%s (commit: %s, built: %s)", v, commit, date)
 	}
-	return "dev"
+	if commit != "" {
+		return fmt.Sprintf("%s (commit: %s)", v, commit)
+	}
+	return v
 }
-
-// version is set via ldflags: -X main.version=x.y.z
-var version string

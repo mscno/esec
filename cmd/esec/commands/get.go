@@ -15,9 +15,9 @@ import (
 type GetCmd struct {
 	File         string `arg:"" help:"File or Environment to decrypt" default:""`
 	Key          string `arg:"" help:"Key to extract from decrypted content" default:""`
-	Format       string `help:"File format" default:".ejson" short:"f"`
+	Format       string `help:"File format (ejson, env, eyaml, etoml)" default:".ejson" short:"f" env:"ESEC_FORMAT"`
 	KeyFromStdin bool   `help:"Read the key from stdin" short:"k"`
-	KeyDir       string `help:"Directory containing the '.esec_keyring' file" default:"." short:"d"`
+	KeyDir       string `help:"Directory containing the '.esec-keyring' file" default:"." short:"d" env:"ESEC_KEY_DIR"`
 }
 
 // Run executes the get command.
@@ -30,7 +30,7 @@ func (c *GetCmd) Run(ctx *cliCtx) error {
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			ctx.Logger.Debug("stdin read failed", "error", err)
-			return fmt.Errorf("error reading from stdin: %v", err)
+			return fmt.Errorf("reading key from stdin: %w", err)
 		}
 		key = strings.TrimSpace(string(data))
 		ctx.Logger.Debug("private key read from stdin", "key_length", len(key))
@@ -41,18 +41,23 @@ func (c *GetCmd) Run(ctx *cliCtx) error {
 	format, err := fileutils.ParseFormat(c.Format)
 	if err != nil {
 		ctx.Logger.Debug("format parsing failed", "format", c.Format, "error", err)
-		return fmt.Errorf("error parsing format flag %q: %v", c.Format, err)
+		return fmt.Errorf("invalid format %q: %w", c.Format, err)
 	}
 	ctx.Logger.Debug("parsed format", "format_type", format)
 
 	fileName, err := processFileOrEnv(c.File, format)
 	if err != nil {
 		ctx.Logger.Debug("file/env processing failed", "input", c.File, "error", err)
-		return fmt.Errorf("error processing file or env: %v", err)
+		return fmt.Errorf("invalid file or environment %q: %w", c.File, err)
 	}
 	ctx.Logger.Debug("resolved file path", "path", fileName)
 
-	format, _ = fileutils.ParseFormat(fileName)
+	// The actual format is determined by the file on disk; the --format flag
+	// only controls how an environment name is resolved to a file name.
+	fileFormat, err := fileutils.ParseFormat(fileName)
+	if err != nil {
+		return fmt.Errorf("determining format of %s: %w", fileName, err)
+	}
 
 	// Check if file exists
 	fileInfo, err := os.Stat(fileName)
@@ -62,7 +67,7 @@ func (c *GetCmd) Run(ctx *cliCtx) error {
 			return fmt.Errorf("file does not exist: %s", fileName)
 		}
 		ctx.Logger.Debug("error checking file", "path", fileName, "error", err)
-		return fmt.Errorf("error checking file %s: %v", fileName, err)
+		return fmt.Errorf("cannot access file %s: %w", fileName, err)
 	}
 	ctx.Logger.Debug("file details", "path", fileName, "size", fileInfo.Size(), "mode", fileInfo.Mode())
 
@@ -70,7 +75,7 @@ func (c *GetCmd) Run(ctx *cliCtx) error {
 	data, err := esec.DecryptFile(fileName, c.KeyDir, key)
 	if err != nil {
 		ctx.Logger.Debug("decryption failed", "path", fileName, "error", err)
-		return fmt.Errorf("error decrypting file %s: %v", fileName, err)
+		return fmt.Errorf("decrypting file %s: %w", fileName, err)
 	}
 
 	ctx.Logger.Debug("decryption successful", "path", fileName, "bytes", len(data))
@@ -78,13 +83,13 @@ func (c *GetCmd) Run(ctx *cliCtx) error {
 	// Parse the data based on format and extract the key
 	var value string
 
-	switch format {
+	switch fileFormat {
 	case fileutils.Env:
 		// Parse .env format
 		envVars, err := esec.DotEnvToEnv(data)
 		if err != nil {
 			ctx.Logger.Debug("env parsing failed", "error", err)
-			return fmt.Errorf("error parsing decrypted .env: %v", err)
+			return fmt.Errorf("parsing decrypted .env: %w", err)
 		}
 		val, exists := envVars[c.Key]
 		if !exists {
@@ -98,7 +103,7 @@ func (c *GetCmd) Run(ctx *cliCtx) error {
 		var jsonData map[string]interface{}
 		if err := gojson.Unmarshal(data, &jsonData); err != nil {
 			ctx.Logger.Debug("json parsing failed", "error", err)
-			return fmt.Errorf("error parsing decrypted JSON: %v", err)
+			return fmt.Errorf("parsing decrypted JSON: %w", err)
 		}
 
 		// Handle nested keys with dot notation
@@ -134,13 +139,13 @@ func (c *GetCmd) Run(ctx *cliCtx) error {
 			valueBytes, err := gojson.Marshal(v)
 			if err != nil {
 				ctx.Logger.Debug("json marshaling failed", "key", c.Key, "error", err)
-				return fmt.Errorf("error serializing value for key %q: %v", c.Key, err)
+				return fmt.Errorf("serializing value for key %q: %w", c.Key, err)
 			}
 			value = string(valueBytes)
 		}
 
 	default:
-		return fmt.Errorf("unsupported format for get command: %s", format)
+		return fmt.Errorf("unsupported format for get command: %s", fileFormat)
 	}
 
 	// Output just the value without newline

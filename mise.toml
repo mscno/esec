@@ -31,4 +31,4 @@ run = "go install ./cmd/esec"
 
 [tasks.build]
 description = "Build esec binary and print version"
-run = ['go build -ldflags "-X main.VERSION=0.0.6" -o esec ./cmd/esec', "./esec --version"]
+run = ['go build -ldflags "-X main.version=0.0.6" -o esec ./cmd/esec', "./esec --version"]
