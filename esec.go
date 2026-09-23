@@ -339,7 +339,7 @@ func DecryptFromEmbedFSWithConfig(v embed.FS, config DecryptFromEmbedConfig) ([]
 	}
 
 	// Find the private key
-	privkey, err := findPrivateKey(config.Keydir, envName, config.UserSuppliedPrivateKey, config.Logger)
+	privkey, err := findPrivateKeyForData(config.Keydir, envName, config.UserSuppliedPrivateKey, data, config.Format, config.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -371,7 +371,7 @@ func DecryptFromEmbedFS(v embed.FS, envName string, format FileFormat) ([]byte, 
 	}
 
 	// Find the private key
-	privkey, err := findPrivateKey("", envName, "", slog.New(slog.DiscardHandler))
+	privkey, err := findPrivateKeyForData("", envName, "", data, format, slog.New(slog.DiscardHandler))
 	if err != nil {
 		return nil, err
 	}
@@ -477,10 +477,7 @@ func DecryptFromEmbedFSWithOptions(v embed.FS, opts ...DecryptFromEmbedOption) (
 
 // DecryptFile reads an encrypted file from disk, decrypts it, and returns the decrypted data.
 func DecryptFile(filePath string, keydir string, userSuppliedPrivateKey string) ([]byte, error) {
-	envName, err := parseEnvironment(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing env from file: %w", err)
-	}
+	envSuffix := parseEnvSuffix(filePath)
 
 	data, err := os.ReadFile(filePath) //nolint:gosec // File path is user-provided
 	if err != nil {
@@ -492,7 +489,7 @@ func DecryptFile(filePath string, keydir string, userSuppliedPrivateKey string) 
 		return nil, err
 	}
 
-	privkey, err := findPrivateKey(keydir, envName, userSuppliedPrivateKey, slog.Default())
+	privkey, err := findPrivateKeyForData(keydir, envSuffix, userSuppliedPrivateKey, data, FileFormat(fileFormat), slog.Default())
 	if err != nil {
 		return nil, err
 	}
@@ -506,13 +503,14 @@ func DecryptFile(filePath string, keydir string, userSuppliedPrivateKey string) 
 }
 
 // Decrypt reads encrypted data from the input reader, decrypts it, and writes the decrypted data to the output writer.
+// envName is the environment suffix used for key lookup (e.g. "dev" or "registry.production").
 func Decrypt(in io.Reader, out io.Writer, envName string, fileFormat FileFormat, keydir string, userSuppliedPrivateKey string) (int, error) {
 	data, err := io.ReadAll(in)
 	if err != nil {
 		return -1, err
 	}
 
-	privkey, err := findPrivateKey(keydir, envName, userSuppliedPrivateKey, slog.Default())
+	privkey, err := findPrivateKeyForData(keydir, envName, userSuppliedPrivateKey, data, fileFormat, slog.Default())
 	if err != nil {
 		return -1, err
 	}
@@ -555,9 +553,96 @@ func decryptData(privkey [32]byte, data []byte, fileFormat FileFormat) ([]byte, 
 	return decryptedData, nil
 }
 
-// findPrivateKey retrieves a private key from user input, environment variables, or keyring file.
-// It prioritizes user-supplied keys, then environment variables, and finally the keyring file.
-func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string, logger *slog.Logger) ([32]byte, error) {
+// KeySuffixes returns the normalized private-key name suffixes for an
+// environment suffix, most specific first: "registry.production" yields
+// ["REGISTRY_PRODUCTION", "PRODUCTION"], "dev" yields ["DEV"], and "" yields
+// [""] (the default key).
+func KeySuffixes(envSuffix string) []string {
+	if envSuffix == "" {
+		return []string{""}
+	}
+	full := strings.ToUpper(strings.ReplaceAll(envSuffix, ".", "_"))
+	last := full
+	if i := strings.LastIndex(full, "_"); i >= 0 {
+		last = full[i+1:]
+	}
+	if full == last {
+		return []string{full}
+	}
+	return []string{full, last}
+}
+
+// ResolveKey looks up a private key in entries (e.g. parsed keyring or
+// environment): first by environment suffix chain (most specific first), then
+// by the secrets file's public key as ESEC_PRIVATE_KEY_<pubkey-hex>.
+// It returns the key, the name of the entry that matched, and whether a match
+// was found.
+func ResolveKey(entries map[string]string, envSuffixes []string, pubkey *[32]byte) (key string, matchedName string, ok bool) {
+	for _, suffix := range envSuffixes {
+		name := EsecPrivateKey
+		if suffix != "" {
+			name += "_" + suffix
+		}
+		if v, ok := entries[name]; ok {
+			return v, name, true
+		}
+	}
+	if pubkey != nil {
+		// Uppercase hex is the convention; accept lowercase for hand-written files.
+		if name := fmt.Sprintf("%s_%X", EsecPrivateKey, *pubkey); name != "" {
+			if v, ok := entries[name]; ok {
+				return v, name, true
+			}
+		}
+		if name := fmt.Sprintf("%s_%x", EsecPrivateKey, *pubkey); name != "" {
+			if v, ok := entries[name]; ok {
+				return v, name, true
+			}
+		}
+	}
+	return "", "", false
+}
+
+// ExtractPublicKey extracts the public key embedded in an encrypted file.
+func ExtractPublicKey(data []byte, fileFormat FileFormat) ([32]byte, error) {
+	formatter, err := getFormatter(fileFormat)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return formatter.ExtractPublicKey(data)
+}
+
+// parseEnvSuffix returns the full environment suffix of a secrets file name:
+// ".env.registry.production" → "registry.production", ".ejson" → "".
+// A non-empty remainder that does not start with "." is not a suffix:
+// ".ejson123" → "".
+func parseEnvSuffix(filename string) string {
+	base := path.Base(filename)
+	for _, prefix := range []string{string(FileFormatEnv), string(FileFormatEjson), string(FileFormatEyaml), string(FileFormatEyml), string(FileFormatEtoml)} {
+		if rest := strings.TrimPrefix(base, prefix); rest != base {
+			if rest == "" {
+				return ""
+			}
+			if strings.HasPrefix(rest, ".") {
+				return rest[1:]
+			}
+		}
+	}
+	return ""
+}
+
+// findPrivateKeyForData resolves the private key for decrypting data.
+//
+// Resolution order (per-key fallthrough across locations):
+//  1. user-supplied key
+//  2. environment variables: ESEC_PRIVATE_KEY_<FULL_SUFFIX>, then
+//     ESEC_PRIVATE_KEY_<LAST_SEGMENT>, then ESEC_PRIVATE_KEY_<file pubkey>
+//  3. keyring files in candidate order (repo-local, global project, global
+//     default), trying the same name chain in each
+//
+// When a key is found via the pubkey-keyed entry, the stored private key is
+// validated to actually match that public key.
+func findPrivateKeyForData(keyPath, envSuffix, userSuppliedPrivateKey string, data []byte, fileFormat FileFormat, logger *slog.Logger) ([32]byte, error) {
 	var privKey [32]byte
 
 	// If the user supplied a private key, use it directly.
@@ -565,26 +650,35 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string, logger *slo
 		return format.ParseKey(userSuppliedPrivateKey)
 	}
 
-	// Determine the key name to look up.
-	keyToLookup := EsecPrivateKey
-	if envName != "" {
-		keyToLookup = fmt.Sprintf("%s_%s", EsecPrivateKey, strings.ToUpper(envName))
+	suffixes := KeySuffixes(envSuffix)
+	displayName := EsecPrivateKey
+	if len(suffixes) > 0 && suffixes[0] != "" {
+		displayName = EsecPrivateKey + "_" + suffixes[0]
 	}
 
-	// Check if the private key is in environment variables.
-	if privKeyString, exists := os.LookupEnv(keyToLookup); exists {
-		return format.ParseKey(privKeyString)
+	// Lazily extract the file's public key for pubkey-keyed lookup.
+	var pubkey *[32]byte
+	getPubkey := func() *[32]byte {
+		if pubkey == nil && data != nil {
+			if pub, err := ExtractPublicKey(data, fileFormat); err == nil {
+				pubkey = &pub
+			}
+		}
+		return pubkey
 	}
-	// Validate keyPath to prevent directory traversal attacks
+
+	// Environment variables.
+	if key, matchedName, ok := ResolveKey(envMap(), suffixes, getPubkey()); ok {
+		return parseResolvedKey(key, matchedName, getPubkey(), logger)
+	}
+
+	// Keyring candidates in priority order.
 	if err := validateKeyPath(keyPath); err != nil {
 		return privKey, err
 	}
-
-	// If not found in env vars, try the keyring candidates in priority order:
-	// the repo-local keyring first, then the global keyring store.
 	candidates := resolveKeyringCandidates(keyPath)
+	filesSeen := 0
 	for _, keyringPath := range candidates {
-		// Check keyring file permissions on non-Windows systems
 		checkKeyringPermissions(logger, keyringPath)
 		privateKeyFile, err := os.ReadFile(keyringPath) //nolint:gosec // File path is constructed from user-provided keyPath
 		if err != nil {
@@ -593,26 +687,53 @@ func findPrivateKey(keyPath, envName, userSuppliedPrivateKey string, logger *slo
 			}
 			return privKey, fmt.Errorf("failed to read keyring file at %q: %w", keyringPath, err)
 		}
-
-		// Parse the keyring file as environment variables.
+		filesSeen++
 		privateKeyEnvs, err := godotenv.Parse(bytes.NewBuffer(privateKeyFile))
 		if err != nil {
 			return privKey, fmt.Errorf("failed to parse keyring file %q: %w", keyringPath, err)
 		}
-
-		// Retrieve the private key from the parsed keyring file. A keyring that
-		// exists but lacks the key is terminal: falling through to a less
-		// specific keyring would mask misconfiguration.
-		privKeyString, found := privateKeyEnvs[keyToLookup]
-		if !found {
-			return privKey, fmt.Errorf("private key %q not found in keyring file %q", keyToLookup, keyringPath)
+		if key, matchedName, ok := ResolveKey(privateKeyEnvs, suffixes, getPubkey()); ok {
+			return parseResolvedKey(key, matchedName, getPubkey(), logger)
 		}
-
-		// Parse and return the private key.
-		return format.ParseKey(privKeyString)
 	}
 
-	return privKey, fmt.Errorf("private key %q not found in environment variables, and keyring file does not exist at %q", keyToLookup, candidates[0])
+	if filesSeen == 0 {
+		return privKey, fmt.Errorf("private key %q not found in environment variables, and keyring file does not exist at %q", displayName, candidates[0])
+	}
+	return privKey, fmt.Errorf("private key %q not found in environment variables or keyring files (tried %s)", displayName, strings.Join(candidates, ", "))
+}
+
+// envMap returns the process environment as a map.
+func envMap() map[string]string {
+	m := make(map[string]string, len(os.Environ()))
+	for _, kv := range os.Environ() {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			m[k] = v
+		}
+	}
+	return m
+}
+
+// parseResolvedKey parses a resolved private key; when the key was matched by
+// a pubkey-keyed entry, it validates that the stored private key actually
+// corresponds to that public key.
+func parseResolvedKey(key, matchedName string, pubkey *[32]byte, logger *slog.Logger) ([32]byte, error) {
+	priv, err := format.ParseKey(key)
+	if err != nil {
+		return priv, err
+	}
+	if pubkey != nil && matchedName == fmt.Sprintf("%s_%X", EsecPrivateKey, *pubkey) ||
+		pubkey != nil && matchedName == fmt.Sprintf("%s_%x", EsecPrivateKey, *pubkey) {
+		derived, err := crypto.PublicFromPrivate(priv)
+		if err != nil {
+			return priv, err
+		}
+		if derived != *pubkey {
+			return [32]byte{}, fmt.Errorf("keyring entry %s holds a private key that does not match that public key", matchedName)
+		}
+		logger.Debug("resolved private key by public key", "pubkey", fmt.Sprintf("%X", *pubkey))
+	}
+	return priv, nil
 }
 
 // getFormatter returns the appropriate Handler based on the given file format.
@@ -769,29 +890,6 @@ func sniffFromKeyring(logger *slog.Logger, keyPath string, envName string) (stri
 }
 
 // Helper functions from before
-func parseEnvironment(filename string) (string, error) {
-	filename = path.Base(filename)
-
-	validPrefixes := []string{string(FileFormatEnv), string(FileFormatEjson), string(FileFormatEyaml), string(FileFormatEyml), string(FileFormatEtoml)}
-	isValidPrefix := false
-	for _, prefix := range validPrefixes {
-		if strings.HasPrefix(filename, prefix) {
-			isValidPrefix = true
-			break
-		}
-	}
-
-	if !isValidPrefix {
-		return "", fmt.Errorf("invalid file type: %s", filename)
-	}
-
-	parts := strings.Split(filename, ".")
-	if len(parts) <= 2 {
-		return "", nil
-	}
-
-	return parts[len(parts)-1], nil
-}
 
 // EjsonToEnv parses decrypted EJSON data and returns a map of environment variables.
 // It extracts all top-level string values, excluding the ESEC_PUBLIC_KEY field.

@@ -11,6 +11,7 @@
 package crypto
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -161,3 +162,13 @@ func genNonce() (nonce [24]byte, err error) {
 
 // ErrInvalidKeyFormat means the key was not in the expected format.
 var ErrInvalidKeyFormat = fmt.Errorf("invalid key format")
+
+// PublicFromPrivate derives the public key corresponding to a Curve25519
+// private key.
+func PublicFromPrivate(priv [32]byte) ([32]byte, error) {
+	pub, _, err := box.GenerateKey(bytes.NewReader(priv[:]))
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return *pub, nil
+}

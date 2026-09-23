@@ -132,15 +132,21 @@ func processFileOrEnv(input string, defaultFileFormat fileutils.FileFormat) (fil
 
 	// Input is treated as an environment
 	environment := input
-	// Validate environment string
-	if strings.ContainsAny(environment, ".\\/") {
-		return "", fmt.Errorf("invalid environment name: %s - should not contain dots or path separators", input)
-	}
-
-	for _, char := range environment {
-		if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyz0123456789", char) {
-			return "", fmt.Errorf("invalid environment name: %s - should be lowercase alphanumeric", input)
+	// Validate environment string: dot-separated lowercase alphanumeric
+	// segments (e.g. "dev" or "registry.production" for monorepo components).
+	// The empty environment selects the default file (e.g. ".ejson").
+	for _, segment := range strings.Split(environment, ".") {
+		if segment == "" && environment != "" {
+			return "", fmt.Errorf("invalid environment name: %s - should be dot-separated lowercase alphanumeric segments", input)
 		}
+		for _, char := range segment {
+			if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyz0123456789", char) {
+				return "", fmt.Errorf("invalid environment name: %s - should be dot-separated lowercase alphanumeric segments", input)
+			}
+		}
+	}
+	if strings.ContainsAny(environment, "\\/") {
+		return "", fmt.Errorf("invalid environment name: %s - should be dot-separated lowercase alphanumeric segments", input)
 	}
 
 	// Generate filename using the default format (.env)

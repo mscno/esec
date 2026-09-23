@@ -22,20 +22,22 @@ const ProjectFileName = ".esec-project"
 // ProjectKey is the variable name inside the project file.
 const ProjectKey = "ESEC_PROJECT"
 
-var projectFormatRegex = regexp.MustCompile(`^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$`)
+var projectFormatRegex = regexp.MustCompile(`^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+(/[a-zA-Z0-9._-]+)*$`)
 
 // ErrNotFound is returned when no .esec-project file can be found.
 var ErrNotFound = errors.New("project file not found")
 
-// ValidateOrgRepo checks if the project identifier conforms to the 'org/repo' format.
+// ValidateOrgRepo checks if the project identifier conforms to the project
+// format: 'org/repo', optionally with path segments for monorepo subprojects
+// ('org/repo/services/registry').
 func ValidateOrgRepo(orgRepo string) error {
 	if !projectFormatRegex.MatchString(orgRepo) {
-		return fmt.Errorf("invalid project format: must be 'org/repo'")
+		return fmt.Errorf("invalid project format: must be 'org/repo[/path...]'")
 	}
 	// Reject dot-only segments; they carry path semantics.
 	for _, seg := range strings.Split(orgRepo, "/") {
 		if seg == "." || seg == ".." {
-			return fmt.Errorf("invalid project format: must be 'org/repo'")
+			return fmt.Errorf("invalid project format: must be 'org/repo[/path...]'")
 		}
 	}
 	return nil
@@ -87,8 +89,9 @@ func ReadProjectFile(dir string) (string, error) {
 }
 
 // FindProjectFile searches dir and its parents for a .esec-project file,
-// returning the project identifier and the path of the file found. It returns
-// ErrNotFound if no project file exists in any parent directory.
+// returning the project identifier and the path of the file found. The search
+// never crosses a repository boundary: it stops after checking the directory
+// containing .git. It returns ErrNotFound if no project file exists.
 func FindProjectFile(dir string) (project string, path string, err error) {
 	if dir == "" {
 		dir = "."
@@ -104,6 +107,11 @@ func FindProjectFile(dir string) (project string, path string, err error) {
 		}
 		if !errors.Is(err, ErrNotFound) {
 			return "", "", err
+		}
+		// Never climb out of a repository: a project file above the git root
+		// must not claim this repo.
+		if _, gerr := os.Stat(filepath.Join(abs, ".git")); gerr == nil {
+			return "", "", ErrNotFound
 		}
 		parent := filepath.Dir(abs)
 		if parent == abs {

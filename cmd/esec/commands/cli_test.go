@@ -309,7 +309,7 @@ func TestProcessFileOrEnv(t *testing.T) {
 			name:          "invalid file prefix",
 			input:         ".invalid",
 			wantErr:       true,
-			wantErrPrefix: "invalid environment name: .invalid - should not contain dots or path separators",
+			wantErrPrefix: "invalid environment name: .invalid - should be dot-separated lowercase alphanumeric segments",
 		},
 		{
 			name:          "uppercase environment",
@@ -318,8 +318,22 @@ func TestProcessFileOrEnv(t *testing.T) {
 			wantErrPrefix: "invalid environment name",
 		},
 		{
-			name:          "environment with dot",
-			input:         "prod.test",
+			name:         "environment with dot (monorepo component)",
+			input:        "prod.test",
+			wantFilename: ".ejson.prod.test",
+			wantEnv:      "prod.test",
+			wantErr:      false,
+		},
+		{
+			name:         "dotted component environment",
+			input:        "registry.production",
+			wantFilename: ".ejson.registry.production",
+			wantEnv:      "registry.production",
+			wantErr:      false,
+		},
+		{
+			name:          "environment with trailing dot",
+			input:         "prod.",
 			wantErr:       true,
 			wantErrPrefix: "invalid environment name",
 		},
@@ -327,7 +341,7 @@ func TestProcessFileOrEnv(t *testing.T) {
 			name:          "environment with slash",
 			input:         "prod/test",
 			wantErr:       true,
-			wantErrPrefix: "invalid environment name: prod/test - should not contain dots or path separators",
+			wantErrPrefix: "invalid environment name: prod/test - should be dot-separated lowercase alphanumeric segments",
 		},
 		{
 			name:         "environment with slash",

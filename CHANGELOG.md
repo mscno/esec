@@ -1,3 +1,22 @@
+# v0.7.0
+
+Monorepo support: component-scoped environments and public-key key lookup.
+
+- Dotted environment names: `esec decrypt registry.production -f .env` resolves
+  `.env.registry.production`; any `.<format>[.<component>...].<env>` naming works
+- Key lookup now tries, per location (env vars, then each keyring in priority order):
+  `ESEC_PRIVATE_KEY_<FULL_SUFFIX>` (dots become underscores) → `ESEC_PRIVATE_KEY_<LAST_SEGMENT>`
+  → `ESEC_PRIVATE_KEY_<file public key hex>`; the file's embedded public key is ground truth,
+  so any file naming scheme works and key rotation needs no renames
+- Pubkey-keyed entries are validated: a private key that doesn't match its public key errors loudly
+- Per-key fallthrough across keyring locations (repo-local → global project → global default);
+  previously an existing keyring missing the key was terminal
+- `.esec-project` discovery stops at the git repository root — a parent directory's project
+  file no longer leaks into repos that lack their own
+- Project identifiers may include path segments for subprojects: `org/repo/services/registry`
+- New exported helpers: `KeySuffixes`, `ResolveKey`, `ExtractPublicKey`,
+  `crypto.PublicFromPrivate`
+
 # v0.6.0
 
 Global keyring store and esec-vault foundation:

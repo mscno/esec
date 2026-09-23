@@ -251,6 +251,26 @@ one exact keyring file (which disables all other file lookups). `XDG_CONFIG_HOME
 for the default location. The global store keeps private keys out of repository working
 directories entirely.
 
+### 3. Key names: environment chain and public key
+
+Within each location, esec tries key names most-specific-first:
+
+- `.ejson.prod` → `ESEC_PRIVATE_KEY_PROD`
+- `.env.registry.production` (monorepo component) → `ESEC_PRIVATE_KEY_REGISTRY_PRODUCTION`,
+  then `ESEC_PRIVATE_KEY_PRODUCTION`
+- any file → `ESEC_PRIVATE_KEY_<the file's public key, hex>`
+
+The public-key form is the ground truth: the file itself names its key, so naming schemes are
+free-form and key rotation is just a second entry (old files keep the old key, new files get the
+new one). A stored private key that doesn't match its entry's public key is rejected loudly.
+
+### 4. Monorepos
+
+The nearest `.esec-project` (walking up, never crossing the git root) scopes the global keyring.
+One marker at the repo root shares one project across all components; nested markers
+(`services/registry/.esec-project` with `ESEC_PROJECT=org/repo/services/registry`) give
+subprojects their own keyrings in the global store.
+
 ```dotenv
 ###########################################################
 ### Private key file - Do not commit to version control ###

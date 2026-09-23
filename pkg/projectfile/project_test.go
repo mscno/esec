@@ -14,7 +14,7 @@ func TestValidateOrgRepo(t *testing.T) {
 			t.Errorf("expected %q to be valid, got %v", v, err)
 		}
 	}
-	invalid := []string{"", "org", "org/", "/repo", "org/repo/extra", "org/repo space", "../repo"}
+	invalid := []string{"", "org", "org/", "/repo", "org/repo space", "../repo"}
 	for _, v := range invalid {
 		if err := ValidateOrgRepo(v); err == nil {
 			t.Errorf("expected %q to be invalid", v)

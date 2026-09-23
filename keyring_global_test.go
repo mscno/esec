@@ -38,7 +38,7 @@ func TestGlobalKeyringStore(t *testing.T) {
 		writeKeyring(t, filepath.Join(globalDir, "org_repo.keyring"),
 			"ESEC_PRIVATE_KEY_DEV="+testPrivateKeyHex+"\n")
 
-		key, err := findPrivateKey(repo, "dev", "", logger)
+		key, err := findPrivateKeyForData(repo, "dev", "", nil, "", logger)
 		if err != nil {
 			t.Fatalf("findPrivateKey: %v", err)
 		}
@@ -55,7 +55,7 @@ func TestGlobalKeyringStore(t *testing.T) {
 		writeKeyring(t, filepath.Join(globalDir, DefaultKeyringBasename),
 			"ESEC_PRIVATE_KEY="+testPrivateKeyHex+"\n")
 
-		key, err := findPrivateKey(repo, "", "", logger)
+		key, err := findPrivateKeyForData(repo, "", "", nil, "", logger)
 		if err != nil {
 			t.Fatalf("findPrivateKey: %v", err)
 		}
@@ -78,7 +78,7 @@ func TestGlobalKeyringStore(t *testing.T) {
 		writeKeyring(t, filepath.Join(globalDir, "org_repo.keyring"),
 			"ESEC_PRIVATE_KEY_DEV="+testPrivateKeyHex+"\n")
 
-		key, err := findPrivateKey(repo, "dev", "", logger)
+		key, err := findPrivateKeyForData(repo, "dev", "", nil, "", logger)
 		if err != nil {
 			t.Fatalf("findPrivateKey: %v", err)
 		}
@@ -88,7 +88,7 @@ func TestGlobalKeyringStore(t *testing.T) {
 		}
 	})
 
-	t.Run("existing project keyring without key is terminal", func(t *testing.T) {
+	t.Run("project keyring without key falls through to default", func(t *testing.T) {
 		globalDir := t.TempDir()
 		t.Setenv(EsecKeyringDir, globalDir)
 
@@ -98,13 +98,16 @@ func TestGlobalKeyringStore(t *testing.T) {
 		}
 		writeKeyring(t, filepath.Join(globalDir, "org_repo.keyring"),
 			"ESEC_PRIVATE_KEY_PROD="+testPrivateKeyHex+"\n")
-		// A default keyring holding the wanted key must NOT be consulted.
+		// The default keyring holds the wanted key and must be consulted.
 		writeKeyring(t, filepath.Join(globalDir, DefaultKeyringBasename),
 			"ESEC_PRIVATE_KEY_DEV="+testPrivateKeyHex+"\n")
 
-		_, err := findPrivateKey(repo, "dev", "", logger)
-		if err == nil {
-			t.Fatal("expected error for missing key in existing keyring")
+		key, err := findPrivateKeyForData(repo, "dev", "", nil, "", logger)
+		if err != nil {
+			t.Fatalf("findPrivateKey: %v", err)
+		}
+		if key != [32]byte(want) {
+			t.Fatalf("expected fallthrough to default keyring, got: %x", key)
 		}
 	})
 
@@ -113,7 +116,7 @@ func TestGlobalKeyringStore(t *testing.T) {
 		t.Setenv(EsecKeyringDir, globalDir)
 		repo := t.TempDir()
 
-		_, err := findPrivateKey(repo, "dev", "", logger)
+		_, err := findPrivateKeyForData(repo, "dev", "", nil, "", logger)
 		if err == nil {
 			t.Fatal("expected error")
 		}
