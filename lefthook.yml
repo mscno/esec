@@ -16,16 +16,16 @@ pre-commit:
   commands:
     fmt:
       glob: "*.go"
-      run: goimports -w {staged_files}
+      run: mise exec -- goimports -w {staged_files}
       stage_fixed: true
 
     lint:
       glob: "*.go"
-      run: golangci-lint run --fix ./...
+      run: mise exec -- golangci-lint run --fix ./...
       stage_fixed: true
 
 pre-push:
   commands:
     test:
       glob: "*.go"
-      run: go test -race -count=1 ./...
+      run: mise exec -- go test -race -count=1 ./...
