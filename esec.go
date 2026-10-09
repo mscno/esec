@@ -69,6 +69,9 @@ func GlobalKeyringDir() string {
 	if dir := os.Getenv(EsecKeyringDir); dir != "" {
 		return dir
 	}
+	if home := os.Getenv("ESEC_VAULT_HOME"); home != "" {
+		return filepath.Join(home, "keyrings")
+	}
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, "esec", "keyrings")
 	}

@@ -74,6 +74,30 @@ runs `esec-<x>` from your `PATH` (e.g. `esec vault ...` → `esec-vault ...`).
 
 ### Generate Keys
 
+Save a new environment key directly to the global project keyring (only the
+public key is printed):
+
+```sh
+esec keygen --save --env dev --project myorg/myapp
+# Inside a project with .esec-project, --project is optional.
+```
+
+`--save` refuses to replace an existing environment key. Dotted environments
+such as `registry.prod` are supported. The companion CLI can scaffold the
+whole project and handle encrypted, recoverable cloud backups:
+
+```sh
+esec vault init
+esec vault project init myorg/myapp --env dev,staging,prod
+esec vault remote add                 # interactive destination setup
+esec vault backup --verify --push
+esec vault daemon install --start     # background broker and backup service
+```
+
+See [esec-vault](https://github.com/mscno/esec-vault) for remote configuration,
+recovery and unattended operation. `ESEC_VAULT_HOME` is respected by both CLIs
+for the default keyring directory; `ESEC_KEYRING_DIR` takes precedence.
+
 Generate a new public/private keypair:
 
 ```sh
