@@ -1,3 +1,11 @@
+# v0.8.0
+
+- `keygen --save --env <name> [--project org/repo]` stores private keys atomically
+  in the global store and prints only the public key; existing keys are preserved.
+- Respect `ESEC_VAULT_HOME` for the default global keyring directory.
+- Notify the vault daemon after saving keys; share kernel-managed writer locks
+  with esec-vault so process crashes cannot leave stale lock ownership.
+
 # v0.7.0
 
 Monorepo support: component-scoped environments and public-key key lookup.
