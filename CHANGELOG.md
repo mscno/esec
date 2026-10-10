@@ -1,3 +1,11 @@
+# v0.8.1
+
+- Add step-by-step project, environment, and subfolder guides in simplified
+  technical English, including key lookup rules and shared-key layouts.
+- Update the release workflow to GoReleaser action v7.2.1 and provenance
+  attestation action v4.1.0.
+- Fix workflow shell quoting and preserve Markdown spacing in release notes.
+
 # v0.8.0
 
 - `keygen --save --env <name> [--project org/repo]` stores private keys atomically
