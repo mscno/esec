@@ -25,10 +25,10 @@ run = "go test ./..."
 description = "Run tests and open coverage report"
 run = ["go test -coverprofile=coverage.out ./...", "go tool cover -html=coverage.out"]
 
-[tasks.install]
-description = "Install esec binary"
-run = "go install ./cmd/esec"
-
 [tasks.build]
-description = "Build esec binary and print version"
-run = ['go build -ldflags "-X main.version=0.0.6" -o esec ./cmd/esec', "./esec --version"]
+description = "Build esec binary as dev+commit and print version"
+run = """
+commit=$(git rev-parse --short HEAD 2>/dev/null || echo none)
+go build -ldflags "-s -w -X main.version=dev -X main.commit=$commit -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o esec ./cmd/esec
+./esec --version
+"""
