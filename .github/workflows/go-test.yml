@@ -20,7 +20,7 @@ jobs:
                   lfs: true
             - name: Get latest Go version
               id: gover
-              run: echo goversion=$(awk -F':|-' '!/^#/ {print $2}' .github/dockerfile-for-dependabot/Dockerfile) >> "$GITHUB_OUTPUT"
+              run: echo "goversion=$(awk -F':|-' '!/^#/ {print $2}' .github/dockerfile-for-dependabot/Dockerfile)" >> "$GITHUB_OUTPUT"
             - name: Setup go
               uses: actions/setup-go@v5
               with:

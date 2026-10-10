@@ -20,7 +20,7 @@ jobs:
                   fetch-depth: 0
             - name: Get latest Go version
               id: gover
-              run: echo goversion=$(awk -F':|-' '!/^#/ {print $2}' .github/dockerfile-for-dependabot/Dockerfile) >> "$GITHUB_OUTPUT"
+              run: echo "goversion=$(awk -F':|-' '!/^#/ {print $2}' .github/dockerfile-for-dependabot/Dockerfile)" >> "$GITHUB_OUTPUT"
             - name: Set up Go
               uses: actions/setup-go@v5
               with:
@@ -31,9 +31,13 @@ jobs:
               uses: anchore/sbom-action/download-syft@v0
             - name: Extract release changelog
               run: |
-                  version=${GITHUB_REF#refs/tags/v*}
+                  version=${GITHUB_REF#refs/tags/}
                   mkdir -p tmp
-                  sed '/^# 'v$version'/,/^# /!d;//d;/^\s*$/d' CHANGELOG.md > tmp/release_changelog.md
+                  awk -v version="$version" '
+                    $0 == "# " version { found=1; next }
+                    found && /^# / { exit }
+                    found { print }
+                  ' CHANGELOG.md > tmp/release_changelog.md
             - name: Release
               uses: goreleaser/goreleaser-action@1a80836c5c9d9e5755a25cb59ec6f45a3b5f41a8 # v7.2.1
               with:
