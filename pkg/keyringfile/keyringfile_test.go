@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/joho/godotenv"
@@ -97,6 +98,7 @@ func TestLegacyParserFailsLoudly(t *testing.T) {
 }
 
 func TestCodecUsesStore(t *testing.T) {
+	t.Setenv("ESEC_VAULT_HOME", t.TempDir())
 	store := secretstore.NewMemory()
 	c := Codec{Store: store}
 	if _, err := c.Decode("org_repo.keyring", []byte(Magic+"\nAAAA\n")); !errors.Is(err, ErrCacheKey) {
@@ -130,5 +132,30 @@ func TestCodecUsesStore(t *testing.T) {
 	}
 	if _, err := EnsureCacheKey(store); err == nil {
 		t.Fatal("malformed cache key silently replaced")
+	}
+}
+
+func TestEnsureCacheKeyConcurrent(t *testing.T) {
+	t.Setenv("ESEC_VAULT_HOME", t.TempDir())
+	store := secretstore.NewMemory()
+	keys := make(chan [32]byte, 8)
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			k, err := EnsureCacheKey(store)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			keys <- *k
+		})
+	}
+	wg.Wait()
+	close(keys)
+	first := <-keys
+	for k := range keys {
+		if k != first {
+			t.Fatal("concurrent creators produced different cache keys")
+		}
 	}
 }

@@ -25,10 +25,12 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/chacha20poly1305"
 
+	"github.com/mscno/esec/pkg/filelock"
 	"github.com/mscno/esec/pkg/secretstore"
 )
 
@@ -118,7 +120,17 @@ func CacheKey(store secretstore.Store) (*[32]byte, error) {
 }
 
 // EnsureCacheKey loads the cache key, creating and storing one if absent.
+// Creation happens under a cross-process lock and re-reads afterwards, so
+// two first-time writers never seal with different keys.
 func EnsureCacheKey(store secretstore.Store) (*[32]byte, error) {
+	if k, err := CacheKey(store); err == nil {
+		return k, nil
+	}
+	unlock, err := lockCacheKey()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	k, err := CacheKey(store)
 	if err == nil {
 		return k, nil
@@ -134,6 +146,22 @@ func EnsureCacheKey(store secretstore.Store) (*[32]byte, error) {
 		return nil, err
 	}
 	return CacheKey(store)
+}
+
+// lockCacheKey waits up to ten seconds for the cache-key creation lock.
+func lockCacheKey() (func(), error) {
+	dir := filepath.Join(secretstore.Home(), "locks", "cache-key")
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		unlock, err := filelock.Acquire(dir)
+		if err == nil {
+			return unlock, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // Codec decodes and encodes keyring files. A nil Store means the default
