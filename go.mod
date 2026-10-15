@@ -16,5 +16,8 @@ require (
 
 require (
 	github.com/alecthomas/repr v0.5.2 // indirect
+	github.com/danieljoos/wincred v1.2.3 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
+	github.com/zalando/go-keyring v0.2.8 // indirect
 )

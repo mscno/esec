@@ -1,3 +1,19 @@
+# v0.9.0
+
+- Read sealed keyring files (`ESEC-SEALED-KEYRING-V1`), encrypted with
+  XChaCha20-Poly1305 under a per-machine cache key and bound to their file
+  name. Plain keyrings keep working unchanged. A sealed keyring whose cache key
+  is unavailable fails with an error naming the file, never "key not found".
+- Add `pkg/secretstore` with OS keychain, TPM (`systemd-creds`), 0600 file,
+  and Linux kernel keyring backends. The backend is recorded in
+  `secret-store.toml` and shared with esec-vault; `ESEC_SECRET_STORE`
+  overrides it.
+- Add `pkg/keyringfile`, the single implementation of the sealed format.
+- `keygen --save` keeps an existing keyring's form and seals new keyrings when
+  `seal_keyrings = true`.
+- Add the hidden `esec capabilities` command so tools can check for
+  sealed-keyring support before sealing.
+
 # v0.8.1
 
 - Add step-by-step project, environment, and subfolder guides in simplified

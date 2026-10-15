@@ -37,6 +37,8 @@ type cli struct {
 	Get     GetCmd     `cmd:"" help:"Decrypt a secrets file and print a single value"`
 	Run     RunCmd     `cmd:"" help:"Run a command with decrypted secrets as environment variables"`
 
+	Capabilities CapabilitiesCmd `cmd:"" hidden:"" help:"Print supported optional features, one per line"`
+
 	Version kong.VersionFlag `help:"Show version"`
 	Debug   bool             `help:"Enable debug logging" env:"ESEC_DEBUG"`
 	Quiet   bool             `help:"Suppress non-essential output" short:"q"`

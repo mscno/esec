@@ -687,6 +687,43 @@ lookups. It does not override a private key supplied through stdin or an
 environment variable. The repo-local `.esec-keyring` is read only from the key
 directory; esec does not search parents for that file.
 
+### Sealed keyrings
+
+esec v0.9.0 and later also read **sealed** keyring files. esec-vault creates
+them on machines enrolled with an esec vault server, or when you run
+`esec vault keyring seal`. A sealed keyring starts with this line:
+
+```text
+ESEC-SEALED-KEYRING-V1
+```
+
+The rest of the file is the normal keyring text, encrypted with
+XChaCha20-Poly1305 under a per-machine cache key. The file name is bound into
+the encryption, so a sealed file only opens under its own name. The cache key
+lives in the secret store that esec-vault selected and recorded in
+`~/.config/esec/secret-store.toml`:
+
+| Backend | Where the cache key lives | Survives reboot |
+|---|---|---|
+| `os` | macOS Keychain, Windows Credential Manager, Linux Secret Service | Yes |
+| `tpm` | `systemd-creds`, sealed to this machine's TPM | Yes |
+| `file` | `~/.config/esec/secrets/device.toml` (mode 0600) | Yes |
+| `keyctl` | Linux kernel user keyring | No |
+
+`ESEC_SECRET_STORE` overrides the recorded backend. Plain and sealed keyrings
+can sit side by side. If esec finds a sealed keyring but cannot load the cache
+key, it fails with an error that names the file. It never reports the key as
+missing.
+
+Older esec versions cannot read sealed keyrings. They stop with
+`failed to parse keyring file ... unexpected character "-"`. Upgrade esec when
+you see this error. `esec capabilities` prints `sealed-keyring-v1` on versions
+that support sealed keyrings.
+
+When `seal_keyrings = true` is set in `secret-store.toml`, `esec keygen --save`
+creates new keyrings sealed. It always keeps an existing keyring in its
+current form.
+
 ### 3. Key names: environment chain and public key
 
 Within each location, esec tries key names most-specific-first:

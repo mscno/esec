@@ -38,6 +38,7 @@ import (
 	"github.com/mscno/esec/pkg/fileutils"
 	"github.com/mscno/esec/pkg/format"
 	"github.com/mscno/esec/pkg/json"
+	"github.com/mscno/esec/pkg/keyringfile"
 	"github.com/mscno/esec/pkg/projectfile"
 	"github.com/mscno/esec/pkg/toml"
 	"github.com/mscno/esec/pkg/yaml"
@@ -691,9 +692,9 @@ func findPrivateKeyForData(keyPath, envSuffix, userSuppliedPrivateKey string, da
 			return privKey, fmt.Errorf("failed to read keyring file at %q: %w", keyringPath, err)
 		}
 		filesSeen++
-		privateKeyEnvs, err := godotenv.Parse(bytes.NewBuffer(privateKeyFile))
+		privateKeyEnvs, err := parseKeyringFile(keyringPath, privateKeyFile)
 		if err != nil {
-			return privKey, fmt.Errorf("failed to parse keyring file %q: %w", keyringPath, err)
+			return privKey, err
 		}
 		if key, matchedName, ok := ResolveKey(privateKeyEnvs, suffixes, getPubkey()); ok {
 			return parseResolvedKey(key, matchedName, getPubkey(), logger)
@@ -810,9 +811,9 @@ func sniffFromKeyring(logger *slog.Logger, keyPath string, envName string) (stri
 	}
 
 	// Parse the keyring file as environment variables.
-	privateKeyEnvs, err := godotenv.Parse(bytes.NewBuffer(privateKeyFile))
+	privateKeyEnvs, err := parseKeyringFile(keyringPath, privateKeyFile)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse keyring file %q: %w", keyringPath, err)
+		return "", err
 	}
 
 	// Check if both ACTIVE_KEY and ACTIVE_ENVIRONMENT are set (conflict)
@@ -962,6 +963,24 @@ func validateKeyPath(keyPath string) error {
 		return fmt.Errorf("invalid keyPath after resolution: %s", keyPath)
 	}
 	return nil
+}
+
+// parseKeyringFile parses a plain or sealed keyring. A sealed keyring whose
+// cache key is unavailable is an error, never an empty keyring: reporting
+// "key not found" would send the user looking in the wrong place.
+func parseKeyringFile(path string, data []byte) (map[string]string, error) {
+	if keyringfile.IsSealed(data) {
+		entries, err := keyringfile.Parse(path, data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open sealed keyring file %q: %w", path, err)
+		}
+		return entries, nil
+	}
+	entries, err := godotenv.Parse(bytes.NewBuffer(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse keyring file %q: %w", path, err)
+	}
+	return entries, nil
 }
 
 // checkKeyringPermissions warns if the keyring file has insecure permissions

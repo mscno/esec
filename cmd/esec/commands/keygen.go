@@ -13,6 +13,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/mscno/esec"
 	"github.com/mscno/esec/pkg/filelock"
+	"github.com/mscno/esec/pkg/keyringfile"
 	"github.com/mscno/esec/pkg/projectfile"
 )
 
@@ -106,7 +107,7 @@ func (c *KeygenCmd) save(pub, priv string) error {
 	}
 	defer unlock()
 	p := filepath.Join(dir, projectfile.KeyringName(project))
-	entries, err := readSavedKeyring(p, project)
+	entries, sealed, err := readSavedKeyring(p, project)
 	if err != nil {
 		return err
 	}
@@ -118,36 +119,47 @@ func (c *KeygenCmd) save(pub, priv string) error {
 		entries[name] = priv
 	}
 	entries[esec.EsecPrivateKey+"_"+strings.ToUpper(pub)] = priv
-	return writeSavedKeyring(dir, p, project, entries)
+	return writeSavedKeyring(dir, p, project, entries, sealed)
 }
 
-func readSavedKeyring(p, project string) (map[string]string, error) {
+func readSavedKeyring(p, project string) (map[string]string, bool, error) {
 	entries := map[string]string{}
+	sealed := keyringfile.SealNewByDefault()
 	if info, err := os.Lstat(p); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
-			return nil, fmt.Errorf("refusing keyring symlink")
+			return nil, false, fmt.Errorf("refusing keyring symlink")
 		}
 		data, err := os.ReadFile(p) //nolint:gosec // constructed from a validated project id inside configured keyring dir
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		for _, line := range strings.Split(string(data), "\n") {
+		// An existing file keeps its form: sealed stays sealed, plain stays plain.
+		sealed = keyringfile.IsSealed(data)
+		plain, err := keyringfile.Decode(p, data)
+		if err != nil {
+			return nil, false, err
+		}
+		for _, line := range strings.Split(string(plain), "\n") {
 			if owner, ok := strings.CutPrefix(line, "# ESEC_PROJECT="); ok && owner != project {
-				return nil, fmt.Errorf("keyring belongs to a different project")
+				return nil, false, fmt.Errorf("keyring belongs to a different project")
 			}
 		}
-		entries, err = godotenv.Unmarshal(string(data))
+		entries, err = godotenv.Unmarshal(string(plain))
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
+		return nil, false, err
 	}
-	return entries, nil
+	return entries, sealed, nil
 }
 
-func writeSavedKeyring(dir, p, project string, entries map[string]string) error {
+func writeSavedKeyring(dir, p, project string, entries map[string]string, sealed bool) error {
 	data, err := godotenv.Marshal(entries)
+	if err != nil {
+		return err
+	}
+	out, err := keyringfile.Codec{}.Encode(p, []byte(fmt.Sprintf("# ESEC_PROJECT=%s\n%s\n", project, data)), sealed)
 	if err != nil {
 		return err
 	}
@@ -157,7 +169,10 @@ func writeSavedKeyring(dir, p, project string, entries map[string]string) error 
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
-	if _, err := fmt.Fprintf(f, "# ESEC_PROJECT=%s\n%s\n", project, data); err != nil {
+	if err := f.Chmod(0600); err != nil {
+		return err
+	}
+	if _, err := f.Write(out); err != nil {
 		return err
 	}
 	if err := f.Sync(); err != nil {
