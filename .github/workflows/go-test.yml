@@ -15,14 +15,14 @@ jobs:
 
         steps:
             - name: Check out repository code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v7
               with:
                   lfs: true
             - name: Get latest Go version
               id: gover
               run: echo "goversion=$(awk -F':|-' '!/^#/ {print $2}' .github/dockerfile-for-dependabot/Dockerfile)" >> "$GITHUB_OUTPUT"
             - name: Setup go
-              uses: actions/setup-go@v5
+              uses: actions/setup-go@v7
               with:
                   cache: true
                   go-version: "${{ steps.gover.outputs.goversion }}"
@@ -41,21 +41,31 @@ jobs:
 #                go: ["1.23"]
 #        steps:
 #            - name: Checkout code
-#              uses: actions/checkout@v4
+#              uses: actions/checkout@v7
 #            - name: Setup go
-#              uses: actions/setup-go@v5
+#              uses: actions/setup-go@v7
 #              with:
 #                  go-version: "${{ matrix.go }}"
 #            - name: Test
 #              run: go test -race ./...
 
-#    lint:
-#        name: Lint
-#        runs-on: ubuntu-latest
-#        steps:
-#            - name: Checkout code
-#              uses: actions/checkout@v4
-#            - name: Init Hermit
-#              run: ./bin/hermit env -r >> "$GITHUB_ENV"
-#            - name: golangci-lint
-#              run: golangci-lint run
+    lint:
+        name: "golangci-lint"
+        permissions:
+            contents: read
+        runs-on: "ubuntu-latest"
+        steps:
+            - name: Check out repository code
+              uses: actions/checkout@v7
+            - name: Get latest Go version
+              id: gover
+              run: echo "goversion=$(awk -F':|-' '!/^#/ {print $2}' .github/dockerfile-for-dependabot/Dockerfile)" >> "$GITHUB_OUTPUT"
+            - name: Setup go
+              uses: actions/setup-go@v7
+              with:
+                  go-version: "${{ steps.gover.outputs.goversion }}"
+            - name: golangci-lint
+              uses: golangci/golangci-lint-action@v9
+              with:
+                  # Keep in step with mise.toml.
+                  version: v2.15.0

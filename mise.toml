@@ -1,6 +1,6 @@
 [tools]
 go = "1.27"
-golangci-lint = "latest"
+golangci-lint = "2.15.0" # keep in step with .github/workflows/go-test.yml
 lefthook = "latest"
 "go:golang.org/x/tools/cmd/goimports" = "latest"
 

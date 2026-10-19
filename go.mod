@@ -8,16 +8,16 @@ require (
 	github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad
 	github.com/joho/godotenv v1.5.1
 	github.com/pelletier/go-toml/v2 v2.4.3
-	golang.org/x/crypto v0.57.0
-	golang.org/x/sys v0.48.0
-	golang.org/x/term v0.46.0
+	github.com/zalando/go-keyring v0.2.8
+	golang.org/x/crypto v0.58.0
+	golang.org/x/sys v0.49.0
+	golang.org/x/term v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	github.com/alecthomas/repr v0.5.2 // indirect
+	github.com/alecthomas/repr v0.5.4 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
-	github.com/godbus/dbus/v5 v5.2.2 // indirect
+	github.com/godbus/dbus/v5 v5.2.4 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
-	github.com/zalando/go-keyring v0.2.8 // indirect
 )
