@@ -1,3 +1,9 @@
+# v0.10.1
+
+- Fix the release workflow: `sigstore/cosign-installer` has no `v4` tag, so
+  v0.10.0 was tagged but built no release binaries. It is now pinned to
+  v4.1.2 by commit. The code is unchanged from v0.10.0.
+
 # v0.10.0
 
 - Add `esec export`: prints the decrypted variables of a `.env` or `.ejson`
