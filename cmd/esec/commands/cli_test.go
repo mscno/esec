@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/alecthomas/assert/v2"
@@ -385,36 +386,33 @@ func TestProcessFileOrEnv(t *testing.T) {
 	}
 }
 
-// Helper function to capture CLI output
+// captureOutput runs f with stdout and stderr captured. It returns the error
+// text as the second value if f fails.
 func captureOutput(f func() error) (string, string) {
-	// Save original stdout and stderr
-	oldOut := os.Stdout
-	oldErr := os.Stderr
-
-	// Create new pipes to capture output
+	oldOut, oldErr := os.Stdout, os.Stderr
 	rOut, wOut, _ := os.Pipe()
 	rErr, wErr, _ := os.Pipe()
+	os.Stdout, os.Stderr = wOut, wErr
 
-	os.Stdout = wOut
-	os.Stderr = wErr
+	// Read while f runs, so output larger than the pipe buffer cannot block it.
+	var outBuf, errBuf bytes.Buffer
+	var wg sync.WaitGroup
+	wg.Go(func() { _, _ = io.Copy(&outBuf, rOut) })
+	wg.Go(func() { _, _ = io.Copy(&errBuf, rErr) })
 
-	// Run function while capturing output
 	err := f()
+
+	// Restore on every path: a test that left stdout pointing at a closed pipe
+	// would kill the test binary on its next write.
+	os.Stdout, os.Stderr = oldOut, oldErr
+	_ = wOut.Close()
+	_ = wErr.Close()
+	wg.Wait()
+	_ = rOut.Close()
+	_ = rErr.Close()
+
 	if err != nil {
 		return "", err.Error()
 	}
-	// Close writers
-	wOut.Close()
-	wErr.Close()
-
-	// Read output from pipes
-	var outBuf, errBuf bytes.Buffer
-	_, _ = io.Copy(&outBuf, rOut)
-	_, _ = io.Copy(&errBuf, rErr)
-
-	// Restore original stdout and stderr
-	os.Stdout = oldOut
-	os.Stderr = oldErr
-
 	return outBuf.String(), errBuf.String()
 }
