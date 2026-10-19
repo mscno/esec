@@ -86,19 +86,24 @@ func TestExportCmdRejectsOtherFormats(t *testing.T) {
 
 func TestRunLeavesOutPublicKey(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("uses env(1)")
+		t.Skip("uses printenv(1)")
 	}
 	pub, priv, err := esec.GenerateKeypair()
 	assert.NoError(t, err)
 	t.Setenv("ESEC_PRIVATE_KEY_TEST", priv)
 	path := writeEncryptedEnv(t, t.TempDir(), "ESEC_PUBLIC_KEY="+pub+"\nPLAIN=abc\n")
+	ctx := &cliCtx{Logger: slog.Default()}
 
+	// printenv, not env: the whole environment can overflow the capture pipe.
 	out, errString := captureOutput(func() error {
-		return (&RunCmd{File: path, Format: ".env", Command: []string{"env"}}).Run(&cliCtx{Logger: slog.Default()})
+		return (&RunCmd{File: path, Format: ".env", Command: []string{"printenv", "PLAIN"}}).Run(ctx)
 	})
 	assert.Equal(t, errString, "")
-	assert.Contains(t, out, "\nPLAIN=abc\n")
-	assert.NotContains(t, out, "ESEC_PUBLIC_KEY")
+	assert.Equal(t, out, "abc\n")
+
+	// printenv exits 1 when the variable is not set.
+	err = (&RunCmd{File: path, Format: ".env", Command: []string{"printenv", "ESEC_PUBLIC_KEY"}}).Run(ctx)
+	assert.Equal(t, error(&ExitError{Code: 1}), err)
 }
 
 func TestDotenvValue(t *testing.T) {

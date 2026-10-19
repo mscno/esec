@@ -20,17 +20,6 @@ func (keyctlStore) HardwareBound() bool { return false }
 
 func desc(name string) string { return Service + ":" + name }
 
-func (keyctlStore) find(name string) (int, error) {
-	id, err := unix.KeyctlSearch(unix.KEY_SPEC_USER_KEYRING, "user", desc(name), 0)
-	if err != nil {
-		if errors.Is(err, unix.ENOKEY) {
-			return 0, ErrNotFound
-		}
-		return 0, fmt.Errorf("keyctl search: %w", err)
-	}
-	return id, nil
-}
-
 func (k keyctlStore) Get(name string) (string, error) {
 	if err := ValidName(name); err != nil {
 		return "", err
@@ -82,4 +71,15 @@ func (k keyctlStore) Delete(name string) error {
 		return fmt.Errorf("keyctl unlink: %w", err)
 	}
 	return nil
+}
+
+func (keyctlStore) find(name string) (int, error) {
+	id, err := unix.KeyctlSearch(unix.KEY_SPEC_USER_KEYRING, "user", desc(name), 0)
+	if err != nil {
+		if errors.Is(err, unix.ENOKEY) {
+			return 0, ErrNotFound
+		}
+		return 0, fmt.Errorf("keyctl search: %w", err)
+	}
+	return id, nil
 }
