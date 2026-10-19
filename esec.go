@@ -893,10 +893,38 @@ func sniffFromKeyring(logger *slog.Logger, keyPath string, envName string) (stri
 	return "", fmt.Errorf("no environment keys found in keyring")
 }
 
-// Helper functions from before
+// EnvVars converts decrypted .env or .ejson data into environment variables
+// for a process. It leaves out the public key (ESEC_PUBLIC_KEY or
+// _ESEC_PUBLIC_KEY) and rejects names that are not valid identifiers. For
+// .ejson, only top-level string values are included.
+func EnvVars(data []byte, fileFormat FileFormat) (map[string]string, error) {
+	var (
+		vars map[string]string
+		err  error
+	)
+	switch fileFormat {
+	case FileFormatEnv:
+		vars, err = DotEnvToEnv(data)
+	case FileFormatEjson:
+		vars, err = EjsonToEnv(data)
+	default:
+		return nil, fmt.Errorf("unsupported format for environment variables: %s", fileFormat)
+	}
+	if err != nil {
+		return nil, err
+	}
+	delete(vars, format.PublicKeyField)
+	delete(vars, format.UnderscoredPublicKeyField)
+	for name := range vars {
+		if !validIdentifierPattern.MatchString(name) {
+			return nil, fmt.Errorf("invalid identifier as key in environment: %q", name)
+		}
+	}
+	return vars, nil
+}
 
 // EjsonToEnv parses decrypted EJSON data and returns a map of environment variables.
-// It extracts all top-level string values, excluding the ESEC_PUBLIC_KEY field.
+// It extracts all top-level string values, excluding the public key field.
 // Non-string values (numbers, booleans, objects, arrays) are skipped.
 func EjsonToEnv(payload []byte) (map[string]string, error) {
 	var data map[string]interface{}
@@ -909,7 +937,8 @@ func EjsonToEnv(payload []byte) (map[string]string, error) {
 }
 
 // DotEnvToEnv parses decrypted dotenv data and returns a map of environment variables.
-// It uses the standard dotenv parsing rules.
+// It uses the standard dotenv parsing rules and returns every entry, including
+// the public key; use EnvVars for the values to pass to a process.
 func DotEnvToEnv(payload []byte) (map[string]string, error) {
 	return godotenv.Parse(bytes.NewBuffer(payload))
 }
@@ -919,7 +948,7 @@ var validIdentifierPattern = regexp.MustCompile(`\A[a-zA-Z_][a-zA-Z0-9_]*\z`)
 func extractEnv(envMap map[string]interface{}) (map[string]string, error) {
 	envSecrets := make(map[string]string, len(envMap))
 	for key, rawValue := range envMap {
-		if key == EsecPublicKey {
+		if key == format.PublicKeyField || key == format.UnderscoredPublicKeyField {
 			continue
 		}
 		// Reject keys that would be invalid environment variable identifiers

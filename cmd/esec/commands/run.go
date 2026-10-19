@@ -2,16 +2,12 @@ package commands
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"os/signal"
 	"runtime"
 	"strings"
 	"syscall"
-
-	"github.com/mscno/esec"
-	"github.com/mscno/esec/pkg/fileutils"
 )
 
 // RunCmd decrypts a secrets file and runs a command with the environment variables.
@@ -24,8 +20,6 @@ type RunCmd struct {
 }
 
 // Run executes the run command, decrypting secrets and running the specified command.
-//
-//nolint:gocyclo // Complex but necessary for signal handling and process management
 func (c *RunCmd) Run(ctx *cliCtx) error {
 	// Validate that a command is specified
 	if len(c.Command) == 0 {
@@ -40,71 +34,9 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	// Use structured logging for debug information
 	ctx.Logger.Debug("preparing to run command", "command", strings.Join(c.Command, " "))
 
-	// Read the private key from stdin if requested
-	var key string
-	if c.KeyFromStdin {
-		data, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return fmt.Errorf("reading key from stdin: %w", err)
-		}
-		key = strings.TrimSpace(string(data))
-		ctx.Logger.Debug("read private key from stdin")
-	}
-
-	// Parse the file format (used only to resolve an environment name to a file)
-	format, err := fileutils.ParseFormat(c.Format)
+	envVars, fileName, err := decryptEnvVars(ctx, c.File, c.Format, c.KeyDir, c.KeyFromStdin)
 	if err != nil {
-		return fmt.Errorf("invalid format %q: %w", c.Format, err)
-	}
-
-	// Process the file or environment name to get the actual filename
-	fileName, err := processFileOrEnv(c.File, format)
-	if err != nil {
-		return fmt.Errorf("invalid file or environment %q: %w", c.File, err)
-	}
-
-	ctx.Logger.Debug("using secrets file", "file", fileName)
-
-	// Check if the file exists
-	if _, err := os.Stat(fileName); os.IsNotExist(err) {
-		return fmt.Errorf("secrets file %s does not exist", fileName)
-	}
-
-	// The actual format is determined by the file on disk
-	fileFormat, err := fileutils.ParseFormat(fileName)
-	if err != nil {
-		return fmt.Errorf("determining format of %s: %w", fileName, err)
-	}
-
-	// Decrypt the file
-	ctx.Logger.Debug("decrypting file", "file", fileName)
-
-	data, err := esec.DecryptFile(fileName, c.KeyDir, key)
-	if err != nil {
-		return fmt.Errorf("decrypting file %s: %w", fileName, err)
-	}
-
-	ctx.Logger.Debug("successfully decrypted secrets file")
-
-	// Convert decrypted data to environment variables
-	var envVars map[string]string
-	switch fileFormat {
-	case fileutils.Env:
-		envVars, err = esec.DotEnvToEnv(data)
-		if err != nil {
-			return fmt.Errorf("parsing decrypted .env: %w", err)
-		}
-		// Sanitize variables to prevent injection (after error check)
-		envVars = sanitizeEnvVars(envVars)
-	case fileutils.Ejson:
-		envVars, err = esec.EjsonToEnv(data)
-		if err != nil {
-			return fmt.Errorf("parsing decrypted EJSON: %w", err)
-		}
-		// Sanitize variables to prevent injection (after error check)
-		envVars = sanitizeEnvVars(envVars)
-	default:
-		return fmt.Errorf("unsupported format for run command: %s", fileFormat)
+		return err
 	}
 
 	// Validate we have environment variables
@@ -214,14 +146,4 @@ func validateCommand(command []string) error {
 	}
 
 	return nil
-}
-
-// sanitizeEnvVars removes potentially dangerous environment variables
-func sanitizeEnvVars(vars map[string]string) map[string]string {
-	for k := range vars {
-		if strings.Contains(k, "=") || strings.Contains(k, ";") || strings.Contains(k, "\n") {
-			delete(vars, k)
-		}
-	}
-	return vars
 }

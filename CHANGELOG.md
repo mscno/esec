@@ -1,3 +1,23 @@
+# v0.10.0
+
+- Add `esec export`: prints the decrypted variables of a `.env` or `.ejson`
+  file as sorted `NAME=value` lines, without the public key, for tools such as
+  `fly secrets import` and `gh secret set -f`. Each value is written in the
+  simplest form that dotenv parsers read back unchanged, and checked by
+  parsing it back; if a value cannot be written, nothing is printed.
+- `esec run` no longer passes the public key to the child process.
+  `ESEC_PUBLIC_KEY` leaked from `.env` files and `_ESEC_PUBLIC_KEY` from
+  `.ejson` files.
+- `esec run` now rejects `.env` names that are not valid identifiers, as it
+  already did for `.ejson`.
+- Add `esec.EnvVars`, which `run` and `export` share. `EjsonToEnv` now also
+  leaves out `_ESEC_PUBLIC_KEY`.
+- Update dependencies (`golang.org/x/crypto` v0.58.0, `x/sys` v0.49.0,
+  `x/term` v0.47.0) and GitHub Actions (checkout v7, setup-go v7,
+  cosign-installer v4, goreleaser-action v7.3.0, attest-build-provenance
+  v4.2.2).
+- CI now runs golangci-lint v2.15.0, pinned in `mise.toml` as well.
+
 # v0.9.0
 
 - Read sealed keyring files (`ESEC-SEALED-KEYRING-V1`), encrypted with

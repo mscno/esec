@@ -34,6 +34,7 @@ type cli struct {
 	Keygen  KeygenCmd  `cmd:"" help:"Generate a new keypair"`
 	Encrypt EncryptCmd `cmd:"" help:"Encrypt a secrets file in place"`
 	Decrypt DecryptCmd `cmd:"" help:"Decrypt a secrets file to stdout"`
+	Export  ExportCmd  `cmd:"" help:"Print decrypted secrets as NAME=value lines, without the public key"`
 	Get     GetCmd     `cmd:"" help:"Decrypt a secrets file and print a single value"`
 	Run     RunCmd     `cmd:"" help:"Run a command with decrypted secrets as environment variables"`
 

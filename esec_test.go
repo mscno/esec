@@ -674,3 +674,22 @@ func splitEnvVar(envVar string) []string {
 func containsPrefix(errMsg, prefix string) bool {
 	return len(errMsg) >= len(prefix) && errMsg[:len(prefix)] == prefix
 }
+
+func TestEnvVarsLeavesOutPublicKey(t *testing.T) {
+	vars, err := EnvVars([]byte("ESEC_PUBLIC_KEY=abc\n_ESEC_PUBLIC_KEY=abc\nA=1\n"), FileFormatEnv)
+	assert.NoError(t, err)
+	assert.Equal(t, map[string]string{"A": "1"}, vars)
+
+	vars, err = EnvVars([]byte(`{"_ESEC_PUBLIC_KEY":"abc","ESEC_PUBLIC_KEY":"abc","A":"1","n":2,"obj":{"x":"y"}}`), FileFormatEjson)
+	assert.NoError(t, err)
+	assert.Equal(t, map[string]string{"A": "1"}, vars)
+}
+
+func TestEnvVarsRejectsInvalidNames(t *testing.T) {
+	_, err := EnvVars([]byte("A.B=1\n"), FileFormatEnv)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), `invalid identifier as key in environment: "A.B"`)
+
+	_, err = EnvVars([]byte("a: 1\n"), FileFormatEyaml)
+	assert.Error(t, err)
+}

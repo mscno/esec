@@ -172,6 +172,13 @@ To print all decrypted values:
 esec decrypt dev -f env
 ```
 
+To pass the values to another tool, use `esec export`. It prints only
+`NAME=value` lines, without the `ESEC_PUBLIC_KEY` line:
+
+```sh
+esec export production -f env | fly secrets import
+```
+
 `esec run` reads private keys directly. For daemon-controlled access, use
 `esec vault run` with an unlocked broker and an allow rule for the project.
 See the [broker guide](https://github.com/mscno/esec-vault#run-applications-through-the-broker).
@@ -459,6 +466,7 @@ Commands:
   encrypt    Encrypt a secrets file in place
   decrypt    Decrypt a secrets file to stdout
   get        Decrypt a secrets file and print a single value
+  export     Print decrypted secrets as NAME=value lines, without the public key
   run        Run a command with decrypted secrets as environment variables
 
 Global Flags:
@@ -593,6 +601,47 @@ echo "your-private-key" | esec get dev SECRET -k
 | `--key-from-stdin` | `-k` | `false` | | Read private key from stdin |
 | `--key-dir` | `-d` | `.` | `ESEC_KEY_DIR` | Directory containing `.esec-keyring` file |
 
+### Export Secrets
+
+Print the decrypted values of a `.env` or `.ejson` file as dotenv lines, for
+tools that import them:
+
+```sh
+# Import into Fly.io
+esec export production -f .env | fly secrets import
+
+# Set GitHub Actions secrets
+esec export production -f .env | gh secret set -f -
+
+# Write a plaintext file for local tools (do not commit it)
+esec export dev > .env.local
+```
+
+`decrypt` prints the whole file, including the `ESEC_PUBLIC_KEY` line, so the
+output can be edited and encrypted again. `export` prints only the
+variables, the same set that `run` passes to a process:
+
+- The public key (`ESEC_PUBLIC_KEY` or `_ESEC_PUBLIC_KEY`) is left out.
+- Names must be valid identifiers (`[A-Za-z_][A-Za-z0-9_]*`).
+- For `.ejson`, only top-level string values are included.
+- Lines are sorted by name.
+
+Values are written in the simplest form that dotenv parsers (esec,
+godotenv, `gh secret set -f`) read back unchanged: bare (`A=abc`), in single
+quotes when they have spaces or `$` (`A='a $b'`), or in double quotes with
+`\\`, `\"`, `\n`, `\r` and `\$` escaped otherwise. `fly secrets import` does not
+process escapes, so it misreads values with a line break or a backslash, and
+values with a `'` or `#` that also contain `"` or `$`; set those with
+`fly secrets set` instead. If a value
+cannot be written as a dotenv line at all, `export` fails and prints nothing.
+
+**Flags:**
+| Flag | Short | Default | Env | Description |
+|------|-------|---------|-----|-------------|
+| `--format` | `-f` | `.ejson` | `ESEC_FORMAT` | File format (`ejson`, `env`) |
+| `--key-from-stdin` | `-k` | `false` | | Read private key from stdin |
+| `--key-dir` | `-d` | `.` | `ESEC_KEY_DIR` | Directory containing `.esec-keyring` file |
+
 ### Run Commands with Secrets
 
 Decrypt secrets and run a command with them as environment variables:
@@ -620,6 +669,9 @@ echo "your-private-key" | esec run dev -k -- myapp serve
 | `--key-dir` | `-d` | `.` | `ESEC_KEY_DIR` | Directory containing `.esec-keyring` file |
 
 The child process inherits esec's stdio, and esec exits with the child's exit code (or `130` when interrupted with `Ctrl-C`). Works with and without a TTY (e.g. in CI pipelines).
+
+The child gets the same variables that `esec export` prints: no public key, and
+only valid identifiers (`run` fails on any other name).
 
 ### Debug Mode
 
