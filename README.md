@@ -477,14 +477,24 @@ Global Flags:
 ```
 
 Unknown subcommands are dispatched git-style: if `esec <x>` is not a builtin command, esec
-runs `esec-<x>` from your `PATH` (e.g. `esec vault ...` → `esec-vault ...`).
+runs `esec-<x>` from your `PATH` (e.g. `esec vault ...` → `esec-vault ...`). `esec --help`
+lists them, and says how to install esec-vault when it is missing.
+
+`esec` alone, `esec --help` and `esec help <command>` show help; each command's help has
+examples.
 
 **Conventions:**
 
 - Data is written to **stdout**, status messages and logs to **stderr**
 - `--format` accepts `ejson`, `env`, `eyaml`, `etoml` (a leading dot is optional)
 - `--format` and `--key-dir` can also be set via the `ESEC_FORMAT` and `ESEC_KEY_DIR` environment variables
-- Exit codes: `0` success, `1` error. `run` propagates the child process exit code and exits `130` on `SIGINT`
+- Exit codes: `0` success, `1` error, `80` bad usage (unknown command or flag). `run` propagates the child process exit code and exits `130` on `SIGINT`
+- Errors say what to do next: a missing file names the secrets files that do exist (and `--format env` when the
+  environment has a `.env` file instead), and a missing private key lists the ways to provide it
+
+**Scripts and agents:** nothing asks questions, so every command runs unattended. Read values with
+`esec get FILE KEY` or `esec export FILE`, never by parsing `decrypt` output, and keep private keys
+in the environment or a keyring rather than on the command line.
 
 ### Generate Keys
 

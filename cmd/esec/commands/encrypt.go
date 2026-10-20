@@ -44,7 +44,7 @@ func (c *EncryptCmd) Run(ctx *cliCtx) error {
 	if err != nil {
 		if os.IsNotExist(err) {
 			ctx.Logger.Debug("file does not exist", "path", filePath)
-			return fmt.Errorf("file does not exist: %s", filePath)
+			return missingFile(filePath)
 		}
 		ctx.Logger.Debug("error checking file", "path", filePath, "error", err)
 		return fmt.Errorf("cannot access file %s: %w", filePath, err)

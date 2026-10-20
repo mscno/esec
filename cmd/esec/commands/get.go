@@ -64,7 +64,7 @@ func (c *GetCmd) Run(ctx *cliCtx) error {
 	if err != nil {
 		if os.IsNotExist(err) {
 			ctx.Logger.Debug("file does not exist", "path", fileName)
-			return fmt.Errorf("file does not exist: %s", fileName)
+			return missingFile(fileName)
 		}
 		ctx.Logger.Debug("error checking file", "path", fileName, "error", err)
 		return fmt.Errorf("cannot access file %s: %w", fileName, err)

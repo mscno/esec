@@ -54,12 +54,20 @@ func Execute(version string) {
 	}
 
 	var cli cli
-	ctx := kong.Parse(&cli,
+	parser := kong.Must(&cli,
 		kong.ShortUsageOnError(),
 		kong.Name("esec"),
-		kong.Description("esec encrypts and decrypts secrets files using public-key cryptography"),
+		kong.Description(description),
+		kong.Help(printHelp),
 		kong.Vars{"version": version},
 	)
+	addDetails(parser.Model)
+	ctx, err := parser.Parse(helpArgs(os.Args[1:]))
+	if err != nil {
+		// Usage goes to stderr with the error, so stdout stays clean.
+		parser.Stdout = os.Stderr
+		parser.FatalIfErrorf(err)
+	}
 
 	// Setup logger with appropriate level based on debug flag
 	logLevel := slog.LevelInfo
@@ -75,7 +83,7 @@ func Execute(version string) {
 	// Make the library package log through the same handler.
 	slog.SetDefault(logger)
 
-	err := ctx.Run(&cliCtx{Logger: logger, Quiet: cli.Quiet})
+	err = ctx.Run(&cliCtx{Logger: logger, Quiet: cli.Quiet})
 
 	// Commands may request a specific process exit code (e.g. `run` forwarding
 	// the exit code of its child process).
@@ -83,7 +91,13 @@ func Execute(version string) {
 	if errors.As(err, &exitErr) {
 		os.Exit(exitErr.Code)
 	}
-	ctx.FatalIfErrorf(err)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "esec: error:", err)
+		for _, h := range hints(err) {
+			fmt.Fprintln(os.Stderr, "hint:", h)
+		}
+		os.Exit(1)
+	}
 }
 
 // writeData writes data to w, ensuring the output ends with exactly one

@@ -23,7 +23,7 @@ type RunCmd struct {
 func (c *RunCmd) Run(ctx *cliCtx) error {
 	// Validate that a command is specified
 	if len(c.Command) == 0 {
-		return fmt.Errorf("no command specified to run")
+		return fmt.Errorf("no command to run: esec run <file or env> -- <command> [args...], for example: esec run prod -- ./server")
 	}
 
 	// Validate the command is safe to execute

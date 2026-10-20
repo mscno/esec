@@ -36,7 +36,7 @@ func decryptEnvVars(ctx *cliCtx, file, formatFlag, keyDir string, keyFromStdin b
 	ctx.Logger.Debug("using secrets file", "file", fileName)
 
 	if _, err := os.Stat(fileName); os.IsNotExist(err) {
-		return nil, "", fmt.Errorf("secrets file %s does not exist", fileName)
+		return nil, "", missingFile(fileName)
 	}
 
 	// The actual format is determined by the file on disk.

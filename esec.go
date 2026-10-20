@@ -701,11 +701,33 @@ func findPrivateKeyForData(keyPath, envSuffix, userSuppliedPrivateKey string, da
 		}
 	}
 
-	if filesSeen == 0 {
-		return privKey, fmt.Errorf("private key %q not found in environment variables, and keyring file does not exist at %q", displayName, candidates[0])
-	}
-	return privKey, fmt.Errorf("private key %q not found in environment variables or keyring files (tried %s)", displayName, strings.Join(candidates, ", "))
+	return privKey, &KeyNotFoundError{Name: displayName, Tried: candidates, NoFiles: filesSeen == 0}
 }
+
+// ErrKeyNotFound matches a KeyNotFoundError with errors.Is.
+var ErrKeyNotFound = errors.New("private key not found")
+
+// KeyNotFoundError reports that no private key for a file was found in the
+// environment or in any keyring file.
+type KeyNotFoundError struct {
+	// Name is the environment variable that would have held the key, such
+	// as ESEC_PRIVATE_KEY_DEV.
+	Name string
+	// Tried lists the keyring files looked in, in order.
+	Tried []string
+	// NoFiles is set when none of them exists.
+	NoFiles bool
+}
+
+func (e *KeyNotFoundError) Error() string {
+	if e.NoFiles && len(e.Tried) > 0 {
+		return fmt.Sprintf("private key %q not found in environment variables, and keyring file does not exist at %q", e.Name, e.Tried[0])
+	}
+	return fmt.Sprintf("private key %q not found in environment variables or keyring files (tried %s)", e.Name, strings.Join(e.Tried, ", "))
+}
+
+// Is reports whether target is ErrKeyNotFound.
+func (e *KeyNotFoundError) Is(target error) bool { return target == ErrKeyNotFound }
 
 // envMap returns the process environment as a map.
 func envMap() map[string]string {

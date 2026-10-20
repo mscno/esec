@@ -1,3 +1,23 @@
+# v0.11.0
+
+- Help that agents and people can find their way with. `esec` alone and
+  `esec help <command>` show help; the overview explains files, keys and
+  environment names with examples, and each command's help has examples.
+- `esec --help` lists commands that `esec-<name>` programs on `PATH` add,
+  such as `esec vault`, and says how to install esec-vault when it is
+  missing. `esec vault` without esec-vault now says that, instead of
+  "unexpected argument vault".
+- A missing secrets file names the secrets files that do exist, and points
+  to `--format env` when the environment has a `.env` file rather than
+  `.ejson`.
+- A missing private key lists the ways to provide it. The library returns it
+  as `*esec.KeyNotFoundError`, which matches `esec.ErrKeyNotFound`; the
+  message is unchanged.
+- `esec run` without a command shows how to call it.
+- Usage errors print the usage on stderr, keeping stdout clean.
+- Fix: `esec export` and `esec capabilities` could be taken over by an
+  `esec-export` or `esec-capabilities` program on `PATH`.
+
 # v0.10.1
 
 - Fix the release workflow: `sigstore/cosign-installer` has no `v4` tag, so
