@@ -206,6 +206,22 @@ If your repository ignores all `.env.*` files, add an exception for the specific
 encrypted files you want to track. A Git commit stores the encrypted data.
 A vault backup stores the keys needed to decrypt that data.
 
+#### Sealed keys: CI and deploys with esec alone
+
+With esec vault, each environment's key is also sealed in the repository, in
+`.esec/<env>.age`: a standard age file encrypted to the environment's readers.
+A machine that is a reader (`esec vault ci add`) gives esec its age identity
+and needs nothing else:
+
+```sh
+ESEC_AGE_IDENTITY=AGE-SECRET-KEY-1… esec run prod -- ./server
+ESEC_AGE_IDENTITY_FILE=/run/secrets/esec-identity esec decrypt prod
+```
+
+When no keyring holds the key, esec opens `.esec/<env>.age` beside the
+project's `esec.toml` with that identity, checking it is this project's
+environment and the key its files use.
+
 ### Add another environment
 
 Use `project init` again to add a key and a file template:

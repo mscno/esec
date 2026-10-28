@@ -3,6 +3,7 @@ module github.com/mscno/esec
 go 1.27.0
 
 require (
+	filippo.io/age v1.3.2
 	github.com/alecthomas/assert/v2 v2.11.0
 	github.com/alecthomas/kong v1.16.1
 	github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad
@@ -16,6 +17,8 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.2.0 // indirect
+	filippo.io/hpke v0.4.0 // indirect
 	github.com/alecthomas/repr v0.5.4 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/godbus/dbus/v5 v5.2.4 // indirect

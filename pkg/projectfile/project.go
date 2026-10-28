@@ -29,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -87,6 +88,15 @@ type Env struct {
 	Key string `toml:"key,omitempty"`
 	// Guard is none (the default), session or touch.
 	Guard string `toml:"guard,omitempty"`
+	// Readers are who the environment's key is sealed to, in .esec/: people
+	// ("mads (gh:583231)"), groups ("group acme/backend") and keys
+	// ("deploy (age1…)"). esec vault writes it; the seal is the authority.
+	Readers []string `toml:"readers,omitempty"`
+}
+
+// Equal reports whether two environments say the same.
+func (e Env) Equal(o Env) bool {
+	return e.Key == o.Key && e.Guard == o.Guard && slices.Equal(e.Readers, o.Readers)
 }
 
 // GuardLevel returns the environment's guard, none when unset.
@@ -163,16 +173,29 @@ func (f *File) Validate() error {
 		}
 	}
 	for name, e := range f.Env {
-		if !validEnv(name) {
-			return fmt.Errorf("invalid environment %q: use dot-separated lowercase letters and digits", name)
+		if err := e.validate(name); err != nil {
+			return err
 		}
-		if e.Key != "" {
-			if raw, err := hex.DecodeString(e.Key); err != nil || len(raw) != 32 || strings.ToLower(e.Key) != e.Key {
-				return fmt.Errorf("environment %s: key must be 64 lowercase hex characters", name)
-			}
+	}
+	return nil
+}
+
+// validate checks one environment of the file.
+func (e Env) validate(name string) error {
+	if !validEnv(name) {
+		return fmt.Errorf("invalid environment %q: use dot-separated lowercase letters and digits", name)
+	}
+	if e.Key != "" {
+		if raw, err := hex.DecodeString(e.Key); err != nil || len(raw) != 32 || strings.ToLower(e.Key) != e.Key {
+			return fmt.Errorf("environment %s: key must be 64 lowercase hex characters", name)
 		}
-		if err := ValidateGuard(e.Guard); err != nil {
-			return fmt.Errorf("environment %s: %w", name, err)
+	}
+	if err := ValidateGuard(e.Guard); err != nil {
+		return fmt.Errorf("environment %s: %w", name, err)
+	}
+	for _, r := range e.Readers {
+		if strings.TrimSpace(r) == "" || strings.ContainsAny(r, "\"\\\x00\r\n") || len(r) > 4096 {
+			return fmt.Errorf("environment %s: invalid reader %q", name, r)
 		}
 	}
 	return nil
@@ -318,6 +341,7 @@ func (f *File) Save(dir string) error {
 func (f *File) clone() *File {
 	c := &File{Project: f.Project, Files: f.Files, Env: make(map[string]Env, len(f.Env))}
 	for k, v := range f.Env {
+		v.Readers = slices.Clone(v.Readers)
 		c.Env[k] = v
 	}
 	return c
@@ -329,12 +353,12 @@ func (f *File) same(o *File) bool {
 		return false
 	}
 	for k, v := range f.Env {
-		if o.Env[k] != v {
+		if !v.Equal(o.Env[k]) {
 			return false
 		}
 	}
 	for k, v := range o.Env {
-		if f.Env[k] != v {
+		if !v.Equal(f.Env[k]) {
 			return false
 		}
 	}

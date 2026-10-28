@@ -2,6 +2,7 @@ package projectfile
 
 import (
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,6 +46,9 @@ func edit(raw []byte, orig, want *File) ([]byte, bool) {
 		}
 		if w.Guard != o.Guard {
 			d.set(table, "guard", w.Guard)
+		}
+		if !slices.Equal(w.Readers, o.Readers) {
+			d.setRaw(table, "readers", tomlStrings(w.Readers))
 		}
 	}
 	out := []byte(strings.Join(d.lines, ""))
@@ -106,11 +110,33 @@ func tomlKey(k string) string {
 	return strconv.Quote(k)
 }
 
-// set sets key in table to value, or removes it for "". It adds the table
-// at the end when there is none.
+// tomlStrings writes a list of strings as a one-line TOML array, "" for an
+// empty one (which set then removes).
+func tomlStrings(list []string) string {
+	if len(list) == 0 {
+		return ""
+	}
+	quoted := make([]string, len(list))
+	for i, v := range list {
+		quoted[i] = strconv.Quote(v)
+	}
+	return "[" + strings.Join(quoted, ", ") + "]"
+}
+
+// set sets key in table to the string value, or removes it for "".
 func (d *doc) set(table, key, value string) {
+	if value == "" {
+		d.setRaw(table, key, "")
+		return
+	}
+	d.setRaw(table, key, strconv.Quote(value))
+}
+
+// setRaw sets key in table to a TOML value written out, or removes it for
+// "". It adds the table at the end when there is none.
+func (d *doc) setRaw(table, key, value string) {
 	start, end, found := d.table(table)
-	line := key + " = " + strconv.Quote(value) + "\n"
+	line := key + " = " + value + "\n"
 	for i := start; found && i < end; i++ {
 		m := keyLine.FindStringSubmatch(d.lines[i])
 		if m == nil || m[1] != key {

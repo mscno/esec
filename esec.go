@@ -40,6 +40,7 @@ import (
 	"github.com/mscno/esec/pkg/json"
 	"github.com/mscno/esec/pkg/keyringfile"
 	"github.com/mscno/esec/pkg/projectfile"
+	"github.com/mscno/esec/pkg/seal"
 	"github.com/mscno/esec/pkg/toml"
 	"github.com/mscno/esec/pkg/yaml"
 )
@@ -705,18 +706,48 @@ func findPrivateKeyForData(keyPath, envSuffix, userSuppliedPrivateKey string, da
 		if key, matchedName, ok := ResolveKey(privateKeyEnvs, suffixes, getPubkey()); ok {
 			return parseResolvedKey(key, matchedName, getPubkey(), logger)
 		}
-		if guarded(privateKeyEnvs, getPubkey()) {
-			return privKey, &KeyNotFoundError{Name: displayName, Tried: candidates, Guarded: true}
-		}
 	}
 
-	return privKey, &KeyNotFoundError{Name: displayName, Tried: candidates, NoFiles: filesSeen == 0}
+	// The key sealed in the repository, for a reader's age identity.
+	notFound := &KeyNotFoundError{Name: displayName, Tried: candidates, NoFiles: filesSeen == 0}
+	key, err := openSealed(keyPath, envSuffix, getPubkey(), notFound)
+	if err != nil {
+		return privKey, err
+	}
+	return parseResolvedKey(key, notFound.Name, getPubkey(), logger)
 }
 
-// guarded reports whether a keyring holds the key of pub only guarded by a
-// security key (esec-vault's guard), which esec cannot open by itself.
-func guarded(entries map[string]string, pub *[32]byte) bool {
-	return pub != nil && entries[fmt.Sprintf("ESEC_GUARD_%X", *pub)] != ""
+// openSealed opens env's key sealed in .esec/ beside the project's
+// esec.toml with the identities ESEC_AGE_IDENTITY names. Without a seal, or
+// without an identity, it returns notFound, saying why.
+func openSealed(dir, env string, pub *[32]byte, notFound *KeyNotFoundError) (string, error) {
+	pf, path, err := projectfile.Find(dir)
+	if err != nil || env == "" {
+		return "", notFound
+	}
+	root := filepath.Dir(path)
+	data, err := seal.Read(root, env)
+	if err != nil {
+		return "", notFound
+	}
+	notFound.Sealed = seal.Path(root, env)
+	notFound.Guarded = pf.Env[env].GuardLevel() != projectfile.GuardNone
+	ids, err := seal.EnvIdentities()
+	if err != nil {
+		return "", err
+	}
+	if len(ids) == 0 {
+		return "", notFound
+	}
+	want := ""
+	if pub != nil {
+		want = fmt.Sprintf("%x", *pub)
+	}
+	p, err := seal.Open(data, pf.Project, env, want, ids...)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", seal.Path(root, env), err)
+	}
+	return p.Private, nil
 }
 
 // ErrKeyNotFound matches a KeyNotFoundError with errors.Is.
@@ -732,14 +763,20 @@ type KeyNotFoundError struct {
 	Tried []string
 	// NoFiles is set when none of them exists.
 	NoFiles bool
-	// Guarded is set when a keyring holds the key guarded by a security
-	// key: esec vault run opens it, after a touch.
+	// Sealed is the sealed key (.esec/<env>.age) found but not opened: no
+	// identity was given.
+	Sealed string
+	// Guarded is set when that environment is guarded: people open it with
+	// a touch of a security key, through esec vault.
 	Guarded bool
 }
 
 func (e *KeyNotFoundError) Error() string {
-	if e.Guarded {
-		return fmt.Sprintf("private key %q is guarded by your security key: run through the background service, which asks for a touch: esec vault run ENV -- COMMAND", e.Name)
+	switch {
+	case e.Sealed != "" && e.Guarded:
+		return fmt.Sprintf("private key %q is sealed in %s and guarded by your security key: run through the background service, which asks for a touch: esec vault run ENV -- COMMAND (machines: set %s)", e.Name, e.Sealed, seal.EnvIdentity)
+	case e.Sealed != "":
+		return fmt.Sprintf("private key %q is sealed in %s: open it with esec vault (esec vault run ENV -- COMMAND), or give a reader's age identity in %s", e.Name, e.Sealed, seal.EnvIdentity)
 	}
 	if e.NoFiles && len(e.Tried) > 0 {
 		return fmt.Sprintf("private key %q not found in environment variables, and keyring file does not exist at %q", e.Name, e.Tried[0])

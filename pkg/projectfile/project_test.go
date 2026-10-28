@@ -243,3 +243,28 @@ func TestParseUnknownKeysAndFilesFormat(t *testing.T) {
 		t.Fatalf("format from name: %v %v", f, err)
 	}
 }
+
+func TestReadersRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ProjectFileName), []byte("project = \"acme/store\"\n\n[env.prod]\nkey = \""+strings.Repeat("a", 64)+"\" # keep\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, _ := Load(dir)
+	e := f.Env["prod"]
+	e.Readers = []string{"mads (gh:583231)", "deploy (age1xyz)"}
+	f.Env["prod"] = e
+	if err := f.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, ProjectFileName)) //nolint:gosec // a test file
+	if !strings.Contains(string(data), `readers = ["mads (gh:583231)", "deploy (age1xyz)"]`) || !strings.Contains(string(data), "# keep") {
+		t.Fatalf("readers:\n%s", data)
+	}
+	got, _ := Load(dir)
+	if len(got.Env["prod"].Readers) != 2 {
+		t.Fatalf("%+v", got.Env["prod"])
+	}
+	if _, err := Parse([]byte("project = \"a/b\"\n[env.dev]\nreaders = [\"bad\\nname\"]\n")); err == nil {
+		t.Fatal("a reader with a newline was accepted")
+	}
+}
