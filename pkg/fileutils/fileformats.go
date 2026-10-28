@@ -33,12 +33,10 @@ func ValidFormats() []FileFormat {
 // It accepts inputs like ".ejson", "ejson", ".ejson.dev", or full paths like "/path/to/.ejson.dev".
 // Returns an error if the format is not recognized.
 func ParseFormat(input string) (FileFormat, error) {
-	if !strings.HasPrefix(input, ".") {
-		input = "." + input
-	}
 	base := filepath.Base(input)
 	for _, format := range ValidFormats() {
-		if strings.HasPrefix(base, string(format)) {
+		f := string(format)
+		if base == f || base == strings.TrimPrefix(f, ".") || strings.HasPrefix(base, f) || strings.HasSuffix(base, f) {
 			return format, nil
 		}
 	}
@@ -54,4 +52,23 @@ func GenerateFilename(format FileFormat, environment string) string {
 		return fmt.Sprintf("%s.%s", format, environment)
 	}
 	return string(format)
+}
+
+// Environment returns the environment suffix from either supported naming style.
+func Environment(filename string) string {
+	f, err := ParseFormat(filename)
+	if err != nil {
+		return ""
+	}
+	base := filepath.Base(filename)
+	if base == string(f) {
+		return ""
+	}
+	if strings.HasPrefix(base, string(f)+".") {
+		return strings.TrimPrefix(base, string(f)+".")
+	}
+	if strings.HasSuffix(base, string(f)) {
+		return strings.TrimSuffix(base, string(f))
+	}
+	return ""
 }

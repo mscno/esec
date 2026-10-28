@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -87,5 +88,52 @@ func TestFindProjectFileNotFound(t *testing.T) {
 		t.Logf("found a project file above %s (unusual but valid)", dir)
 	} else if !errors.Is(err, ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestProjectFileRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	pub := "a1" + strings.Repeat("0", 62)
+	f := &File{Project: "acme/store", Files: Files{Format: "env", Name: ".env.{env}"}}
+	f.SetEnv("dev", pub)
+	f.SetEnv("api.prod", pub)
+	e := f.Env["api.prod"]
+	e.Guard = GuardTouch
+	f.Env["api.prod"] = e
+	if err := f.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Project != "acme/store" || got.Files.Name != ".env.{env}" || got.Env["api.prod"].GuardLevel() != GuardTouch || got.Env["dev"].GuardLevel() != GuardNone || got.Env["dev"].Key != pub {
+		t.Fatalf("round trip: %+v", got)
+	}
+	if strings.Join(got.Envs(), ",") != "api.prod,dev" {
+		t.Fatalf("envs: %v", got.Envs())
+	}
+	// WriteProjectFile keeps the rest of the file.
+	if err := WriteProjectFile(dir, "acme/shop"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = Load(dir); got.Project != "acme/shop" || len(got.Env) != 2 {
+		t.Fatalf("rename lost environments: %+v", got)
+	}
+}
+
+func TestProjectFileRejectsInvalid(t *testing.T) {
+	for _, bad := range []string{
+		`project = "nope"`,
+		"project = \"a/b\"\nunknown = 1",
+		"project = \"a/b\"\n[env.Prod]\nkey = \"\"",
+		"project = \"a/b\"\n[env.prod]\nkey = \"xyz\"",
+		"project = \"a/b\"\n[env.prod]\nguard = \"maybe\"",
+		"project = \"a/b\"\n[files]\nname = \"../{env}.env\"",
+		"project = \"a/b\"\n[files]\nformat = \"xml\"",
+	} {
+		if _, err := Parse([]byte(bad)); err == nil {
+			t.Errorf("accepted %q", bad)
+		}
 	}
 }

@@ -14,7 +14,7 @@ import (
 // ExportCmd decrypts a secrets file and prints its values as dotenv lines.
 type ExportCmd struct {
 	File         string `arg:"" help:"File or Environment to export" default:""`
-	Format       string `help:"File format (ejson, env)" default:".ejson" short:"f" env:"ESEC_FORMAT"`
+	Format       string `help:"File format filter (ejson, env, etoml)" default:"" short:"f" env:"ESEC_FORMAT"`
 	KeyFromStdin bool   `help:"Read the key from stdin" short:"k"`
 	KeyDir       string `help:"Directory containing the '.esec-keyring' file" default:"." short:"d" env:"ESEC_KEY_DIR"`
 }

@@ -81,7 +81,7 @@ func TestExportCmdRejectsOtherFormats(t *testing.T) {
 	_, errString := captureOutput(func() error {
 		return (&ExportCmd{File: path, Format: ".ejson"}).Run(&cliCtx{Logger: slog.Default()})
 	})
-	assert.Contains(t, errString, "only .env and .ejson files hold environment variables")
+	assert.Contains(t, errString, "use .env, .ejson or .etoml")
 }
 
 func TestRunLeavesOutPublicKey(t *testing.T) {

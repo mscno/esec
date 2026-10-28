@@ -9,13 +9,14 @@ import (
 
 	"github.com/mscno/esec"
 	"github.com/mscno/esec/pkg/fileutils"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // GetCmd decrypts a secrets file and extracts a specific key.
 type GetCmd struct {
 	File         string `arg:"" help:"File or Environment to decrypt" default:""`
 	Key          string `arg:"" help:"Key to extract from decrypted content" default:""`
-	Format       string `help:"File format (ejson, env, eyaml, etoml)" default:".ejson" short:"f" env:"ESEC_FORMAT"`
+	Format       string `help:"File format (ejson, env, eyaml, etoml)" default:"" short:"f" env:"ESEC_FORMAT"`
 	KeyFromStdin bool   `help:"Read the key from stdin" short:"k"`
 	KeyDir       string `help:"Directory containing the '.esec-keyring' file" default:"." short:"d" env:"ESEC_KEY_DIR"`
 }
@@ -38,17 +39,9 @@ func (c *GetCmd) Run(ctx *cliCtx) error {
 		ctx.Logger.Debug("using key from keyring", "key_dir", c.KeyDir)
 	}
 
-	format, err := fileutils.ParseFormat(c.Format)
+	fileName, _, err := fileutils.Resolve(".", c.File, c.Format)
 	if err != nil {
-		ctx.Logger.Debug("format parsing failed", "format", c.Format, "error", err)
-		return fmt.Errorf("invalid format %q: %w", c.Format, err)
-	}
-	ctx.Logger.Debug("parsed format", "format_type", format)
-
-	fileName, err := processFileOrEnv(c.File, format)
-	if err != nil {
-		ctx.Logger.Debug("file/env processing failed", "input", c.File, "error", err)
-		return fmt.Errorf("invalid file or environment %q: %w", c.File, err)
+		return err
 	}
 	ctx.Logger.Debug("resolved file path", "path", fileName)
 
@@ -98,12 +91,18 @@ func (c *GetCmd) Run(ctx *cliCtx) error {
 		}
 		value = val
 
-	case fileutils.Ejson:
-		// Parse JSON format
+	case fileutils.Ejson, fileutils.Etoml:
+		// Parse the selected structured format
 		var jsonData map[string]interface{}
-		if err := gojson.Unmarshal(data, &jsonData); err != nil {
-			ctx.Logger.Debug("json parsing failed", "error", err)
-			return fmt.Errorf("parsing decrypted JSON: %w", err)
+		var parseErr error
+		if fileFormat == fileutils.Etoml {
+			parseErr = toml.Unmarshal(data, &jsonData)
+		} else {
+			parseErr = gojson.Unmarshal(data, &jsonData)
+		}
+		if parseErr != nil {
+			ctx.Logger.Debug("structured parsing failed", "error", "invalid document")
+			return fmt.Errorf("invalid decrypted structured document")
 		}
 
 		// Handle nested keys with dot notation
@@ -132,7 +131,7 @@ func (c *GetCmd) Run(ctx *cliCtx) error {
 		switch v := val.(type) {
 		case string:
 			value = v
-		case float64, int, bool:
+		case float64, int, int64, bool:
 			value = fmt.Sprintf("%v", v)
 		default:
 			// For complex objects, return as JSON

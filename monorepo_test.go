@@ -231,7 +231,7 @@ func TestFindProjectFileStopsAtGitRoot(t *testing.T) {
 		t.Fatal("expected no project found: walk must stop at git root")
 	}
 
-	// A nested .esec-project inside the repo still wins.
+	// A nested esec.toml inside the repo still wins.
 	if err := projectfile.WriteProjectFile(filepath.Join(repo, "services"), "org/repo/services"); err != nil {
 		t.Fatal(err)
 	}

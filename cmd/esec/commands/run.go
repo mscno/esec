@@ -13,7 +13,7 @@ import (
 // RunCmd decrypts a secrets file and runs a command with the environment variables.
 type RunCmd struct {
 	File         string   `arg:"" help:"File or Environment to decrypt" default:""`
-	Format       string   `help:"File format (ejson, env, eyaml, etoml)" default:".ejson" short:"f" env:"ESEC_FORMAT"`
+	Format       string   `help:"File format (ejson, env, eyaml, etoml)" default:"" short:"f" env:"ESEC_FORMAT"`
 	KeyFromStdin bool     `help:"Read the key from stdin" short:"k"`
 	KeyDir       string   `help:"Directory containing the '.esec-keyring' file" default:"." short:"d" env:"ESEC_KEY_DIR"`
 	Command      []string `arg:"" optional:"" name:"command" help:"Command to run with the decrypted environment variables"`

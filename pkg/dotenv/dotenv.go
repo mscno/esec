@@ -32,7 +32,7 @@ func (d *Formatter) ExtractPublicKey(data []byte) ([32]byte, error) {
 
 // TransformScalarValues processes each key=value pair in the dotenv data,
 // applying the given function to transform each value. Comments, blank lines,
-// and the ESEC_PUBLIC_KEY field are preserved unchanged.
+// and the ESEC_PUBLIC_KEY / _ESEC_PUBLIC_KEY fields are preserved unchanged.
 // Returns an error if a line appears to be a malformed key-value pair.
 func (d *Formatter) TransformScalarValues(data []byte, fn func([]byte) ([]byte, error)) ([]byte, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
@@ -63,8 +63,8 @@ func (d *Formatter) TransformScalarValues(data []byte, fn func([]byte) ([]byte, 
 
 		key, value := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 
-		// Skip the public key field and encrypt other values
-		if key != format.PublicKeyField {
+		// Skip public key metadata and encrypt other values.
+		if key != format.PublicKeyField && key != format.UnderscoredPublicKeyField {
 			encMsg, err := fn([]byte(value))
 			if err != nil {
 				return nil, err

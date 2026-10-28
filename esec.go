@@ -25,7 +25,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -33,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
+	"github.com/mscno/esec/pkg/config"
 	"github.com/mscno/esec/pkg/crypto"
 	"github.com/mscno/esec/pkg/dotenv"
 	"github.com/mscno/esec/pkg/fileutils"
@@ -84,7 +84,7 @@ func GlobalKeyringDir() string {
 
 // resolveKeyringCandidates returns keyring file paths in priority order:
 // ESEC_KEYRING_PATH alone if set; otherwise the repo-local keyring first,
-// followed by the global keyring store (project-keyed via .esec-project, then
+// followed by the global keyring store (project-keyed via esec.toml, then
 // the default keyring).
 func resolveKeyringCandidates(keyPath string) []string {
 	if envPath := os.Getenv(EsecKeyringPath); envPath != "" {
@@ -620,19 +620,8 @@ func ExtractPublicKey(data []byte, fileFormat FileFormat) ([32]byte, error) {
 // ".env.registry.production" → "registry.production", ".ejson" → "".
 // A non-empty remainder that does not start with "." is not a suffix:
 // ".ejson123" → "".
-func parseEnvSuffix(filename string) string {
-	base := path.Base(filename)
-	for _, prefix := range []string{string(FileFormatEnv), string(FileFormatEjson), string(FileFormatEyaml), string(FileFormatEyml), string(FileFormatEtoml)} {
-		if rest := strings.TrimPrefix(base, prefix); rest != base {
-			if rest == "" {
-				return ""
-			}
-			if strings.HasPrefix(rest, ".") {
-				return rest[1:]
-			}
-		}
-	}
-	return ""
+func parseEnvSuffix(filePath string) string {
+	return fileutils.Environment(filePath)
 }
 
 // findPrivateKeyForData resolves the private key for decrypting data.
@@ -655,6 +644,23 @@ func findPrivateKeyForData(keyPath, envSuffix, userSuppliedPrivateKey string, da
 	}
 
 	suffixes := KeySuffixes(envSuffix)
+	cfg, err := config.Load()
+	if err != nil {
+		return privKey, err
+	}
+	if alias, ok := cfg.Aliases[envSuffix]; ok {
+		suffixes = append(suffixes, KeySuffixes(alias)...)
+	}
+	var reverse []string
+	for alias, canonical := range cfg.Aliases {
+		if canonical == envSuffix {
+			reverse = append(reverse, alias)
+		}
+	}
+	sort.Strings(reverse)
+	for _, alias := range reverse {
+		suffixes = append(suffixes, KeySuffixes(alias)...)
+	}
 	displayName := EsecPrivateKey
 	if len(suffixes) > 0 && suffixes[0] != "" {
 		displayName = EsecPrivateKey + "_" + suffixes[0]
@@ -699,9 +705,18 @@ func findPrivateKeyForData(keyPath, envSuffix, userSuppliedPrivateKey string, da
 		if key, matchedName, ok := ResolveKey(privateKeyEnvs, suffixes, getPubkey()); ok {
 			return parseResolvedKey(key, matchedName, getPubkey(), logger)
 		}
+		if guarded(privateKeyEnvs, getPubkey()) {
+			return privKey, &KeyNotFoundError{Name: displayName, Tried: candidates, Guarded: true}
+		}
 	}
 
 	return privKey, &KeyNotFoundError{Name: displayName, Tried: candidates, NoFiles: filesSeen == 0}
+}
+
+// guarded reports whether a keyring holds the key of pub only guarded by a
+// security key (esec-vault's guard), which esec cannot open by itself.
+func guarded(entries map[string]string, pub *[32]byte) bool {
+	return pub != nil && entries[fmt.Sprintf("ESEC_GUARD_%X", *pub)] != ""
 }
 
 // ErrKeyNotFound matches a KeyNotFoundError with errors.Is.
@@ -717,9 +732,15 @@ type KeyNotFoundError struct {
 	Tried []string
 	// NoFiles is set when none of them exists.
 	NoFiles bool
+	// Guarded is set when a keyring holds the key guarded by a security
+	// key: esec vault run opens it, after a touch.
+	Guarded bool
 }
 
 func (e *KeyNotFoundError) Error() string {
+	if e.Guarded {
+		return fmt.Sprintf("private key %q is guarded by your security key: run through the background service, which asks for a touch: esec vault run ENV -- COMMAND", e.Name)
+	}
 	if e.NoFiles && len(e.Tried) > 0 {
 		return fmt.Sprintf("private key %q not found in environment variables, and keyring file does not exist at %q", e.Name, e.Tried[0])
 	}
@@ -915,10 +936,10 @@ func sniffFromKeyring(logger *slog.Logger, keyPath string, envName string) (stri
 	return "", fmt.Errorf("no environment keys found in keyring")
 }
 
-// EnvVars converts decrypted .env or .ejson data into environment variables
+// EnvVars converts decrypted .env, .ejson or .etoml data into environment variables
 // for a process. It leaves out the public key (ESEC_PUBLIC_KEY or
 // _ESEC_PUBLIC_KEY) and rejects names that are not valid identifiers. For
-// .ejson, only top-level string values are included.
+// .ejson, only top-level string values are included. TOML tables use __ paths.
 func EnvVars(data []byte, fileFormat FileFormat) (map[string]string, error) {
 	var (
 		vars map[string]string
@@ -929,6 +950,8 @@ func EnvVars(data []byte, fileFormat FileFormat) (map[string]string, error) {
 		vars, err = DotEnvToEnv(data)
 	case FileFormatEjson:
 		vars, err = EjsonToEnv(data)
+	case FileFormatEtoml:
+		vars, err = TomlToEnv(data)
 	default:
 		return nil, fmt.Errorf("unsupported format for environment variables: %s", fileFormat)
 	}
@@ -937,7 +960,10 @@ func EnvVars(data []byte, fileFormat FileFormat) (map[string]string, error) {
 	}
 	delete(vars, format.PublicKeyField)
 	delete(vars, format.UnderscoredPublicKeyField)
-	for name := range vars {
+	for name, value := range vars {
+		if strings.ContainsRune(value, 0) {
+			return nil, fmt.Errorf("NUL byte in environment variable %q", name)
+		}
 		if !validIdentifierPattern.MatchString(name) {
 			return nil, fmt.Errorf("invalid identifier as key in environment: %q", name)
 		}

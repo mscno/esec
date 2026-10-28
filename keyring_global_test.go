@@ -51,7 +51,7 @@ func TestGlobalKeyringStore(t *testing.T) {
 		globalDir := t.TempDir()
 		t.Setenv(EsecKeyringDir, globalDir)
 
-		repo := t.TempDir() // no .esec-project
+		repo := t.TempDir() // no esec.toml
 		writeKeyring(t, filepath.Join(globalDir, DefaultKeyringBasename),
 			"ESEC_PRIVATE_KEY="+testPrivateKeyHex+"\n")
 

@@ -19,10 +19,10 @@ const description = `esec encrypts and decrypts secrets files using public-key c
 
 A secrets file (.env, .ejson, .eyaml or .etoml, with an environment suffix such as .env.prod) holds its public key and encrypted values, and is committed. Its private key stays out of the repository: in the variable ESEC_PRIVATE_KEY_<ENV> (ESEC_PRIVATE_KEY_PROD for .env.prod), in a .esec-keyring file, or in the global keyring that esec vault manages.
 
-Commands take a file name or an environment name: "prod" means .ejson.prod, or .env.prod with --format env.
+Commands take a filename or discover an environment across supported formats and naming patterns. "prod" also searches "production". Multiple matches fail; use --format or an explicit path. Preferences live in ~/.config/esec/config.toml.
 
     esec keygen                        # a key pair to start a file with
-    esec encrypt prod                  # encrypt .ejson.prod in place
+    esec encrypt prod                  # discover and encrypt the matching file
     esec decrypt prod                  # print it decrypted
     esec get prod DATABASE_URL         # print one value
     esec export .env.prod              # NAME=value lines
@@ -42,7 +42,7 @@ var commandDetails = map[string]string{
 	"encrypt": `Encrypts every value not encrypted yet, with the file's public key. No private key is needed.
 
 ` + examples(
-		"esec encrypt prod                 # .ejson.prod",
+		"esec encrypt prod                 # discover exactly one file",
 		"esec encrypt .env.prod",
 		"esec encrypt prod --dry-run       # print, change nothing",
 	),
@@ -61,7 +61,7 @@ var commandDetails = map[string]string{
 		"esec get prod DATABASE_URL",
 		"esec get .env.prod API_TOKEN",
 	),
-	"run": `Runs the command with the file's values added to its environment, and returns its exit code.
+	"run": `Runs the command with the file's values added to its environment, and returns its exit code. Supports dotenv, EJSON and TOML. TOML tables use uppercase double-underscore paths (database.host becomes DATABASE__HOST); arrays and dates are rejected.
 
 ` + examples(
 		"esec run prod -- ./server",
@@ -187,7 +187,7 @@ func missingFile(name string) error {
 }
 
 func isSecretsFile(name string) bool {
-	if name == ".esec-keyring" || name == ".esec-project" {
+	if name == ".esec-keyring" || name == "esec.toml" {
 		return false
 	}
 	return formatOf(name) != ""

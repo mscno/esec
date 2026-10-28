@@ -10,7 +10,7 @@ import (
 	"github.com/mscno/esec/pkg/fileutils"
 )
 
-// decryptEnvVars decrypts a .env or .ejson secrets file, named directly or by
+// decryptEnvVars decrypts a .env, .ejson or .etoml secrets file, named directly or by
 // environment, and returns its values as environment variables without the
 // public key. It is shared by run and export.
 func decryptEnvVars(ctx *cliCtx, file, formatFlag, keyDir string, keyFromStdin bool) (map[string]string, string, error) {
@@ -24,28 +24,12 @@ func decryptEnvVars(ctx *cliCtx, file, formatFlag, keyDir string, keyFromStdin b
 		ctx.Logger.Debug("read private key from stdin")
 	}
 
-	// The --format flag only resolves an environment name to a file name.
-	format, err := fileutils.ParseFormat(formatFlag)
+	fileName, fileFormat, err := fileutils.Resolve(".", file, formatFlag)
 	if err != nil {
-		return nil, "", fmt.Errorf("invalid format %q: %w", formatFlag, err)
+		return nil, "", err
 	}
-	fileName, err := processFileOrEnv(file, format)
-	if err != nil {
-		return nil, "", fmt.Errorf("invalid file or environment %q: %w", file, err)
-	}
-	ctx.Logger.Debug("using secrets file", "file", fileName)
-
-	if _, err := os.Stat(fileName); os.IsNotExist(err) {
-		return nil, "", missingFile(fileName)
-	}
-
-	// The actual format is determined by the file on disk.
-	fileFormat, err := fileutils.ParseFormat(fileName)
-	if err != nil {
-		return nil, "", fmt.Errorf("determining format of %s: %w", fileName, err)
-	}
-	if fileFormat != fileutils.Env && fileFormat != fileutils.Ejson {
-		return nil, "", fmt.Errorf("unsupported format %s: only .env and .ejson files hold environment variables", fileFormat)
+	if fileFormat != fileutils.Env && fileFormat != fileutils.Ejson && fileFormat != fileutils.Etoml {
+		return nil, "", fmt.Errorf("unsupported format %s: use .env, .ejson or .etoml", fileFormat)
 	}
 
 	data, err := esec.DecryptFile(fileName, keyDir, key)

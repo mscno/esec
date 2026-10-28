@@ -13,7 +13,7 @@ import (
 // DecryptCmd decrypts a secrets file.
 type DecryptCmd struct {
 	File         string `arg:"" help:"File or Environment to decrypt" default:""`
-	Format       string `help:"File format (ejson, env, eyaml, etoml)" default:".ejson" short:"f" env:"ESEC_FORMAT"`
+	Format       string `help:"File format (ejson, env, eyaml, etoml)" default:"" short:"f" env:"ESEC_FORMAT"`
 	KeyFromStdin bool   `help:"Read the key from stdin" short:"k"`
 	KeyDir       string `help:"Directory containing the '.esec-keyring' file" default:"." short:"d" env:"ESEC_KEY_DIR"`
 }
@@ -36,17 +36,9 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 		ctx.Logger.Debug("using key from keyring", "key_dir", c.KeyDir)
 	}
 
-	format, err := fileutils.ParseFormat(c.Format)
+	fileName, _, err := fileutils.Resolve(".", c.File, c.Format)
 	if err != nil {
-		ctx.Logger.Debug("format parsing failed", "format", c.Format, "error", err)
-		return fmt.Errorf("invalid format %q: %w", c.Format, err)
-	}
-	ctx.Logger.Debug("parsed format", "format_type", format)
-
-	fileName, err := processFileOrEnv(c.File, format)
-	if err != nil {
-		ctx.Logger.Debug("file/env processing failed", "input", c.File, "error", err)
-		return fmt.Errorf("invalid file or environment %q: %w", c.File, err)
+		return err
 	}
 	ctx.Logger.Debug("resolved file path", "path", fileName)
 

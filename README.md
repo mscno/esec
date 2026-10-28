@@ -76,7 +76,7 @@ For detailed verification instructions including checksum verification and SBOM 
 
 | Item | Purpose | Commit to Git? |
 |---|---|---|
-| `.esec-project` | Selects the project's global keyring | Yes |
+| `esec.toml` | Names the project (its global keyring), how its files are named, and each environment's public key | Yes |
 | `ESEC_PUBLIC_KEY` in `.env.dev` | Selects the key pair used to encrypt the file | Yes |
 | Encrypted `.env.dev` | Stores the project's development secrets | Yes, after encryption |
 | Global `*.keyring` file | Stores private keys on this computer | No |
@@ -86,7 +86,7 @@ A project key is different from your personal vault identity.
 Create your personal identity once. Create project keys for each application.
 Use different keys for environments that need different access.
 
-### Step 1: Create the project marker and environment keys
+### Step 1: Create the project file and environment keys
 
 Run this command from the project root:
 
@@ -99,20 +99,28 @@ The command creates these files:
 
 ```text
 store/
-  .esec-project
+  esec.toml
   .env.dev
   .env.staging
   .env.prod
 ```
 
-The project marker contains one line:
+The project file `esec.toml` names the project, the format of its files and
+each environment with its current public key:
 
-```dotenv
-ESEC_PROJECT=acme/store
+```toml
+project = "acme/store"
+
+[files]
+format = "env"
+
+[env.dev]
+key = "1f0c…"
 ```
 
-The marker contains no private key. It does not set the active environment,
-file format, remote backup location, or daemon policy.
+It contains no private key. Every machine names and finds the project's
+files the way its `[files]` section says (`name = "secrets/{env}.etoml"`),
+over the shared `~/.config/esec/config.toml`.
 
 The private keys are stored in:
 
@@ -123,15 +131,14 @@ The private keys are stored in:
 Use a stable project ID. Two clones with the same ID use the same global
 keyring on this computer. A different ID selects a different keyring.
 
-If you only need to create a marker, create `.esec-project` in your editor.
-For a new file, this command has the same result:
+If you only need the project file, create `esec.toml` in your editor:
 
 ```sh
-printf 'ESEC_PROJECT=acme/store\n' > .esec-project
+printf 'project = "acme/store"\n' > esec.toml
 ```
 
-Write the value without quotes. Use `org/repo` or `org/repo/subproject`.
-Changing the marker does not move existing keys to the new project ID.
+Use `org/repo` or `org/repo/subproject`. Changing the id does not move
+existing keys to the new project ID.
 
 ### Step 2: Add values and encrypt the file
 
@@ -150,8 +157,8 @@ $EDITOR .env.dev
 esec encrypt dev -f env
 ```
 
-Use `-f env` when you pass an environment name for a dotenv file.
-Core esec defaults to `.ejson`.
+Environment names are discovered across supported formats. Use `-f env` to
+filter for dotenv files when several formats exist.
 
 You can also pass the file path:
 
@@ -185,13 +192,13 @@ See the [broker guide](https://github.com/mscno/esec-vault#run-applications-thro
 
 ### Step 4: Commit encrypted files and back up the keys
 
-Encrypt each file after you add its values. Then commit the project marker,
+Encrypt each file after you add its values. Then commit the project file,
 the encrypted files, and the `.gitignore` update.
 
 ```sh
 esec encrypt staging -f env
 esec encrypt prod -f env
-git add .esec-project .gitignore .env.dev .env.staging .env.prod
+git add esec.toml .gitignore .env.dev .env.staging .env.prod
 esec vault backup --verify --push
 ```
 
@@ -243,7 +250,7 @@ cd ~/projects/store
 esec vault env list
 ```
 
-Each `env list` command uses the nearest project marker.
+Each `env list` command uses the nearest project file.
 The two projects have separate keys, even when both use the name `dev`.
 You can inspect a project without changing directory:
 
@@ -293,13 +300,13 @@ Edit each copy to store different values for each component.
 
 ```text
 sharedapp/
-  .esec-project                 # ESEC_PROJECT=acme/sharedapp
+  esec.toml                    # project = "acme/sharedapp"
   services/
     api/.env.dev
     worker/.env.dev
 ```
 
-Keep one marker at the repository root. From the API directory:
+Keep one esec.toml at the repository root. From the API directory:
 
 ```sh
 cd services/api
@@ -309,7 +316,7 @@ esec run dev -f env -- npm run dev
 ```
 
 esec finds `.env.dev` in `services/api`. It searches upward for the project
-marker and selects `acme/sharedapp`. Both components use that project's `dev`
+esec.toml and selects `acme/sharedapp`. Both components use that project's `dev`
 key. Sharing this key gives access to every file encrypted to that key.
 
 ### Layout B: One project with separate component keys
@@ -328,7 +335,7 @@ The result is:
 
 ```text
 platform/
-  .esec-project                 # ESEC_PROJECT=acme/platform
+  esec.toml                    # project = "acme/platform"
   services/
     api/.env.api.dev
     api/.env.api.prod
@@ -355,14 +362,14 @@ From the repository root, core esec can use an explicit file path:
 esec decrypt services/api/.env.api.dev
 ```
 
-The root marker is correct for both components in this layout.
+The root esec.toml is correct for both components in this layout.
 To share only the API development key with a teammate, use
 `esec vault share --to alice --env api.dev` from the repository root after
 [setting up member trust](https://github.com/mscno/esec-vault#share-project-keys-with-a-teammate).
 
 ### Layout C: A separate project in each subfolder
 
-Use nested project markers when components need separate project keyrings:
+Use nested project files when components need separate project keyrings:
 
 ```sh
 esec vault project init acme/mono/services/api \
@@ -375,11 +382,11 @@ esec vault project init acme/mono/services/worker \
 mono/
   services/
     api/
-      .esec-project            # ESEC_PROJECT=acme/mono/services/api
+      esec.toml               # project = "acme/mono/services/api"
       .env.dev
       .env.prod
     worker/
-      .esec-project            # ESEC_PROJECT=acme/mono/services/worker
+      esec.toml               # project = "acme/mono/services/worker"
       .env.dev
       .env.prod
 ```
@@ -395,7 +402,7 @@ esec vault env list
 ```
 
 The API and worker now have different `dev` keys.
-A nested marker selects its own project keyring. It does not merge keys from
+A nested esec.toml selects its own project keyring. It does not merge keys from
 a parent project's keyring. Environment-variable overrides and the global
 default keyring can still apply to core esec.
 
@@ -407,7 +414,7 @@ esec run services/api/.env.dev --key-dir services/api -- npm --prefix services/a
 ```
 
 The file argument selects the file. `--key-dir` selects where core esec starts
-its project-marker and keyring lookup. A file path alone does not change that
+its project-file and keyring lookup. A file path alone does not change that
 starting directory.
 
 For broker commands, change into the component and use an environment name:
@@ -417,7 +424,7 @@ For broker commands, change into the component and use an environment name:
 ```
 
 Run `members`, `share`, and `sync` in the directory that contains the component's
-marker. These sharing commands do not walk the repository or collect child
+esec.toml. These sharing commands do not walk the repository or collect child
 projects automatically.
 
 ### Reuse a root secrets file from a subfolder
@@ -429,8 +436,8 @@ esec does not search parent folders for a secrets file. Supply its path:
 esec run ../../.env.dev -- npm run dev
 ```
 
-With one root project marker, the normal upward marker lookup selects the root
-keyring. If `services/api` has its own marker, select the root keyring explicitly:
+With one root project file, the normal upward esec.toml lookup selects the root
+keyring. If `services/api` has its own esec.toml, select the root keyring explicitly:
 
 ```sh
 project_root=$(git rev-parse --show-toplevel)
@@ -450,7 +457,7 @@ rejects `..` in `--key-dir`, even though a secrets file path can contain `..`.
 | Project root | `esec decrypt services/api/.env.dev -d services/api` | `services/api/.env.dev` | `services/api` |
 | `services/api` | `esec decrypt ../../.env.dev -d "$project_root"` | `../../.env.dev` | Absolute repository root |
 
-Project lookup uses the nearest marker. It stops at the Git root.
+Project lookup uses the nearest esec.toml. It stops at the Git root.
 esec reads one secrets file per command. It does not merge parent and child
 secrets files, or load `dev` and `prod` together.
 
@@ -503,7 +510,7 @@ public key is printed):
 
 ```sh
 esec keygen --save --env dev --project myorg/myapp
-# Inside a project with .esec-project, --project is optional.
+# Inside a project with esec.toml, --project is optional.
 ```
 
 `--save` refuses to replace an existing environment key. Dotted environments
@@ -559,7 +566,7 @@ esec encrypt dev -o .ejson.dev.enc
 **Flags:**
 | Flag | Short | Default | Env | Description |
 |------|-------|---------|-----|-------------|
-| `--format` | `-f` | `.ejson` | `ESEC_FORMAT` | File format (`ejson`, `env`, `eyaml`, `etoml`) |
+| `--format` | `-f` | auto | `ESEC_FORMAT` | File format filter (`ejson`, `env`, `eyaml`, `etoml`) |
 | `--dry-run` | `-n` | `false` | | Print encrypted output to stdout without writing |
 | `--output` | `-o` | | | Write encrypted output to this file instead of in place |
 
@@ -585,7 +592,7 @@ esec decrypt dev -d /path/to/keyring/dir
 **Flags:**
 | Flag | Short | Default | Env | Description |
 |------|-------|---------|-----|-------------|
-| `--format` | `-f` | `.ejson` | `ESEC_FORMAT` | File format (`ejson`, `env`, `eyaml`, `etoml`) |
+| `--format` | `-f` | auto | `ESEC_FORMAT` | File format filter (`ejson`, `env`, `eyaml`, `etoml`) |
 | `--key-from-stdin` | `-k` | `false` | | Read private key from stdin |
 | `--key-dir` | `-d` | `.` | `ESEC_KEY_DIR` | Directory containing `.esec-keyring` file |
 
@@ -607,13 +614,13 @@ echo "your-private-key" | esec get dev SECRET -k
 **Flags:**
 | Flag | Short | Default | Env | Description |
 |------|-------|---------|-----|-------------|
-| `--format` | `-f` | `.ejson` | `ESEC_FORMAT` | File format (`ejson`, `env`, `eyaml`, `etoml`) |
+| `--format` | `-f` | auto | `ESEC_FORMAT` | File format filter (`ejson`, `env`, `eyaml`, `etoml`) |
 | `--key-from-stdin` | `-k` | `false` | | Read private key from stdin |
 | `--key-dir` | `-d` | `.` | `ESEC_KEY_DIR` | Directory containing `.esec-keyring` file |
 
 ### Export Secrets
 
-Print the decrypted values of a `.env` or `.ejson` file as dotenv lines, for
+Print the decrypted values of a `.env`, `.ejson` or `.etoml` file as dotenv lines, for
 tools that import them:
 
 ```sh
@@ -634,6 +641,7 @@ variables, the same set that `run` passes to a process:
 - The public key (`ESEC_PUBLIC_KEY` or `_ESEC_PUBLIC_KEY`) is left out.
 - Names must be valid identifiers (`[A-Za-z_][A-Za-z0-9_]*`).
 - For `.ejson`, only top-level string values are included.
+- For `.etoml`, scalar values are included; nested tables use uppercase `__` paths.
 - Lines are sorted by name.
 
 Values are written in the simplest form that dotenv parsers (esec,
@@ -648,7 +656,7 @@ cannot be written as a dotenv line at all, `export` fails and prints nothing.
 **Flags:**
 | Flag | Short | Default | Env | Description |
 |------|-------|---------|-----|-------------|
-| `--format` | `-f` | `.ejson` | `ESEC_FORMAT` | File format (`ejson`, `env`) |
+| `--format` | `-f` | auto | `ESEC_FORMAT` | File format filter (`ejson`, `env`) |
 | `--key-from-stdin` | `-k` | `false` | | Read private key from stdin |
 | `--key-dir` | `-d` | `.` | `ESEC_KEY_DIR` | Directory containing `.esec-keyring` file |
 
@@ -674,7 +682,7 @@ echo "your-private-key" | esec run dev -k -- myapp serve
 **Flags:**
 | Flag | Short | Default | Env | Description |
 |------|-------|---------|-----|-------------|
-| `--format` | `-f` | `.ejson` | `ESEC_FORMAT` | File format (`ejson`, `env`, `eyaml`, `etoml`) |
+| `--format` | `-f` | auto | `ESEC_FORMAT` | File format filter (`ejson`, `env`, `eyaml`, `etoml`) |
 | `--key-from-stdin` | `-k` | `false` | | Read private key from stdin |
 | `--key-dir` | `-d` | `.` | `ESEC_KEY_DIR` | Directory containing `.esec-keyring` file |
 
@@ -736,8 +744,8 @@ If not found in environment variables, esec looks for a `.esec-keyring` file, fi
 key directory (default `.`, or set via `--key-dir` / `ESEC_KEY_DIR`), then in the **global
 keyring store**:
 
-1. `~/.config/esec/keyrings/<org>_<repo>.keyring` — when the repo contains an `.esec-project`
-   file (`ESEC_PROJECT=org/repo`), looked up from the current directory upward
+1. `~/.config/esec/keyrings/<org>_<repo>.keyring` — when the repo contains an `esec.toml`
+   (`project = "org/repo"`), looked up from the current directory upward
 2. `~/.config/esec/keyrings/default.keyring` — project-independent fallback
 
 Set `ESEC_KEYRING_DIR` to select a different global directory. Otherwise,
@@ -809,9 +817,9 @@ Changing the public-key field alone does not rotate already encrypted values.
 
 ### 4. Monorepos
 
-The nearest `.esec-project` (walking up, never crossing the git root) scopes the global keyring.
-One marker at the repo root shares one project across all components; nested markers
-(`services/registry/.esec-project` with `ESEC_PROJECT=org/repo/services/registry`) give
+The nearest `esec.toml` (walking up, never crossing the git root) scopes the global keyring.
+One esec.toml at the repo root shares one project across all components; nested esec.toml files
+(`services/registry/esec.toml` with `project = "org/repo/services/registry"`) give
 subprojects their own keyrings in the global store.
 
 ```dotenv
@@ -1102,3 +1110,64 @@ ESEC[<version>:<public-key>:<nonce>:<ciphertext>]
 - **Ciphertext**: Encrypted data (base64)
 
 Encryption uses NaCl box (Curve25519, XSalsa20, Poly1305).
+
+
+## File discovery, TOML run and example templates
+
+Commands discover an environment across supported formats, without picking the
+first match. For example, `esec decrypt prod` searches `.ejson.prod`,
+`prod.ejson`, `.etoml.prod`, `prod.etoml`, `.env.prod`, and corresponding
+`production` names. Zero matches fail with searched paths; multiple matches
+fail with candidate names. `--format etoml` filters candidates. An explicit
+filename selects that file, independently of the format filter. Discovery is
+limited to the current directory and configured relative patterns; it does
+not recursively guess files in other projects.
+
+```sh
+esec decrypt prod
+esec run production.etoml -- ./server
+esec export prod --format etoml
+esec get production.etoml database.password
+```
+
+TOML `run` and `export` support string, number and boolean scalars. Top-level
+names retain their case. Nested table paths are uppercased and joined with
+`__`: `[database] host = "localhost"` becomes `DATABASE__HOST=localhost`.
+Public-key metadata is excluded. Invalid identifiers, NUL bytes, name
+collisions, arrays and date/time values fail before the command starts.
+Use direct structured loading when arrays or TOML date/time types are needed.
+Existing EJSON export semantics (top-level strings) are unchanged.
+
+Copy `config.example.toml` to `~/.config/esec/config.toml` to customize:
+
+```toml
+default_format = "etoml"
+
+[files]
+patterns = [".{format}.{env}", "{env}.{format}"]
+create = "{env}.{format}"
+templates = ["example.{format}", ".{format}.example"]
+
+[aliases]
+prod = "production"
+dev = "development"
+stage = "staging"
+```
+
+The config location honors `ESEC_CONFIG`, then `ESEC_VAULT_HOME`, then
+`XDG_CONFIG_HOME/esec`, then `~/.config/esec`. Unknown fields and unsafe
+patterns fail. Patterns are literal relative paths with placeholders, not
+globs. Alias matching is bidirectional and adds candidates; it never resolves
+ambiguity by precedence. New filenames keep the requested environment name.
+Key lookup tries the file's environment name before its configured aliases.
+`default_format` controls new environment creation, not discovery preference.
+Explicit creation `--format` wins over `ESEC_FORMAT` and the configured default.
+The built-in creation default remains dotenv with legacy `.env.<env>` names.
+
+With the companion esec-vault, `project init` and `env add` create encrypted
+files from `example.etoml`, `example.ejson`, or `.env.example` for the selected
+format. Without an example they create an empty public-key skeleton. Templates
+need no public key; it is inserted automatically. Defaults are encrypted in
+memory before writing. Examples must contain public dummy values, not real
+credentials; string fields starting with `_` and numeric/boolean values are
+not encrypted by the esec formats. Use `--no-template` for key-only setup.

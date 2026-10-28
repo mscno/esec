@@ -21,7 +21,7 @@ import (
 type KeygenCmd struct {
 	Save    bool   `help:"Store the private key in the global project keyring; print only its public key"`
 	Env     string `help:"Environment for --save (e.g. dev or registry.prod)"`
-	Project string `help:"Project id for --save (default: nearest .esec-project)"`
+	Project string `help:"Project id for --save (default: nearest esec.toml)"`
 }
 
 // Run executes the keygen command.
@@ -82,7 +82,7 @@ func (c *KeygenCmd) save(pub, priv string) error {
 	if project == "" {
 		p, _, err := projectfile.FindProjectFile(".")
 		if err != nil {
-			return fmt.Errorf("--save needs .esec-project or --project: %w", err)
+			return fmt.Errorf("--save needs esec.toml or --project: %w", err)
 		}
 		project = p
 	}

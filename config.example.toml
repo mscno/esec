@@ -1,0 +1,15 @@
+# Copy to ~/.config/esec/config.toml (or $XDG_CONFIG_HOME/esec/config.toml).
+# --format overrides ESEC_FORMAT, which overrides default_format for creation.
+# Discovery always fails on zero/multiple matches instead of picking a format.
+default_format = "etoml"
+
+[files]
+patterns = [".{format}.{env}", "{env}.{format}"]
+# New environment names remain literal: prod creates prod.etoml here.
+create = "{env}.{format}"
+templates = ["example.{format}", ".{format}.example"]
+
+[aliases]
+prod = "production"
+dev = "development"
+stage = "staging"
