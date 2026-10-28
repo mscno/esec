@@ -109,6 +109,49 @@ func Seal(p Payload, recipients ...age.Recipient) ([]byte, error) {
 // Open decrypts a seal with any of ids and checks that it is the key of
 // project's env with public key pub ("" skips the public key check).
 func Open(data []byte, project, env, pub string, ids ...age.Identity) (*Payload, error) {
+	p, err := Peek(data, ids...)
+	if err != nil {
+		return nil, err
+	}
+	if p.Project != project || p.Env != env {
+		return nil, fmt.Errorf("the sealed key is %s %s's, not %s %s's", p.Project, p.Env, project, env)
+	}
+	got, err := p.Public()
+	if err != nil {
+		return nil, err
+	}
+	if pub != "" && !strings.EqualFold(got, pub) {
+		return nil, fmt.Errorf("the sealed key of %s %s is not the key its files use", project, env)
+	}
+	return p, nil
+}
+
+// OpenKey is Open for a reader that has a file but not its project, such
+// as a binary with the file and its seal embedded: the seal must hold
+// env's key, and that key must be pub, the file's public key.
+func OpenKey(data []byte, env, pub string, ids ...age.Identity) (*Payload, error) {
+	if pub == "" {
+		return nil, errors.New("opening a sealed key without its project needs the file's public key")
+	}
+	p, err := Peek(data, ids...)
+	if err != nil {
+		return nil, err
+	}
+	if p.Env != env {
+		return nil, fmt.Errorf("the sealed key is %s's, not %s's", p.Env, env)
+	}
+	got, err := p.Public()
+	if err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(got, pub) {
+		return nil, fmt.Errorf("the sealed key of %s is not the key its file uses", env)
+	}
+	return p, nil
+}
+
+// Peek opens a seal with any of ids without checking whose key it holds.
+func Peek(data []byte, ids ...age.Identity) (*Payload, error) {
 	if len(ids) == 0 {
 		return nil, errors.New("no identity to open the sealed key with")
 	}
@@ -123,16 +166,6 @@ func Open(data []byte, project, env, pub string, ids ...age.Identity) (*Payload,
 	var p Payload
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, fmt.Errorf("sealed key: %w", err)
-	}
-	if p.Project != project || p.Env != env {
-		return nil, fmt.Errorf("the sealed key is %s %s's, not %s %s's", p.Project, p.Env, project, env)
-	}
-	got, err := p.Public()
-	if err != nil {
-		return nil, err
-	}
-	if pub != "" && !strings.EqualFold(got, pub) {
-		return nil, fmt.Errorf("the sealed key of %s %s is not the key its files use", project, env)
 	}
 	return &p, nil
 }

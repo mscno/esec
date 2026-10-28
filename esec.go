@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -300,6 +301,12 @@ func KeyringLookup(keyPath string) EnvironmentLookupFn {
 //   - The decrypted file content as a byte slice.
 //   - An error if any step fails (e.g., environment detection, file reading, decryption).
 func DecryptFromEmbedFSWithConfig(v embed.FS, config DecryptFromEmbedConfig) ([]byte, error) {
+	return DecryptFromFS(v, config)
+}
+
+// DecryptFromFS is DecryptFromEmbedFSWithConfig for any file system, such
+// as os.DirFS of a directory the files were copied to.
+func DecryptFromFS(v fs.FS, config DecryptFromEmbedConfig) ([]byte, error) {
 	// Set defaults for unspecified options
 	if config.Format == "" {
 		config.Format = FileFormatEjson
@@ -327,6 +334,13 @@ func DecryptFromEmbedFSWithConfig(v embed.FS, config DecryptFromEmbedConfig) ([]
 
 		// Execute the lookup function
 		envName, err = lookupFn()
+		if err != nil && config.EnvironmentLookuper == nil {
+			// No ESEC_PRIVATE_KEY*: the environment whose embedded seal
+			// ESEC_AGE_IDENTITY opens.
+			if env, serr := sniffEmbeddedSeal(v); serr == nil {
+				envName, err = env, nil
+			}
+		}
 		if err != nil {
 			return nil, fmt.Errorf("error determining environment name: %v", err)
 		}
@@ -338,13 +352,16 @@ func DecryptFromEmbedFSWithConfig(v embed.FS, config DecryptFromEmbedConfig) ([]
 	config.Logger.Debug("reading file from vault", "file", fileName)
 
 	// Attempt to read the file from the embedded filesystem
-	data, err := v.ReadFile(fileName)
+	data, err := fs.ReadFile(v, fileName)
 	if err != nil {
 		return nil, fmt.Errorf("error reading file from vault: %v", err)
 	}
 
 	// Find the private key
 	privkey, err := findPrivateKeyForData(config.Keydir, envName, config.UserSuppliedPrivateKey, data, config.Format, config.Logger)
+	if errors.Is(err, ErrKeyNotFound) {
+		privkey, err = openEmbeddedSeal(v, envName, data, config.Format, err)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +378,11 @@ func DecryptFromEmbedFS(v embed.FS, envName string, format FileFormat) ([]byte, 
 	if envName == "" {
 		detected, err := sniffEnvName(slog.New(slog.DiscardHandler))
 		if err != nil {
-			return nil, fmt.Errorf("error sniffing environment name: %v", err)
+			env, serr := sniffEmbeddedSeal(v)
+			if serr != nil {
+				return nil, fmt.Errorf("error sniffing environment name: %v", err)
+			}
+			detected = env
 		}
 		envName = detected
 	}
@@ -377,6 +398,9 @@ func DecryptFromEmbedFS(v embed.FS, envName string, format FileFormat) ([]byte, 
 
 	// Find the private key
 	privkey, err := findPrivateKeyForData("", envName, "", data, format, slog.New(slog.DiscardHandler))
+	if errors.Is(err, ErrKeyNotFound) {
+		privkey, err = openEmbeddedSeal(v, envName, data, format, err)
+	}
 	if err != nil {
 		return nil, err
 	}

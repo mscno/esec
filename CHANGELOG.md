@@ -1,3 +1,22 @@
+# v0.12.0
+
+- **`esec.toml` replaces `.esec-project`** (no compatibility): the project
+  id, how its secrets files are named (applied over `config.toml`, so every
+  machine finds them alike), and each environment's public key, guard and
+  readers. Edits keep comments and layout; unknown keys are listed, not
+  fatal, so an older esec reads a file a newer one wrote.
+- **Sealed keys**: an environment's private key can live in the repository
+  as `.esec/<env>.age`, a standard age file to its readers (`pkg/seal`).
+  When no keyring holds the key, esec opens it with the identity in
+  `ESEC_AGE_IDENTITY` or `ESEC_AGE_IDENTITY_FILE`, checking the project,
+  environment and the public key the files use: CI and deploys need only
+  esec.
+- **Embedded seals**: a binary that embeds `esec.toml`, its file and
+  `.esec/<env>.age` decrypts with `ESEC_AGE_IDENTITY` alone, a secret that
+  survives rotation; with no `ESEC_PRIVATE_KEY*` set, the environment is
+  the one whose seal the identity opens. `ESEC_PRIVATE_KEY_<ENV>` still
+  comes first. `esec.DecryptFromFS` decrypts from any `fs.FS`.
+
 # v0.11.0
 
 - Help that agents and people can find their way with. `esec` alone and

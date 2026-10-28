@@ -1062,6 +1062,31 @@ func main() {
 }
 ```
 
+### Embed the sealed key too: one secret that survives rotation
+
+A binary can embed the file's sealed key (`.esec/<env>.age`) and
+`esec.toml` beside the file. Where it runs, its one secret is an age
+identity that reads the seal (`esec vault ci add NAME --env prod`), not the
+environment's key:
+
+```go
+//go:embed esec.toml .env.prod .esec/prod.age
+var vault embed.FS
+
+data, err := esec.DecryptFromEmbedFSWithConfig(vault, esec.DecryptFromEmbedConfig{Format: esec.FileFormatEnv})
+```
+
+```sh
+ESEC_AGE_IDENTITY=AGE-SECRET-KEY-1… ./server
+```
+
+With no `ESEC_PRIVATE_KEY*` set, the environment is the one whose embedded
+seal the identity opens. When the key is rotated, the next build embeds the
+new seal and the same identity opens it: nothing changes where the binary
+runs. An `ESEC_PRIVATE_KEY_PROD` still comes first, so a deploy that holds
+the environment's key itself keeps working. `esec.DecryptFromFS` does the
+same for any `fs.FS`.
+
 ### Convert to Environment Map
 
 ```go
