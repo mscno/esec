@@ -102,7 +102,7 @@ func LoadDir(dir string) (Config, error) {
 
 // WithProject applies a project file's [files] settings.
 func (c Config) WithProject(f *projectfile.File) Config {
-	if format := strings.TrimPrefix(f.Files.Format, "."); format != "" {
+	if format := f.FilesFormat(); format != "" {
 		c.DefaultFormat = format
 		c.ProjectFormat = format
 	}

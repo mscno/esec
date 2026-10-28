@@ -59,7 +59,18 @@ type File struct {
 	Project string         `toml:"project"`
 	Files   Files          `toml:"files,omitempty"`
 	Env     map[string]Env `toml:"env,omitempty"`
+
+	// raw and orig are the file as read, so Save changes only what changed
+	// and keeps comments and layout.
+	raw  []byte
+	orig *File
+	// unknown are keys this version does not know, ignored.
+	unknown []string
 }
+
+// Unknown returns the keys in the file this version of esec does not know
+// (from a newer version, or a typo). They are ignored.
+func (f *File) Unknown() []string { return f.unknown }
 
 // Files says how the project's secrets files are named. Empty fields fall
 // back to the shared esec configuration.
@@ -143,6 +154,13 @@ func (f *File) Validate() error {
 		if !strings.Contains(n, "{env}") || !filepath.IsLocal(n) || strings.ContainsAny(n, "*?[]\\\x00\r\n") {
 			return fmt.Errorf("invalid files.name %q: a relative filename with {env}, such as .env.{env}", n)
 		}
+		named := NameFormat(n)
+		if named == "" {
+			return fmt.Errorf("invalid files.name %q: it must show the format, as in .env.{env}, .ejson.{env} or {env}.etoml", n)
+		}
+		if format := strings.TrimPrefix(f.Files.Format, "."); format != "" && format != named {
+			return fmt.Errorf("files.name %q is a %s file but files.format is %s", n, named, format)
+		}
 	}
 	for name, e := range f.Env {
 		if !validEnv(name) {
@@ -158,6 +176,27 @@ func (f *File) Validate() error {
 		}
 	}
 	return nil
+}
+
+// NameFormat returns the format a files.name pattern names (env of
+// ".env.{env}", etoml of "{env}.etoml"), or "" if it names none.
+func NameFormat(name string) string {
+	base := filepath.Base(name)
+	for _, f := range []string{"ejson", "eyaml", "eyml", "etoml", "env"} {
+		if base == "."+f || strings.HasPrefix(base, "."+f+".") || strings.HasSuffix(base, "."+f) {
+			return f
+		}
+	}
+	return ""
+}
+
+// FilesFormat returns the project's file format: files.format, or the one
+// files.name shows. It is "" when the project sets neither.
+func (f *File) FilesFormat() string {
+	if format := strings.TrimPrefix(f.Files.Format, "."); format != "" {
+		return format
+	}
+	return NameFormat(f.Files.Name)
 }
 
 // Envs returns the environment names in order.
@@ -186,25 +225,50 @@ func KeyringName(orgRepo string) string {
 	return strings.ReplaceAll(orgRepo, "/", "_") + ".keyring"
 }
 
-// Parse decodes and validates esec.toml content.
+// Parse decodes and validates esec.toml content. Keys it does not know are
+// ignored and listed by Unknown, so a file written by a newer esec still
+// works with an older one.
 func Parse(data []byte) (*File, error) {
 	var f File
-	if err := toml.NewDecoder(bytes.NewReader(data)).DisallowUnknownFields().Decode(&f); err != nil {
+	var strict *toml.StrictMissingError
+	err := toml.NewDecoder(bytes.NewReader(data)).DisallowUnknownFields().Decode(&f)
+	if errors.As(err, &strict) {
+		for _, e := range strict.Errors {
+			f.unknown = append(f.unknown, strings.Join(e.Key(), "."))
+		}
+		f = File{unknown: f.unknown}
+		err = toml.Unmarshal(data, &f)
+	}
+	if err != nil {
 		return nil, fmt.Errorf("invalid %s: %w", ProjectFileName, err)
 	}
 	if err := f.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid %s: %w", ProjectFileName, err)
 	}
+	f.raw = data
+	f.orig = f.clone()
 	return &f, nil
 }
 
-// Marshal encodes the file.
+const header = "# esec project file: commit it. It holds no secret.\n"
+
+// Marshal encodes the file. A file that was read keeps its comments and
+// layout: only the values that changed are rewritten.
 func (f *File) Marshal() ([]byte, error) {
 	if err := f.Validate(); err != nil {
 		return nil, err
 	}
+	raw, orig := f.raw, f.orig
+	if raw == nil {
+		raw, orig = []byte(header), &File{}
+	}
+	if out, ok := edit(raw, orig, f); ok {
+		return out, nil
+	}
+	// The file uses a layout edit does not handle (inline tables, dotted
+	// keys): write it afresh.
 	var buf bytes.Buffer
-	buf.WriteString("# esec project file: commit it. It holds no secret.\n")
+	buf.WriteString(header)
 	enc := toml.NewEncoder(&buf)
 	enc.SetIndentTables(false)
 	if err := enc.Encode(f); err != nil {
@@ -249,6 +313,32 @@ func (f *File) Save(dir string) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), filepath.Join(dir, ProjectFileName))
+}
+
+func (f *File) clone() *File {
+	c := &File{Project: f.Project, Files: f.Files, Env: make(map[string]Env, len(f.Env))}
+	for k, v := range f.Env {
+		c.Env[k] = v
+	}
+	return c
+}
+
+// same reports whether two files say the same.
+func (f *File) same(o *File) bool {
+	if f.Project != o.Project || f.Files != o.Files {
+		return false
+	}
+	for k, v := range f.Env {
+		if o.Env[k] != v {
+			return false
+		}
+	}
+	for k, v := range o.Env {
+		if f.Env[k] != v {
+			return false
+		}
+	}
+	return true
 }
 
 // Find searches dir and its parents for esec.toml, returning the file and

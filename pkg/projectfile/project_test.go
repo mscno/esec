@@ -125,7 +125,6 @@ func TestProjectFileRoundTrip(t *testing.T) {
 func TestProjectFileRejectsInvalid(t *testing.T) {
 	for _, bad := range []string{
 		`project = "nope"`,
-		"project = \"a/b\"\nunknown = 1",
 		"project = \"a/b\"\n[env.Prod]\nkey = \"\"",
 		"project = \"a/b\"\n[env.prod]\nkey = \"xyz\"",
 		"project = \"a/b\"\n[env.prod]\nguard = \"maybe\"",
@@ -135,5 +134,112 @@ func TestProjectFileRejectsInvalid(t *testing.T) {
 		if _, err := Parse([]byte(bad)); err == nil {
 			t.Errorf("accepted %q", bad)
 		}
+	}
+}
+
+func TestSaveKeepsCommentsAndLayout(t *testing.T) {
+	dir := t.TempDir()
+	orig := `# Owner: platform team
+project = "acme/store" # the repo
+
+[files]
+format = "env"
+name = ".env.{env}"
+
+# Production: guarded.
+[env.prod]
+key = "` + strings.Repeat("a", 64) + `" # rotated in March
+guard = "touch"
+`
+	if err := os.WriteFile(filepath.Join(dir, ProjectFileName), []byte(orig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.SetEnv("prod", strings.Repeat("b", 64))
+	f.SetEnv("dev", strings.Repeat("c", 64))
+	if err := f.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, ProjectFileName)) //nolint:gosec // a test file
+	got := string(data)
+	want := strings.Replace(orig, strings.Repeat("a", 64), strings.Repeat("b", 64), 1) + "\n[env.dev]\nkey = \"" + strings.Repeat("c", 64) + "\"\n"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+
+	// Removing a guard removes its line only.
+	f, _ = Load(dir)
+	e := f.Env["prod"]
+	e.Guard = ""
+	f.Env["prod"] = e
+	if err := f.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	data, _ = os.ReadFile(filepath.Join(dir, ProjectFileName)) //nolint:gosec // a test file
+	if strings.Contains(string(data), "guard =") || !strings.Contains(string(data), "# Production: guarded.") {
+		t.Fatalf("after removing the guard:\n%s", data)
+	}
+}
+
+func TestSaveNewFileAndInlineTables(t *testing.T) {
+	dir := t.TempDir()
+	f := &File{Project: "acme/store", Files: Files{Format: "ejson"}}
+	f.SetEnv("dev", strings.Repeat("a", 64))
+	if err := f.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, ProjectFileName)) //nolint:gosec // a test file
+	want := header + `project = "acme/store"
+
+[files]
+format = "ejson"
+
+[env.dev]
+key = "` + strings.Repeat("a", 64) + "\"\n"
+	if string(data) != want {
+		t.Fatalf("new file:\n%s", data)
+	}
+
+	// A layout the editor does not handle is written afresh, correctly.
+	inline := "project = \"acme/store\"\nenv = { dev = { key = \"" + strings.Repeat("a", 64) + "\" } }\n"
+	if err := os.WriteFile(filepath.Join(dir, ProjectFileName), []byte(inline), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.SetEnv("prod", strings.Repeat("b", 64))
+	if err := f.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(dir)
+	if err != nil || got.Env["dev"].Key != strings.Repeat("a", 64) || got.Env["prod"].Key != strings.Repeat("b", 64) {
+		t.Fatalf("rewritten: %+v %v", got, err)
+	}
+}
+
+func TestParseUnknownKeysAndFilesFormat(t *testing.T) {
+	f, err := Parse([]byte("project = \"acme/store\"\nowner = \"me\"\n[env.dev]\nkye = \"x\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u := f.Unknown(); len(u) != 2 || u[0] != "owner" || u[1] != "env.dev.kye" {
+		t.Fatalf("unknown = %v", u)
+	}
+	for _, bad := range []string{
+		"project = \"a/b\"\n[files]\nname = \"secrets.{env}\"\n",
+		"project = \"a/b\"\n[files]\nformat = \"etoml\"\nname = \".env.{env}\"\n",
+	} {
+		if _, err := Parse([]byte(bad)); err == nil {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+	f, err = Parse([]byte("project = \"a/b\"\n[files]\nname = \"{env}.etoml\"\n"))
+	if err != nil || f.FilesFormat() != "etoml" {
+		t.Fatalf("format from name: %v %v", f, err)
 	}
 }
