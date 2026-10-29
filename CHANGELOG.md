@@ -1,3 +1,10 @@
+# v0.12.1
+
+- Document the companion esec-vault v0.23.0 self-service personal/work tenant
+  flow, collision recovery and receiving-owner project transfers through
+  `esec vault`. The companion CLI and upgraded vault server implement these
+  features; this release does not change the esec library or file formats.
+
 # v0.12.0
 
 - **`esec.toml` replaces `.esec-project`** (no compatibility): the project
