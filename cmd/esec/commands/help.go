@@ -218,6 +218,10 @@ func envSuffix(name string) string {
 func hints(err error) []string {
 	var nf *esec.KeyNotFoundError
 	if errors.As(err, &nf) {
+		if nf.Guarded && nf.Sealed != "" {
+			// No key esec could be given opens it: the error says the way.
+			return nil
+		}
 		return []string{"give esec the private key in one of these ways:" +
 			"\n  export " + nf.Name + "=<private key>" +
 			"\n  add the line " + nf.Name + "=<private key> to .esec-keyring (never commit it)" +

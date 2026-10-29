@@ -1,3 +1,10 @@
+# v0.12.2
+
+- `esec decrypt` on a guarded environment names the commands that read it,
+  for that environment: `esec vault decrypt ENV [KEY]` (esec-vault v0.24.1)
+  or `esec vault run ENV -- COMMAND`. It no longer suggests exporting or
+  saving the private key, which no guarded key can be given as.
+
 # v0.12.1
 
 - Document the companion esec-vault v0.23.0 self-service personal/work tenant

@@ -84,6 +84,19 @@ func TestKeyNotFoundHint(t *testing.T) {
 	}
 }
 
+// A guarded key opens only through esec vault: the error names the
+// commands for its environment, and no hint offers keys that cannot work.
+func TestGuardedKeyNotFound(t *testing.T) {
+	nf := &esec.KeyNotFoundError{Name: "ESEC_PRIVATE_KEY_PRODUCTION", Sealed: "/repo/.esec/production.age", Guarded: true}
+	err := fmt.Errorf("decrypting file .env.production: %w", nf)
+	if msg := err.Error(); !strings.Contains(msg, "esec vault decrypt production [KEY]") || !strings.Contains(msg, "esec vault run production -- COMMAND") {
+		t.Fatalf("error: %s", msg)
+	}
+	if h := hints(err); h != nil {
+		t.Fatalf("hints for a guarded key: %q", h)
+	}
+}
+
 // The top-level help lists esec vault, installed or not.
 func TestHelpListsVault(t *testing.T) {
 	var buf bytes.Buffer

@@ -798,7 +798,8 @@ type KeyNotFoundError struct {
 func (e *KeyNotFoundError) Error() string {
 	switch {
 	case e.Sealed != "" && e.Guarded:
-		return fmt.Sprintf("private key %q is sealed in %s and guarded by your security key: run through the background service, which asks for a touch: esec vault run ENV -- COMMAND (machines: set %s)", e.Name, e.Sealed, seal.EnvIdentity)
+		env := strings.TrimSuffix(filepath.Base(e.Sealed), ".age")
+		return fmt.Sprintf("private key %q is sealed in %s and guarded by your security key: read it through the background service, which asks for a touch: esec vault decrypt %s [KEY], or esec vault run %s -- COMMAND (machines: set %s)", e.Name, e.Sealed, env, env, seal.EnvIdentity)
 	case e.Sealed != "":
 		return fmt.Sprintf("private key %q is sealed in %s: open it with esec vault (esec vault run ENV -- COMMAND), or give a reader's age identity in %s", e.Name, e.Sealed, seal.EnvIdentity)
 	}
