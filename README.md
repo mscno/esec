@@ -17,6 +17,31 @@ projects, store keys, share keys with other people, and back up keys.
 - [Manage the daemon and backups](https://github.com/mscno/esec-vault#automatic-backups).
 
 The command examples use esec v0.8.0 or later and esec-vault v0.3.0 or later.
+
+### Personal and work namespaces
+
+With **esec-vault v0.23.0 or later**, whitelisted users sign in with GitHub,
+receive a personal namespace (or choose another after a collision), and can
+create separate work organisations. Namespace handles are not GitHub-org
+ownership claims; each tenant has its own immutable ID and signed owners.
+These commands are forwarded to the companion `esec-vault` executable:
+
+```sh
+esec vault login https://vault.example.com
+esec vault personal choose my-personal-name  # only if your username is unavailable
+esec vault org create geoman
+esec vault org create paraplyventures
+esec vault project transfer mscno/api --to geoman/api
+# Different receiving owner:
+esec vault project transfer mscno/api --to geoman/api --recipient alice
+esec vault transfers accept tr_...           # on the receiving owner's device
+```
+
+Transfers preserve encrypted files' keys, but do not automatically copy source
+collaborators across tenants. Update `project` in `esec.toml` after a transfer;
+rotate keys and re-encrypt files to revoke former readers. Upgrade the vault
+server and trusted-device clients together. See the
+[tenant and transfer guide](https://github.com/mscno/esec-vault#personal-and-work-tenants-guarded-server).
 Replace `acme` and the project names with your own names.
 Replace `npm run dev` with your application's start command. Set `$EDITOR` to
 your editor, or replace `$EDITOR` in the examples with an editor command.
