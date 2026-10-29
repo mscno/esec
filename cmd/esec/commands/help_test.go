@@ -76,7 +76,7 @@ func TestKeyNotFoundHint(t *testing.T) {
 		t.Fatal("not ErrKeyNotFound")
 	}
 	h := hints(err)
-	if len(h) != 1 || !strings.Contains(h[0], "export ESEC_PRIVATE_KEY_PROD=") || !strings.Contains(h[0], "esec vault team sync") {
+	if len(h) != 1 || !strings.Contains(h[0], "export ESEC_PRIVATE_KEY_PROD=") || !strings.Contains(h[0], "esec vault sync fetches") {
 		t.Fatalf("hints: %q", h)
 	}
 	if hints(errors.New("other")) != nil {

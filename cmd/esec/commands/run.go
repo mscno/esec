@@ -36,7 +36,9 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 
 	envVars, fileName, err := decryptEnvVars(ctx, c.File, c.Format, c.KeyDir, c.KeyFromStdin)
 	if err != nil {
-		return err
+		return viaVault(err, c.File, func(env string) []string {
+			return append(append(withFormat([]string{"run", env}, c.Format), "--"), c.Command...)
+		})
 	}
 
 	// Validate we have environment variables

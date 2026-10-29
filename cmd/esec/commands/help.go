@@ -226,7 +226,7 @@ func hints(err error) []string {
 			"\n  export " + nf.Name + "=<private key>" +
 			"\n  add the line " + nf.Name + "=<private key> to .esec-keyring (never commit it)" +
 			"\n  pass it on stdin with -k" +
-			"\n  with esec vault: esec vault team sync fetches the keys of shared projects; esec vault run <env> -- <command> uses them"}
+			"\n  with esec vault: esec vault sync fetches the keys of shared projects; esec vault run <env> -- <command> uses them"}
 	}
 	return nil
 }

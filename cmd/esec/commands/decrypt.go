@@ -58,7 +58,10 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 	data, err := esec.DecryptFile(fileName, c.KeyDir, key)
 	if err != nil {
 		ctx.Logger.Debug("decryption failed", "path", fileName, "error", err)
-		return fmt.Errorf("decrypting file %s: %w", fileName, err)
+		// esec vault prints KEY=value lines, not the file.
+		return viaVault(fmt.Errorf("decrypting file %s: %w", fileName, err), c.File, func(env string) []string {
+			return withFormat([]string{"decrypt", env}, c.Format)
+		})
 	}
 
 	ctx.Logger.Debug("decryption successful", "path", fileName, "bytes", len(data))

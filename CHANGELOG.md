@@ -1,3 +1,21 @@
+# v0.13.0
+
+- **`esec run`, `esec decrypt` and `esec get` read guarded environments.**
+  A guarded key is sealed to its readers' security keys only, so esec cannot
+  be given it. With an environment name (not a path), these commands now hand
+  the read to `esec vault run` or `esec vault decrypt` when esec-vault
+  (v0.24.1 or later) is on `PATH`: its background service shows a dialog and
+  waits for a touch, and esec never holds the key. `esec decrypt` then prints
+  `KEY=value` lines rather than the file. `esec export` does not hand over,
+  since tools read its output. Without esec-vault, the error is unchanged.
+- The key-not-found hint names `esec vault sync` (`team sync` is gone in
+  esec-vault v0.25.0).
+- README: environment names resolve across every format (two matching files
+  are an error), not to `.ejson` by default; the key lookup order includes the
+  sealed key in `.esec/<env>.age`; first setup is `esec vault setup`; sharing
+  a component's key is `esec vault share ENV --with LOGIN`; encrypted keyring
+  files are made with `esec vault keyring protect`.
+
 # v0.12.2
 
 - `esec decrypt` on a guarded environment names the commands that read it,

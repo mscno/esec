@@ -13,7 +13,7 @@ projects, store keys, share keys with other people, and back up keys.
 - [Set up a project](#project-guide).
 - [Use keys in subfolders](#subfolder-guide).
 - [Check how esec finds a key](#private-key-lookup).
-- [Share keys with a teammate](https://github.com/mscno/esec-vault#share-project-keys-with-a-teammate).
+- [Share keys with a teammate](https://github.com/mscno/esec-vault#keys-live-with-the-code-sealed-in-the-repository).
 - [Manage the daemon and backups](https://github.com/mscno/esec-vault#automatic-backups).
 
 The command examples use esec v0.8.0 or later and esec-vault v0.3.0 or later.
@@ -404,9 +404,9 @@ esec decrypt services/api/.env.api.dev
 ```
 
 The root esec.toml is correct for both components in this layout.
-To share only the API development key with a teammate, use
-`esec vault share --to alice --env api.dev` from the repository root after
-[setting up member trust](https://github.com/mscno/esec-vault#share-project-keys-with-a-teammate).
+To share only the API development key with a teammate, run
+`esec vault share api.dev --with alice` from the repository root and commit
+`.esec/`.
 
 ### Layout C: A separate project in each subfolder
 
@@ -464,9 +464,9 @@ For broker commands, change into the component and use an environment name:
 (cd services/api && esec vault run dev -f env -- npm run dev)
 ```
 
-Run `members`, `share`, and `sync` in the directory that contains the component's
-esec.toml. These sharing commands do not walk the repository or collect child
-projects automatically.
+Run `share` and `unshare` in the directory that contains the component's
+esec.toml. They do not walk the repository or collect child projects
+automatically.
 
 ### Reuse a root secrets file from a subfolder
 
@@ -559,11 +559,9 @@ such as `registry.prod` are supported. The companion CLI can scaffold the
 whole project and handle encrypted, recoverable cloud backups:
 
 ```sh
-esec vault init
+esec vault setup                      # identity, backup destination, background service
 esec vault project init myorg/myapp --env dev,staging,prod
-esec vault remote add                 # interactive destination setup
 esec vault backup --verify --push
-esec vault daemon install --start     # background broker and backup service
 ```
 
 See [esec-vault](https://github.com/mscno/esec-vault) for remote configuration,
@@ -706,7 +704,7 @@ cannot be written as a dotenv line at all, `export` fails and prints nothing.
 Decrypt secrets and run a command with them as environment variables:
 
 ```sh
-# Run with ejson format (default)
+# The one dev file (.ejson.dev, .env.dev, …); more than one is an error
 esec run dev -- myapp serve
 
 # Run with env format
@@ -754,14 +752,17 @@ esec follows a structured naming convention for environment-based encryption fil
 
 ### Environment Resolution
 
-When you pass an environment name instead of a filename, esec automatically resolves it:
+When you pass an environment name instead of a filename, esec looks for that
+environment's file in every supported format and naming pattern. Exactly one
+file must match: when two do (`.ejson.prod` and `.env.prod`), esec fails and
+asks for `--format` or a path.
 
 | Command | Resolves To | Key used |
 |---------|-------------|----------|
-| `esec encrypt` | `.ejson` | Public key stored in the file |
-| `esec encrypt dev` | `.ejson.dev` | Public key stored in the file |
-| `esec decrypt prod` | `.ejson.prod` | `ESEC_PRIVATE_KEY_PROD` |
-| `esec decrypt dev -f .env` | `.env.dev` | `ESEC_PRIVATE_KEY_DEV` |
+| `esec encrypt dev` | the one `dev` file, such as `.env.dev` | Public key stored in the file |
+| `esec decrypt prod` | the one `prod` file (also `production`) | `ESEC_PRIVATE_KEY_PROD` |
+| `esec decrypt dev -f env` | `.env.dev` | `ESEC_PRIVATE_KEY_DEV` |
+| `esec decrypt .ejson.dev` | `.ejson.dev` | `ESEC_PRIVATE_KEY_DEV` |
 
 ---
 
@@ -798,11 +799,11 @@ lookups. It does not override a private key supplied through stdin or an
 environment variable. The repo-local `.esec-keyring` is read only from the key
 directory; esec does not search parents for that file.
 
-### Sealed keyrings
+### Encrypted keyring files
 
-esec v0.9.0 and later also read **sealed** keyring files. esec-vault creates
-them on machines enrolled with an esec vault server, or when you run
-`esec vault keyring seal`. A sealed keyring starts with this line:
+esec v0.9.0 and later also read keyring files encrypted for this machine.
+esec-vault writes them on machines enrolled with an esec vault server, or when
+you run `esec vault keyring protect`. Such a keyring starts with this line:
 
 ```text
 ESEC-SEALED-KEYRING-V1
@@ -835,7 +836,22 @@ When `seal_keyrings = true` is set in `secret-store.toml`, `esec keygen --save`
 creates new keyrings sealed. It always keeps an existing keyring in its
 current form.
 
-### 3. Key names: environment chain and public key
+### 3. Sealed key in the repository (`.esec/<env>.age`)
+
+When no keyring holds the key, esec opens `.esec/<env>.age` beside the
+project's `esec.toml` with the age identity in `ESEC_AGE_IDENTITY` or
+`ESEC_AGE_IDENTITY_FILE` (see
+[sealed keys](#sealed-keys-ci-and-deploys-with-esec-alone)).
+
+A guarded environment's key is sealed to its readers' security keys only, so
+no identity esec can be given opens it. With an environment name,
+`esec run`, `esec decrypt` and `esec get` then hand the read to
+`esec vault run` or `esec vault decrypt` when esec-vault is installed: its
+background service shows a dialog and waits for your touch. `esec decrypt`
+then prints `KEY=value` lines, not the file. `esec export` does not hand
+over, since tools read its output.
+
+### 4. Key names: environment chain and public key
 
 Within each location, esec tries key names most-specific-first:
 
@@ -856,7 +872,7 @@ project contains multiple production keys.
 The file's public-key field and its encrypted values must use the same key pair.
 Changing the public-key field alone does not rotate already encrypted values.
 
-### 4. Monorepos
+### 5. Monorepos
 
 The nearest `esec.toml` (walking up, never crossing the git root) scopes the global keyring.
 One esec.toml at the repo root shares one project across all components; nested esec.toml files
