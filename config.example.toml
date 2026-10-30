@@ -8,8 +8,3 @@ patterns = [".{format}.{env}", "{env}.{format}"]
 # New environment names remain literal: prod creates prod.etoml here.
 create = "{env}.{format}"
 templates = ["example.{format}", ".{format}.example"]
-
-[aliases]
-prod = "production"
-dev = "development"
-stage = "staging"

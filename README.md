@@ -783,7 +783,7 @@ asks for `--format` or a path.
 | Command | Resolves To | Key used |
 |---------|-------------|----------|
 | `esec encrypt dev` | the one `dev` file, such as `.env.dev` | Public key stored in the file |
-| `esec decrypt prod` | the one `prod` file (also `production`) | `ESEC_PRIVATE_KEY_PROD` |
+| `esec decrypt prod` | the one `prod` file | `ESEC_PRIVATE_KEY_PROD` |
 | `esec decrypt dev -f env` | `.env.dev` | `ESEC_PRIVATE_KEY_DEV` |
 | `esec decrypt .ejson.dev` | `.ejson.dev` | `ESEC_PRIVATE_KEY_DEV` |
 
@@ -1221,9 +1221,10 @@ Encryption uses NaCl box (Curve25519, XSalsa20, Poly1305).
 
 Commands discover an environment across supported formats, without picking the
 first match. For example, `esec decrypt prod` searches `.ejson.prod`,
-`prod.ejson`, `.etoml.prod`, `prod.etoml`, `.env.prod`, and corresponding
-`production` names. Zero matches fail with searched paths; multiple matches
-fail with candidate names. `--format etoml` filters candidates. An explicit
+`prod.ejson`, `.etoml.prod`, `prod.etoml`, `.env.prod`, and `prod.env`.
+Environment names match exactly: `prod` never discovers `production`,
+`dev` never discovers `development`, and `stage` never discovers `staging`.
+Zero matches fail with searched paths; multiple matches fail with candidate names. `--format etoml` filters candidates. An explicit
 filename selects that file, independently of the format filter. Discovery is
 limited to the current directory and configured relative patterns; it does
 not recursively guess files in other projects.
@@ -1252,19 +1253,14 @@ default_format = "etoml"
 patterns = [".{format}.{env}", "{env}.{format}"]
 create = "{env}.{format}"
 templates = ["example.{format}", ".{format}.example"]
-
-[aliases]
-prod = "production"
-dev = "development"
-stage = "staging"
 ```
 
 The config location honors `ESEC_CONFIG`, then `ESEC_VAULT_HOME`, then
 `XDG_CONFIG_HOME/esec`, then `~/.config/esec`. Unknown fields and unsafe
 patterns fail. Patterns are literal relative paths with placeholders, not
-globs. Alias matching is bidirectional and adds candidates; it never resolves
-ambiguity by precedence. New filenames keep the requested environment name.
-Key lookup tries the file's environment name before its configured aliases.
+globs. New filenames keep the requested environment name. Key lookup does
+not substitute other environment names. Environment aliases are unsupported;
+remove any existing `[aliases]` section from your config.
 `default_format` controls new environment creation, not discovery preference.
 Explicit creation `--format` wins over `ESEC_FORMAT` and the configured default.
 The built-in creation default remains dotenv with legacy `.env.<env>` names.

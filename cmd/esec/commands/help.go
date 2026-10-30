@@ -19,7 +19,7 @@ const description = `esec encrypts and decrypts secrets files using public-key c
 
 A secrets file (.env, .ejson, .eyaml or .etoml, with an environment suffix such as .env.prod) holds its public key and encrypted values, and is committed. Its private key stays out of the repository: in the variable ESEC_PRIVATE_KEY_<ENV> (ESEC_PRIVATE_KEY_PROD for .env.prod), in a .esec-keyring file, in the global keyring that esec vault manages, or sealed in the repository (.esec/<env>.age) for a reader whose age identity is in ESEC_AGE_IDENTITY or ESEC_AGE_IDENTITY_FILE (CI, deploys).
 
-Commands take a filename or discover an environment across supported formats and naming patterns. "prod" also searches "production". Multiple matches fail; use --format or an explicit path. Preferences live in ~/.config/esec/config.toml.
+Commands take a filename or discover an environment across supported formats and naming patterns. Environment names match exactly: "prod" and "production" are different environments. Multiple matches fail; use --format or an explicit path. Preferences live in ~/.config/esec/config.toml.
 
     esec keygen                        # a key pair to start a file with
     esec setup                         # wizard: project, environments, files and keys

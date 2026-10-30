@@ -1,6 +1,8 @@
 package esec
 
 import (
+	"errors"
+	"os"
 	"strings"
 	"testing"
 )
@@ -25,23 +27,43 @@ func TestTomlEnvMapping(t *testing.T) {
 	}
 }
 
-func TestSuffixFileAndAliasKey(t *testing.T) {
+func TestEnvironmentKeyNamesAreExact(t *testing.T) {
 	t.Setenv("ESEC_VAULT_HOME", t.TempDir())
 	t.Setenv("ESEC_CONFIG", "")
-	pub, priv, err := GenerateKeypair()
-	if err != nil {
+	t.Setenv("ESEC_PRIVATE_KEY", "")
+	if err := os.Unsetenv("ESEC_PRIVATE_KEY"); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("ESEC_PRIVATE_KEY_PROD", priv)
-	var encrypted strings.Builder
-	if _, err := Encrypt(strings.NewReader("_ESEC_PUBLIC_KEY='"+pub+"'\nTOKEN='hello'\n"), &encrypted, FileFormatEtoml); err != nil {
-		t.Fatal(err)
-	}
-	var plain strings.Builder
-	if _, err := Decrypt(strings.NewReader(encrypted.String()), &plain, "production", FileFormatEtoml, "", ""); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(plain.String(), "hello") {
-		t.Fatal("alias key failed")
+	for _, pair := range [][2]string{{"prod", "production"}, {"dev", "development"}, {"stage", "staging"}} {
+		for _, names := range [][2]string{pair, {pair[1], pair[0]}} {
+			t.Run(names[0]+"-is-not-"+names[1], func(t *testing.T) {
+				pub, priv, err := GenerateKeypair()
+				if err != nil {
+					t.Fatal(err)
+				}
+				name := "ESEC_PRIVATE_KEY_" + strings.ToUpper(names[0])
+				t.Setenv(name, "")
+				if err := os.Unsetenv(name); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("ESEC_PRIVATE_KEY_"+strings.ToUpper(names[1]), priv)
+				var encrypted strings.Builder
+				if _, err := Encrypt(strings.NewReader("_ESEC_PUBLIC_KEY='"+pub+"'\nTOKEN='hello'\n"), &encrypted, FileFormatEtoml); err != nil {
+					t.Fatal(err)
+				}
+				keydir := t.TempDir()
+				var plain strings.Builder
+				if _, err := Decrypt(strings.NewReader(encrypted.String()), &plain, names[0], FileFormatEtoml, keydir, ""); !errors.Is(err, ErrKeyNotFound) {
+					t.Fatalf("used another environment's key: %v", err)
+				}
+				t.Setenv("ESEC_PRIVATE_KEY_"+strings.ToUpper(names[0]), priv)
+				if _, err := Decrypt(strings.NewReader(encrypted.String()), &plain, names[0], FileFormatEtoml, keydir, ""); err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(plain.String(), "hello") {
+					t.Fatal("exact environment key failed")
+				}
+			})
+		}
 	}
 }

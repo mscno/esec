@@ -33,7 +33,6 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
-	"github.com/mscno/esec/pkg/config"
 	"github.com/mscno/esec/pkg/crypto"
 	"github.com/mscno/esec/pkg/dotenv"
 	"github.com/mscno/esec/pkg/fileutils"
@@ -669,23 +668,6 @@ func findPrivateKeyForData(keyPath, envSuffix, userSuppliedPrivateKey string, da
 	}
 
 	suffixes := KeySuffixes(envSuffix)
-	cfg, err := config.Load()
-	if err != nil {
-		return privKey, err
-	}
-	if alias, ok := cfg.Aliases[envSuffix]; ok {
-		suffixes = append(suffixes, KeySuffixes(alias)...)
-	}
-	var reverse []string
-	for alias, canonical := range cfg.Aliases {
-		if canonical == envSuffix {
-			reverse = append(reverse, alias)
-		}
-	}
-	sort.Strings(reverse)
-	for _, alias := range reverse {
-		suffixes = append(suffixes, KeySuffixes(alias)...)
-	}
 	displayName := EsecPrivateKey
 	if len(suffixes) > 0 && suffixes[0] != "" {
 		displayName = EsecPrivateKey + "_" + suffixes[0]

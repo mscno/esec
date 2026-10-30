@@ -19,7 +19,7 @@ func TestLoadValidatesSharedPreferences(t *testing.T) {
 	for _, bad := range []string{
 		"default_format='unknown'", "defaut_format='etoml'",
 		"[files]\ncreate='../{env}.{format}'", "[files]\npatterns=[]",
-		"[files]\npatterns=['{unknown}.{format}']", "[aliases]\nprod='../production'",
+		"[files]\npatterns=['{unknown}.{format}']", "[aliases]\nprod='production'",
 	} {
 		if err := os.WriteFile(p, []byte(bad), 0600); err != nil {
 			t.Fatal(err)

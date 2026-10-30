@@ -24,7 +24,7 @@ func TestRunLoadsDiscoveredToml(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("ESEC_PRIVATE_KEY_PROD", priv)
+	t.Setenv("ESEC_PRIVATE_KEY_PRODUCTION", priv)
 	var encrypted strings.Builder
 	if _, err := esec.Encrypt(strings.NewReader("_ESEC_PUBLIC_KEY='"+pub+"'\n[database]\npassword='run-secret'\nport=5432\n"), &encrypted, esec.FileFormatEtoml); err != nil {
 		t.Fatal(err)
@@ -32,13 +32,13 @@ func TestRunLoadsDiscoveredToml(t *testing.T) {
 	if err := os.WriteFile("production.etoml", []byte(encrypted.String()), 0600); err != nil {
 		t.Fatal(err)
 	}
-	get := GetCmd{File: "prod", Key: "database.password"}
+	get := GetCmd{File: "production", Key: "database.password"}
 	value, getErr := captureOutput(func() error { return get.Run(&cliCtx{Logger: slog.Default()}) })
 	if getErr != "" || value != "run-secret" {
 		t.Fatalf("TOML get failed: %s", getErr)
 	}
 	output := filepath.Join(dir, "result")
-	c := RunCmd{File: "prod", Command: []string{"sh", "-c", `printf '%s:%s' "$DATABASE__PASSWORD" "$DATABASE__PORT" > "$1"`, "sh", output}}
+	c := RunCmd{File: "production", Command: []string{"sh", "-c", `printf '%s:%s' "$DATABASE__PASSWORD" "$DATABASE__PORT" > "$1"`, "sh", output}}
 	if err := c.Run(&cliCtx{Logger: slog.Default()}); err != nil {
 		t.Fatal(err)
 	}
