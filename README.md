@@ -113,7 +113,27 @@ Use different keys for environments that need different access.
 
 ### Step 1: Create the project file and environment keys
 
-Run this command from the project root:
+From the project root, `esec setup` opens a wizard: project id, environments
+(`dev`, `staging`, `test`, `production`, `ops`, or your own names), format,
+and, when esec-vault is signed in, a name check, guard and readers. It then
+writes `esec.toml` and a secrets file for each environment, and stores the
+private keys. This is not `esec vault setup`, which creates your personal
+identity.
+
+```sh
+esec setup
+esec setup --project acme/store --env dev,staging,production --format env --yes
+esec setup --add --env ops --yes
+```
+
+With esec-vault v0.26.0 or later signed in, the wizard checks that the tenant and project id
+are free (`esec vault project check`), then runs `esec vault project init` and shares any extra readers.
+Without it, pass `--local`: files and keys are written on this machine only,
+the name is not reserved, and guard and readers are not recorded. A terminal
+is optional; without one, pass `--yes` and the flags above. A missing flag
+exits 80 and names it.
+
+The same result, without the wizard, is `esec vault project init`:
 
 ```sh
 cd ~/projects/store

@@ -1,3 +1,11 @@
+# v0.16.0
+
+- **`esec setup`** creates a project, or adds environments, from a wizard or
+  from flags. With esec-vault v0.26.0 or later signed in, it checks that the
+  name is free (`esec vault project check`) and runs `project init`. Otherwise
+  `--local` writes `esec.toml`, secrets files and keys on this machine only.
+  This is not `esec vault setup`, which creates a personal identity.
+
 # v0.15.0
 
 - Removed `requires` in `esec.toml` and `projectfile.File.CheckRequires`

@@ -30,8 +30,27 @@ func (e *ExitError) Error() string {
 	return fmt.Sprintf("exit status %d", e.Code)
 }
 
+// commandExit reports a process exit code requested by err.
+func commandExit(err error) (int, bool) {
+	if err == nil {
+		return 0, false
+	}
+	var exitErr *ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.Code, true
+	}
+	for err != nil {
+		if c, ok := err.(interface{ ExitCode() int }); ok {
+			return c.ExitCode(), true
+		}
+		err = errors.Unwrap(err)
+	}
+	return 0, false
+}
+
 type cli struct {
 	Keygen  KeygenCmd  `cmd:"" help:"Generate a new keypair"`
+	Setup   SetupCmd   `cmd:"" help:"Create a project, or add environments, from a wizard or flags"`
 	Encrypt EncryptCmd `cmd:"" help:"Encrypt a secrets file in place"`
 	Decrypt DecryptCmd `cmd:"" help:"Decrypt a secrets file to stdout"`
 	Export  ExportCmd  `cmd:"" help:"Print decrypted secrets as NAME=value lines, without the public key"`
@@ -86,10 +105,18 @@ func Execute(version string) {
 	err = ctx.Run(&cliCtx{Logger: logger, Quiet: cli.Quiet})
 
 	// Commands may request a specific process exit code (e.g. `run` forwarding
-	// the exit code of its child process).
-	var exitErr *ExitError
-	if errors.As(err, &exitErr) {
-		os.Exit(exitErr.Code)
+	// the exit code of its child process). ExitError is silent: the command
+	// already printed, or the code belongs to a child. Other exit codes still
+	// print the error.
+	if code, ok := commandExit(err); ok {
+		var silent *ExitError
+		if !errors.As(err, &silent) {
+			fmt.Fprintln(os.Stderr, "esec: error:", err)
+			for _, h := range hints(err) {
+				fmt.Fprintln(os.Stderr, "hint:", h)
+			}
+		}
+		os.Exit(code)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "esec: error:", err)
