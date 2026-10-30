@@ -1,3 +1,10 @@
+# v0.14.1
+
+- Fix: `projectfile.File.CheckRequires` panicked when given an empty
+  version, as a program built without version information can pass. It now
+  skips the check, as for a development build. The esec CLI was not
+  affected: it always passes a version.
+
 # v0.14.0
 
 - **`requires` in `esec.toml`:** the oldest esec that may work with the

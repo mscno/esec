@@ -9,7 +9,7 @@ import (
 // CheckRequires reports whether an esec of version (such as "v0.14.0", or
 // "v0.14.0 (commit: …)") meets the project's Requires. A build with no
 // release version ("dev", "(devel)") is not checked, nor is a project that
-// requires nothing.
+// requires nothing, nor an empty version.
 func (f *File) CheckRequires(version string) error {
 	if f == nil || strings.TrimSpace(f.Requires) == "" {
 		return nil
@@ -18,12 +18,13 @@ func (f *File) CheckRequires(version string) error {
 	if err != nil {
 		return fmt.Errorf("invalid %s: requires %q: %w", ProjectFileName, f.Requires, err)
 	}
-	have, ok := parseVersion(strings.Fields(version + " ")[0])
+	release, _, _ := strings.Cut(strings.TrimSpace(version), " ")
+	have, ok := parseVersion(release)
 	if !ok {
 		return nil
 	}
 	if less(have, want) {
-		return fmt.Errorf("%s requires esec %s, and this is %s: update it (go install github.com/mscno/esec/cmd/esec@latest, or a release from https://github.com/mscno/esec/releases)", ProjectFileName, strings.TrimSpace(f.Requires), strings.Fields(version + " ")[0])
+		return fmt.Errorf("%s requires esec %s, and this is %s: update it (go install github.com/mscno/esec/cmd/esec@latest, or a release from https://github.com/mscno/esec/releases)", ProjectFileName, strings.TrimSpace(f.Requires), release)
 	}
 	return nil
 }

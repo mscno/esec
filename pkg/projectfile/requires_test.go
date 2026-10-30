@@ -19,6 +19,8 @@ func TestCheckRequires(t *testing.T) {
 		{">= 0.14", "v0.14.0-rc.1", true},
 		{">= 0.14", "dev", true},
 		{">= 0.14", "(devel)", true},
+		{">= 0.14", "", true},
+		{">= 0.14", "  ", true},
 	} {
 		f := &File{Project: "acme/store", Requires: tc.requires}
 		err := f.CheckRequires(tc.version)
