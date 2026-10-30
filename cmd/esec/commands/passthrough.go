@@ -12,6 +12,7 @@ import (
 // subcommand passthrough).
 var builtinCommands = map[string]bool{
 	"keygen":       true,
+	"setup":        true,
 	"encrypt":      true,
 	"decrypt":      true,
 	"export":       true,
