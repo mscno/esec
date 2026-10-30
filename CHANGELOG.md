@@ -1,3 +1,15 @@
+# v0.17.0
+
+- **Environment names match exactly.** Removed built-in and configured
+  environment aliases from file discovery and private-key lookup. `prod`
+  no longer discovers `production` or reads `ESEC_PRIVATE_KEY_PRODUCTION`,
+  and the reverse is also true. The same applies to `dev`/`development`
+  and `stage`/`staging`. Use the environment's exact name or an explicit
+  filename; existing encrypted files and keys do not need rotation.
+- Removed `[aliases]` from the shared preferences. Delete that section from
+  `~/.config/esec/config.toml` (or `ESEC_CONFIG`); it is now rejected as an
+  unknown field rather than silently selecting another environment.
+
 # v0.16.0
 
 - **`esec setup`** creates a project, or adds environments, from a wizard or
