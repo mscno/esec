@@ -234,9 +234,34 @@ To pass the values to another tool, use `esec export`. It prints only
 esec export production -f env | fly secrets import
 ```
 
-`esec run` reads private keys directly. For daemon-controlled access, use
-`esec vault run` with an unlocked broker and an allow rule for the project.
-See the [broker guide](https://github.com/mscno/esec-vault#run-applications-through-the-broker).
+`esec decrypt`, `esec get`, `esec export` and `esec run` select the read route
+from the resolved file's project and protection. Unguarded keys read locally;
+a personal identity can open its ordinary seal without a separate sync.
+Guarded reads use the local daemon before any ordinary cached key is tried.
+An explicit age workload identity opens only a seal that authorizes it.
+Public-key-addressed process credentials from `esec vault machine run` also
+remain direct; ordinary named variables and keyring entries alone never
+select that workload route for a guarded environment.
+
+```sh
+esec inspect production
+esec inspect .env.production --json
+esec decrypt .env.production
+esec run production -- ./server
+```
+
+`inspect` opens no private keys or seals and asks for no approval. It reports
+public metadata, key availability, guard, route and blocking reason codes.
+A present key or configured identity remains unverified until actually used.
+The file's location determines its project, including custom filename patterns
+and explicit files outside the current checkout. Environment names stay exact.
+
+For guarded reads, install esec-vault v0.28.0 or later and run
+`esec vault setup` (or `esec vault daemon upgrade` after updating an existing
+service). The daemon returns a decrypted document, never the private key.
+`decrypt` keeps the same file format and output on both routes; `get`, `export`
+and `run` parse that same document. Missing hardware or consent fails explicitly.
+See the [read and consent guide](https://github.com/mscno/esec-vault#run-applications-through-the-broker).
 
 ### Step 4: Commit encrypted files and back up the keys
 
@@ -866,13 +891,16 @@ project's `esec.toml` with the age identity in `ESEC_AGE_IDENTITY` or
 `ESEC_AGE_IDENTITY_FILE` (see
 [sealed keys](#sealed-keys-ci-and-deploys-with-esec-alone)).
 
-A guarded environment's key is sealed to its readers' security keys only, so
-no identity esec can be given opens it. With an environment name,
-`esec run`, `esec decrypt` and `esec get` then hand the read to
-`esec vault run` or `esec vault decrypt` when esec-vault is installed: its
-background service shows a dialog and waits for your touch. `esec decrypt`
-then prints `KEY=value` lines, not the file. `esec export` does not hand
-over, since tools read its output.
+For ordinary personal reads, the local identity in the configured secret
+store can open a reader's seal. No cloud request is made during this read.
+For guarded reads, the shared planner selects the daemon before ordinary
+cached keys, including when a filename is supplied. Session protection opens
+for a bounded session; touch protection opens for each read. Explicit age
+identities for CI and deploys remain unattended when the seal authorizes them.
+
+The same plaintext document is returned on every route: `esec decrypt` does
+not switch to dotenv output for guarded JSON, YAML or TOML files. Inspect the
+route and any blockers first with `esec inspect ENV --json`.
 
 ### 4. Key names: environment chain and public key
 
@@ -1272,3 +1300,8 @@ need no public key; it is inserted automatically. Defaults are encrypted in
 memory before writing. Examples must contain public dummy values, not real
 credentials; string fields starting with `_` and numeric/boolean values are
 not encrypted by the esec formats. Use `--no-template` for key-only setup.
+
+Inside an `esec vault forward` session, the same guarded `esec decrypt` and
+`esec run` commands use the forwarded broker. Only ciphertext and the sealed
+key are sent to it; inspection reports local metadata and remote approval
+requirements without asking the remote machine to open a key.

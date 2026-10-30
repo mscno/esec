@@ -49,6 +49,7 @@ func commandExit(err error) (int, bool) {
 }
 
 type cli struct {
+	Inspect InspectCmd `cmd:"" help:"Explain a read: file, reader, key, guard, route and blockers; no secrets or prompts"`
 	Keygen  KeygenCmd  `cmd:"" help:"Generate a new keypair"`
 	Setup   SetupCmd   `cmd:"" help:"Create a project, or add environments, from a wizard or flags"`
 	Encrypt EncryptCmd `cmd:"" help:"Encrypt a secrets file in place"`

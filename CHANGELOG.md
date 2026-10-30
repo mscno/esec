@@ -1,3 +1,26 @@
+# v0.18.0
+
+Pairs with esec-vault v0.28.0 for daemon reads. Upgrade the managed daemon
+with `esec vault daemon upgrade` after installing it.
+
+- **One read interface.** `decrypt`, `get`, `export` and `run` use one exact
+  resolver and access planner. Explicit filenames resolve in their own
+  project; custom patterns and shared-key protection are respected.
+  Guarded reads select the daemon before ordinary cached keys. Explicit
+  age workload identities and explicit public-key-addressed process keys remain unattended authorized recipients.
+- **Consistent output.** The daemon returns a document rather than a
+  transformed environment map. `decrypt` preserves its original format;
+  `get`, `export` and `run` parse the same document on either route.
+- **`esec inspect ENV [--json]`** reports public identity metadata, file,
+  key availability, seal integrity, guard, route and stable blocker codes.
+  It opens no secret-store entries or seals and requests no approval.
+  Presence is distinguished from verified usability.
+- **Personal reader seals** can open directly with the identity in this
+  machine's configured secret store; no cloud request or sync is needed.
+- Shared seal record types and signature checks are now in `pkg/seal`, so
+  core and vault use the same metadata when planning reads. Old daemons
+  fail with an upgrade instruction rather than changing output formats.
+
 # v0.17.0
 
 - **Environment names match exactly.** Removed built-in and configured

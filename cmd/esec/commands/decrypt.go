@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mscno/esec"
 	"github.com/mscno/esec/pkg/fileutils"
 )
 
@@ -55,13 +54,11 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 	ctx.Logger.Debug("file details", "path", fileName, "size", fileInfo.Size(), "mode", fileInfo.Mode())
 
 	ctx.Logger.Debug("decrypting file", "path", fileName)
-	data, err := esec.DecryptFile(fileName, c.KeyDir, key)
+	data, err := readDocument(fileName, c.Format, c.KeyDir, key)
 	if err != nil {
 		ctx.Logger.Debug("decryption failed", "path", fileName, "error", err)
 		// esec vault prints KEY=value lines, not the file.
-		return viaVault(fmt.Errorf("decrypting file %s: %w", fileName, err), c.File, func(env string) []string {
-			return withFormat([]string{"decrypt", env}, c.Format)
-		})
+		return err
 	}
 
 	ctx.Logger.Debug("decryption successful", "path", fileName, "bytes", len(data))

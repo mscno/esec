@@ -1,11 +1,12 @@
 package commands
 
 import (
-	"errors"
+	"encoding/json"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
-	"reflect"
+	"strings"
 	"testing"
 
 	"filippo.io/age"
@@ -58,69 +59,59 @@ func guardedRepo(t *testing.T, guard string) {
 	t.Chdir(repo)
 }
 
-// fakeVault puts an esec-vault on PATH and records what esec would run.
-func fakeVault(t *testing.T) *[][]string {
-	t.Helper()
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "esec-vault"), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil { //nolint:gosec // an executable test fixture
+func TestGuardedReadsUseDocumentProtocolForNamesAndFiles(t *testing.T) {
+	guardedRepo(t, projectfile.GuardTouch)
+	dir, err := os.MkdirTemp("", "esec-read-") //nolint:usetesting // Darwin Unix sockets need a short path
+	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	var calls [][]string
-	orig := execExternalFn
-	t.Cleanup(func() { execExternalFn = orig })
-	execExternalFn = func(_ string, args []string) int {
-		calls = append(calls, args)
-		return 7
+	defer os.RemoveAll(dir)
+	sock := filepath.Join(dir, "r.sock")
+	t.Setenv("ESEC_VAULT_SOCK", sock)
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return &calls
-}
-
-// run, decrypt and get of a guarded environment, whose key esec cannot be
-// given, are handed to esec vault, which asks for the touch.
-func TestGuardedReadsGoThroughVault(t *testing.T) {
-	guardedRepo(t, projectfile.GuardTouch)
-	calls := fakeVault(t)
-	ctx := &cliCtx{Logger: slog.New(slog.DiscardHandler)}
-
-	for _, tc := range []struct {
-		cmd  interface{ Run(ctx *cliCtx) error }
-		want []string
-	}{
-		{&DecryptCmd{File: "prod", KeyDir: "."}, []string{"decrypt", "prod"}},
-		{&GetCmd{File: "prod", Key: "API", KeyDir: "."}, []string{"decrypt", "prod", "API"}},
-		{&RunCmd{File: "prod", Format: "env", KeyDir: ".", Command: []string{"./deploy", "--now"}}, []string{"run", "prod", "--format", "env", "--", "./deploy", "--now"}},
-	} {
-		*calls = nil
-		err := tc.cmd.Run(ctx)
-		var exit *ExitError
-		if !errors.As(err, &exit) || exit.Code != 7 {
-			t.Fatalf("%T: %v, want esec vault's exit code", tc.cmd, err)
+	defer ln.Close()
+	done := make(chan struct{})
+	defer close(done)
+	target, err := esec.ResolveRead(".", "prod", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			func() {
+				defer conn.Close()
+				var req map[string]string
+				if json.NewDecoder(conn).Decode(&req) != nil {
+					return
+				}
+				if req["op"] != "read_document" || req["env"] != "prod" {
+					if err := json.NewEncoder(conn).Encode(map[string]any{"ok": false, "error": "wrong canonical read"}); err != nil {
+						t.Error(err)
+					}
+					return
+				}
+				if err := json.NewEncoder(conn).Encode(map[string]any{"ok": true, "document": []byte("ESEC_PUBLIC_KEY=" + target.PublicKey + "\nAPI=sk_live\n")}); err != nil {
+					t.Error(err)
+				}
+			}()
 		}
-		if len(*calls) != 1 || !reflect.DeepEqual((*calls)[0], tc.want) {
-			t.Fatalf("%T ran %v, want %v", tc.cmd, *calls, tc.want)
-		}
-	}
-
-	// A file path is esec's own to resolve: the error stands.
-	*calls = nil
-	if err := (&DecryptCmd{File: ".env.prod", KeyDir: "."}).Run(ctx); !errors.Is(err, esec.ErrKeyNotFound) || len(*calls) != 0 {
-		t.Fatalf("a path was handed over: %v %v", err, *calls)
-	}
-	// Without esec-vault the error says how to read it.
-	t.Setenv("PATH", t.TempDir())
-	if err := (&DecryptCmd{File: "prod", KeyDir: "."}).Run(ctx); !errors.Is(err, esec.ErrKeyNotFound) || len(*calls) != 0 {
-		t.Fatalf("without esec-vault: %v %v", err, *calls)
-	}
-}
-
-// A sealed key that is not guarded is not handed over: a reader's identity
-// opens it, and esec says so.
-func TestUnguardedSealStaysWithEsec(t *testing.T) {
-	guardedRepo(t, projectfile.GuardNone)
-	calls := fakeVault(t)
+	}()
 	ctx := &cliCtx{Logger: slog.New(slog.DiscardHandler)}
-	if err := (&DecryptCmd{File: "prod", KeyDir: "."}).Run(ctx); !errors.Is(err, esec.ErrKeyNotFound) || len(*calls) != 0 {
-		t.Fatalf("unguarded: %v %v", err, *calls)
+	for _, input := range []string{"prod", ".env.prod"} {
+		got, msg := captureOutput(func() error { return (&DecryptCmd{File: input, KeyDir: "."}).Run(ctx) })
+		if msg != "" || !strings.Contains(got, "API=sk_live") {
+			t.Fatalf("decrypt %s: %q %s", input, got, msg)
+		}
+		got, msg = captureOutput(func() error { return (&GetCmd{File: input, Key: "API", KeyDir: "."}).Run(ctx) })
+		if msg != "" || got != "sk_live" {
+			t.Fatalf("get %s: %q %s", input, got, msg)
+		}
 	}
 }

@@ -32,7 +32,7 @@ func decryptEnvVars(ctx *cliCtx, file, formatFlag, keyDir string, keyFromStdin b
 		return nil, "", fmt.Errorf("unsupported format %s: use .env, .ejson or .etoml", fileFormat)
 	}
 
-	data, err := esec.DecryptFile(fileName, keyDir, key)
+	data, err := readDocument(fileName, formatFlag, keyDir, key)
 	if err != nil {
 		return nil, "", fmt.Errorf("decrypting file %s: %w", fileName, err)
 	}

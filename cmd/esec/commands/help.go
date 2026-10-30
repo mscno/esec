@@ -28,12 +28,19 @@ Commands take a filename or discover an environment across supported formats and
     esec get prod DATABASE_URL         # print one value
     esec export .env.prod              # NAME=value lines
     esec run prod -- ./server          # run with the values as environment variables
+    esec inspect prod                  # explain the read route without opening keys
 
 Scripts and agents: output goes to stdout and messages to stderr; "esec help <command>" explains one. Exit codes: 0 done, 1 failed, 80 bad usage; run returns its command's code.`
 
 // commandDetails are the explanations and examples "esec <command> --help"
 // shows, by command path.
 var commandDetails = map[string]string{
+	"inspect": `Resolves the same exact file, environment and protection as decrypt and run. Shows public metadata only: no secret-store entries are read, no seal opens, no hardware or approval is requested. Unknown availability stays unverified.
+
+Examples:
+    esec inspect production
+    esec inspect .env.production --json
+`,
 	"setup": `Creates a project, or adds environments to the one already here. It writes esec.toml, a key and a secrets file for each environment. With esec-vault signed in, it checks that the name is free and stores the keys through vault. Without that, pass --local to keep keys on this machine only. This is not "esec vault setup", which creates your personal identity.
 
 ` + examples(
