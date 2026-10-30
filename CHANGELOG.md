@@ -1,3 +1,13 @@
+# v0.14.0
+
+- **`requires` in `esec.toml`:** the oldest esec that may work with the
+  project, such as `requires = ">= 0.14"`. esec refuses to run in the
+  project when it is older, and says how to update; a development build
+  (`dev`) is not checked. `projectfile.File.CheckRequires` lets other tools
+  apply the same rule. Versions before v0.14.0 list the key as unknown and
+  carry on.
+- README: install esec once per machine rather than pinning it per project.
+
 # v0.13.0
 
 - **`esec run`, `esec decrypt` and `esec get` read guarded environments.**

@@ -57,9 +57,13 @@ var ErrNotFound = errors.New("project file not found")
 
 // File is the content of esec.toml.
 type File struct {
-	Project string         `toml:"project"`
-	Files   Files          `toml:"files,omitempty"`
-	Env     map[string]Env `toml:"env,omitempty"`
+	Project string `toml:"project"`
+	// Requires is the oldest esec that may work with this project, such as
+	// ">= 0.14" (CheckRequires). Older versions cannot enforce it: they list
+	// it as unknown and carry on.
+	Requires string         `toml:"requires,omitempty"`
+	Files    Files          `toml:"files,omitempty"`
+	Env      map[string]Env `toml:"env,omitempty"`
 
 	// raw and orig are the file as read, so Save changes only what changed
 	// and keeps comments and layout.

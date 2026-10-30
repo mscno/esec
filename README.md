@@ -165,6 +165,18 @@ printf 'project = "acme/store"\n' > esec.toml
 Use `org/repo` or `org/repo/subproject`. Changing the id does not move
 existing keys to the new project ID.
 
+Install esec once per machine rather than pinning it in each project: it
+has to match esec vault and your keyrings. When a project needs a newer esec
+(for example for sealed keys), say so in `esec.toml`:
+
+```toml
+requires = ">= 0.14"
+```
+
+esec v0.14.0 and later then refuse to work in the project when they are
+older, and say how to update. Older versions cannot check it: they list
+`requires` as an unknown key and carry on.
+
 ### Step 2: Add values and encrypt the file
 
 Keep the generated `ESEC_PUBLIC_KEY` line. Add your values below it:
