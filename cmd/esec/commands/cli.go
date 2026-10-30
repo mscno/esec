@@ -83,10 +83,7 @@ func Execute(version string) {
 	// Make the library package log through the same handler.
 	slog.SetDefault(logger)
 
-	err = checkRequires(ctx.Command(), version)
-	if err == nil {
-		err = ctx.Run(&cliCtx{Logger: logger, Quiet: cli.Quiet})
-	}
+	err = ctx.Run(&cliCtx{Logger: logger, Quiet: cli.Quiet})
 
 	// Commands may request a specific process exit code (e.g. `run` forwarding
 	// the exit code of its child process).

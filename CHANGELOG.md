@@ -1,3 +1,9 @@
+# v0.15.0
+
+- Removed `requires` in `esec.toml` and `projectfile.File.CheckRequires`
+  (added in v0.14.0): a too-old esec reports its own error. A file that
+  still has `requires` works; esec lists the key as unknown.
+
 # v0.14.1
 
 - Fix: `projectfile.File.CheckRequires` panicked when given an empty
