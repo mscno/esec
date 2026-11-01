@@ -1,3 +1,10 @@
+# v0.18.1
+
+- Update setup and backup guidance for server-first esec-vault v0.29.0.
+  Local keyrings and existing encrypt/decrypt commands remain compatible.
+- Keep the unified read and inspection API from v0.18.0; GUI and editor
+  integrations now use that published interface.
+
 # v0.18.0
 
 Pairs with esec-vault v0.28.0 for daemon reads. Upgrade the managed daemon
