@@ -165,10 +165,12 @@ func TestSetupRefusesExistingProjectWithoutAdd(t *testing.T) {
 	}
 }
 
-func TestSetupEncryptsExampleTemplate(t *testing.T) {
+func TestSetupNeverCopiesExampleTemplates(t *testing.T) {
 	dir := isolateSetup(t)
-	if err := os.WriteFile(filepath.Join(dir, "example.env"), []byte("DATABASE_URL=postgres://localhost/db\n"), 0o600); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"example.env", ".env.example"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("DATABASE_URL=postgres://localhost/db\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := (&SetupCmd{Project: "acme/store", Env: "dev", Format: "env", Yes: true, Local: true}).Run(setupCtx()); err != nil {
 		t.Fatal(err)
@@ -178,8 +180,8 @@ func TestSetupEncryptsExampleTemplate(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(body)
-	if strings.Contains(text, "postgres://") || !strings.Contains(text, "ESEC[") || !strings.Contains(text, "ESEC_PUBLIC_KEY=") {
-		t.Fatalf("template not encrypted: %s", text)
+	if strings.Contains(text, "DATABASE_URL") || strings.Contains(text, "ESEC[") || !strings.HasPrefix(text, "ESEC_PUBLIC_KEY=") || strings.Count(text, "\n") != 1 {
+		t.Fatal("new file must contain only its public key")
 	}
 }
 

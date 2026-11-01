@@ -1,8 +1,6 @@
 package commands
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -10,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/mscno/esec"
-	"github.com/mscno/esec/pkg/config"
 	"github.com/mscno/esec/pkg/projectfile"
 )
 
@@ -29,7 +26,7 @@ func applySetup(ctx *cliCtx, sc *setupContext, p setupPlan) error {
 }
 
 func applyLocal(ctx *cliCtx, sc *setupContext, p setupPlan) error {
-	keys, notes, err := buildLocal(sc, p)
+	keys, err := buildLocal(sc, p)
 	if err != nil {
 		return err
 	}
@@ -50,6 +47,7 @@ func applyLocal(ctx *cliCtx, sc *setupContext, p setupPlan) error {
 	if err := writeProject(sc, p, keys); err != nil {
 		return fmt.Errorf("wrote keys and files, then failed on esec.toml: %w", err)
 	}
+	var notes []string
 	if added, ignored, err := ensureGitignore(sc.Dir, p.Format); err != nil {
 		say(ctx, "could not update .gitignore: %s", err.Error())
 	} else {
@@ -78,37 +76,30 @@ type localKey struct {
 	body                       []byte
 }
 
-func buildLocal(sc *setupContext, p setupPlan) ([]localKey, []string, error) {
+func buildLocal(sc *setupContext, p setupPlan) ([]localKey, error) {
 	var keys []localKey
-	var notes []string
 	for _, env := range p.Envs {
 		pub, priv, err := esec.GenerateKeypair()
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		file, err := p.filename(env, sc)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		path := filepath.Join(sc.Dir, file)
 		if err := within(sc.Dir, path); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if _, err := os.Lstat(path); err == nil {
-			return nil, nil, fmt.Errorf("secrets file %s already exists; not overwritten", file)
+			return nil, fmt.Errorf("secrets file %s already exists; not overwritten", file)
 		} else if !errors.Is(err, os.ErrNotExist) {
-			return nil, nil, err
+			return nil, err
 		}
-		body, note, err := materialize(sc, p.Format, pub, env)
-		if err != nil {
-			return nil, nil, err
-		}
-		if note != "" {
-			notes = append(notes, note)
-		}
+		body := []byte(skeleton(p.Format, pub))
 		keys = append(keys, localKey{env: env, pub: pub, priv: priv, file: file, path: path, body: body})
 	}
-	return keys, notes, nil
+	return keys, nil
 }
 
 func writeProject(sc *setupContext, p setupPlan, keys []localKey) error {
@@ -136,54 +127,6 @@ func writeProject(sc *setupContext, p setupPlan, keys []localKey) error {
 	return f.Save(sc.Dir)
 }
 
-func materialize(sc *setupContext, format, pub, env string) ([]byte, string, error) {
-	name, body, ok := findTemplate(sc.Dir, format, sc.Config)
-	if !ok {
-		return []byte(skeleton(format, pub)), "", nil
-	}
-	with, err := withPublicKey(format, body, pub)
-	if err != nil {
-		return templateSkipped(format, pub, name, env)
-	}
-	var buf bytes.Buffer
-	if _, err := esec.Encrypt(bytes.NewReader(with), &buf, esec.FileFormat("."+format)); err != nil {
-		return nil, "", fmt.Errorf("encrypt %s for %s: %w", name, env, err)
-	}
-	out := buf.Bytes()
-	if len(out) == 0 || out[len(out)-1] != '\n' {
-		out = append(out, '\n')
-	}
-	return out, "", nil
-}
-
-func templateSkipped(format, pub, name, env string) ([]byte, string, error) {
-	return []byte(skeleton(format, pub)), fmt.Sprintf("%s could not be used; wrote a public-key skeleton for %s", name, env), nil
-}
-
-func findTemplate(dir, format string, cfg config.Config) (string, []byte, bool) {
-	patterns := cfg.Files.Templates
-	if len(patterns) == 0 {
-		patterns = []string{"example.{format}", ".{format}.example"}
-	}
-	token := strings.TrimPrefix(format, ".")
-	for _, pat := range patterns {
-		name := strings.NewReplacer("{format}", token, "{env}", "example").Replace(pat)
-		if strings.ContainsAny(name, "{}") || !filepath.IsLocal(name) {
-			continue
-		}
-		path := filepath.Join(dir, name)
-		if err := within(dir, path); err != nil {
-			continue
-		}
-		b, err := os.ReadFile(path) //nolint:gosec // path is a relative template name inside the project directory
-		if err != nil {
-			continue
-		}
-		return name, b, true
-	}
-	return "", nil, false
-}
-
 func skeleton(format, pub string) string {
 	switch format {
 	case "ejson":
@@ -195,71 +138,6 @@ func skeleton(format, pub string) string {
 	default:
 		return "ESEC_PUBLIC_KEY=" + pub + "\n"
 	}
-}
-
-func withPublicKey(format string, body []byte, pub string) ([]byte, error) {
-	switch format {
-	case "ejson":
-		return insertJSONKey(body, pub)
-	case "eyaml", "eyml":
-		return insertPrefixedKey(body, "_ESEC_PUBLIC_KEY: "+pub, "_ESEC_PUBLIC_KEY:", "ESEC_PUBLIC_KEY:"), nil
-	case "etoml":
-		return insertPrefixedKey(body, "_ESEC_PUBLIC_KEY = \""+pub+"\"", "_ESEC_PUBLIC_KEY", "ESEC_PUBLIC_KEY"), nil
-	default:
-		return insertPrefixedKey(body, "ESEC_PUBLIC_KEY="+pub, "ESEC_PUBLIC_KEY=", "_ESEC_PUBLIC_KEY="), nil
-	}
-}
-
-func insertJSONKey(body []byte, pub string) ([]byte, error) {
-	if len(bytes.TrimSpace(body)) == 0 {
-		body = []byte("{}")
-	}
-	var obj map[string]any
-	if err := json.Unmarshal(body, &obj); err != nil {
-		return nil, err
-	}
-	delete(obj, "ESEC_PUBLIC_KEY")
-	obj["_ESEC_PUBLIC_KEY"] = pub
-	out, err := json.MarshalIndent(obj, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	return append(out, '\n'), nil
-}
-
-func insertPrefixedKey(body []byte, line string, prefixes ...string) []byte {
-	s := string(body)
-	if s != "" && !strings.HasSuffix(s, "\n") {
-		s += "\n"
-	}
-	var out []string
-	found := false
-	for _, l := range strings.Split(s, "\n") {
-		trim := strings.TrimSpace(l)
-		match := false
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(trim, prefix) {
-				match = true
-				break
-			}
-		}
-		if match {
-			if !found {
-				out = append(out, line)
-				found = true
-			}
-			continue
-		}
-		out = append(out, l)
-	}
-	if !found {
-		out = append([]string{line}, out...)
-	}
-	res := strings.Join(out, "\n")
-	if !strings.HasSuffix(res, "\n") {
-		res += "\n"
-	}
-	return []byte(res)
 }
 
 func writeNewFile(path string, body []byte) error {

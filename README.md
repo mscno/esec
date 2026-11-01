@@ -1245,7 +1245,7 @@ ESEC[<version>:<public-key>:<nonce>:<ciphertext>]
 Encryption uses NaCl box (Curve25519, XSalsa20, Poly1305).
 
 
-## File discovery, TOML run and example templates
+## File discovery, TOML run and new secrets files
 
 Commands discover an environment across supported formats, without picking the
 first match. For example, `esec decrypt prod` searches `.ejson.prod`,
@@ -1293,13 +1293,17 @@ remove any existing `[aliases]` section from your config.
 Explicit creation `--format` wins over `ESEC_FORMAT` and the configured default.
 The built-in creation default remains dotenv with legacy `.env.<env>` names.
 
-With the companion esec-vault, `project init` and `env add` create encrypted
-files from `example.etoml`, `example.ejson`, or `.env.example` for the selected
-format. Without an example they create an empty public-key skeleton. Templates
-need no public key; it is inserted automatically. Defaults are encrypted in
-memory before writing. Examples must contain public dummy values, not real
-credentials; string fields starting with `_` and numeric/boolean values are
-not encrypted by the esec formats. Use `--no-template` for key-only setup.
+`esec setup --local` creates new secrets files containing only their public key.
+With esec-vault v0.29.5+, `project init` and `env add` do the same. None of these
+commands copies `.env.example`, `example.etoml`, or other example files; their
+legacy `files.templates` preference is ignored. Add the values you need explicitly.
+Use `--no-template` with vault commands for key-only creation.
+
+Vault `project init` asks before adding a missing public key and encrypting
+existing plaintext in place; `--yes` approves that operation in scripts.
+Matching encrypted files stay unchanged, and missing/mismatched keys produce
+specific errors instead of silently replacing keys. Core local setup continues
+to refuse existing destination files.
 
 Inside an `esec vault forward` session, the same guarded `esec decrypt` and
 `esec run` commands use the forwarded broker. Only ciphertext and the sealed

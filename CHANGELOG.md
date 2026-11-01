@@ -1,3 +1,10 @@
+# v0.18.3
+
+- Local setup now creates new secrets files with only their public key. Never
+  copy values from `.env.example` or other configured example templates.
+- Pairs with esec-vault v0.29.5, which asks before encrypting existing plaintext
+  during project initialization and preserves already-encrypted files.
+
 # v0.18.2
 
 - Add successful-read route metadata for GUI integrations, including local keys,
