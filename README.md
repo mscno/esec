@@ -227,7 +227,7 @@ the encrypted files, and the `.gitignore` update.
 esec encrypt staging -f env
 esec encrypt prod -f env
 git add esec.toml .gitignore .env.dev .env.staging .env.prod
-esec vault backup --verify --push
+esec vault sync --server
 ```
 
 If your repository ignores all `.env.*` files, add an exception for the specific
@@ -562,12 +562,12 @@ such as `registry.prod` are supported. The companion CLI can scaffold the
 whole project and handle encrypted, recoverable cloud backups:
 
 ```sh
-esec vault setup                      # identity, backup destination, background service
+esec vault setup --server SERVER      # sign in, recover keys, start background service
 esec vault project init myorg/myapp --env dev,staging,prod
-esec vault backup --verify --push
+esec vault sync --server
 ```
 
-See [esec-vault](https://github.com/mscno/esec-vault) for remote configuration,
+See [esec-vault](https://github.com/mscno/esec-vault) for server sign-in,
 recovery and unattended operation. `ESEC_VAULT_HOME` is respected by both CLIs
 for the default keyring directory; `ESEC_KEYRING_DIR` takes precedence.
 
