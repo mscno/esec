@@ -113,7 +113,27 @@ Use different keys for environments that need different access.
 
 ### Step 1: Create the project file and environment keys
 
-Run this command from the project root:
+From the project root, `esec setup` opens a wizard: project id, environments
+(`dev`, `staging`, `test`, `production`, `ops`, or your own names), format,
+and, when esec-vault is signed in, a name check, guard and readers. It then
+writes `esec.toml` and a secrets file for each environment, and stores the
+private keys. This is not `esec vault setup`, which creates your personal
+identity.
+
+```sh
+esec setup
+esec setup --project acme/store --env dev,staging,production --format env --yes
+esec setup --add --env ops --yes
+```
+
+With esec-vault v0.26.0 or later signed in, the wizard checks that the tenant and project id
+are free (`esec vault project check`), then runs `esec vault project init` and shares any extra readers.
+Without it, pass `--local`: files and keys are written on this machine only,
+the name is not reserved, and guard and readers are not recorded. A terminal
+is optional; without one, pass `--yes` and the flags above. A missing flag
+exits 80 and names it.
+
+The same result, without the wizard, is `esec vault project init`:
 
 ```sh
 cd ~/projects/store
@@ -214,9 +234,34 @@ To pass the values to another tool, use `esec export`. It prints only
 esec export production -f env | fly secrets import
 ```
 
-`esec run` reads private keys directly. For daemon-controlled access, use
-`esec vault run` with an unlocked broker and an allow rule for the project.
-See the [broker guide](https://github.com/mscno/esec-vault#run-applications-through-the-broker).
+`esec decrypt`, `esec get`, `esec export` and `esec run` select the read route
+from the resolved file's project and protection. Unguarded keys read locally;
+a personal identity can open its ordinary seal without a separate sync.
+Guarded reads use the local daemon before any ordinary cached key is tried.
+An explicit age workload identity opens only a seal that authorizes it.
+Public-key-addressed process credentials from `esec vault machine run` also
+remain direct; ordinary named variables and keyring entries alone never
+select that workload route for a guarded environment.
+
+```sh
+esec inspect production
+esec inspect .env.production --json
+esec decrypt .env.production
+esec run production -- ./server
+```
+
+`inspect` opens no private keys or seals and asks for no approval. It reports
+public metadata, key availability, guard, route and blocking reason codes.
+A present key or configured identity remains unverified until actually used.
+The file's location determines its project, including custom filename patterns
+and explicit files outside the current checkout. Environment names stay exact.
+
+For guarded reads, install esec-vault v0.28.0 or later and run
+`esec vault setup` (or `esec vault daemon upgrade` after updating an existing
+service). The daemon returns a decrypted document, never the private key.
+`decrypt` keeps the same file format and output on both routes; `get`, `export`
+and `run` parse that same document. Missing hardware or consent fails explicitly.
+See the [read and consent guide](https://github.com/mscno/esec-vault#run-applications-through-the-broker).
 
 ### Step 4: Commit encrypted files and back up the keys
 
@@ -763,7 +808,7 @@ asks for `--format` or a path.
 | Command | Resolves To | Key used |
 |---------|-------------|----------|
 | `esec encrypt dev` | the one `dev` file, such as `.env.dev` | Public key stored in the file |
-| `esec decrypt prod` | the one `prod` file (also `production`) | `ESEC_PRIVATE_KEY_PROD` |
+| `esec decrypt prod` | the one `prod` file | `ESEC_PRIVATE_KEY_PROD` |
 | `esec decrypt dev -f env` | `.env.dev` | `ESEC_PRIVATE_KEY_DEV` |
 | `esec decrypt .ejson.dev` | `.ejson.dev` | `ESEC_PRIVATE_KEY_DEV` |
 
@@ -846,13 +891,16 @@ project's `esec.toml` with the age identity in `ESEC_AGE_IDENTITY` or
 `ESEC_AGE_IDENTITY_FILE` (see
 [sealed keys](#sealed-keys-ci-and-deploys-with-esec-alone)).
 
-A guarded environment's key is sealed to its readers' security keys only, so
-no identity esec can be given opens it. With an environment name,
-`esec run`, `esec decrypt` and `esec get` then hand the read to
-`esec vault run` or `esec vault decrypt` when esec-vault is installed: its
-background service shows a dialog and waits for your touch. `esec decrypt`
-then prints `KEY=value` lines, not the file. `esec export` does not hand
-over, since tools read its output.
+For ordinary personal reads, the local identity in the configured secret
+store can open a reader's seal. No cloud request is made during this read.
+For guarded reads, the shared planner selects the daemon before ordinary
+cached keys, including when a filename is supplied. Session protection opens
+for a bounded session; touch protection opens for each read. Explicit age
+identities for CI and deploys remain unattended when the seal authorizes them.
+
+The same plaintext document is returned on every route: `esec decrypt` does
+not switch to dotenv output for guarded JSON, YAML or TOML files. Inspect the
+route and any blockers first with `esec inspect ENV --json`.
 
 ### 4. Key names: environment chain and public key
 
@@ -1201,9 +1249,10 @@ Encryption uses NaCl box (Curve25519, XSalsa20, Poly1305).
 
 Commands discover an environment across supported formats, without picking the
 first match. For example, `esec decrypt prod` searches `.ejson.prod`,
-`prod.ejson`, `.etoml.prod`, `prod.etoml`, `.env.prod`, and corresponding
-`production` names. Zero matches fail with searched paths; multiple matches
-fail with candidate names. `--format etoml` filters candidates. An explicit
+`prod.ejson`, `.etoml.prod`, `prod.etoml`, `.env.prod`, and `prod.env`.
+Environment names match exactly: `prod` never discovers `production`,
+`dev` never discovers `development`, and `stage` never discovers `staging`.
+Zero matches fail with searched paths; multiple matches fail with candidate names. `--format etoml` filters candidates. An explicit
 filename selects that file, independently of the format filter. Discovery is
 limited to the current directory and configured relative patterns; it does
 not recursively guess files in other projects.
@@ -1232,19 +1281,14 @@ default_format = "etoml"
 patterns = [".{format}.{env}", "{env}.{format}"]
 create = "{env}.{format}"
 templates = ["example.{format}", ".{format}.example"]
-
-[aliases]
-prod = "production"
-dev = "development"
-stage = "staging"
 ```
 
 The config location honors `ESEC_CONFIG`, then `ESEC_VAULT_HOME`, then
 `XDG_CONFIG_HOME/esec`, then `~/.config/esec`. Unknown fields and unsafe
 patterns fail. Patterns are literal relative paths with placeholders, not
-globs. Alias matching is bidirectional and adds candidates; it never resolves
-ambiguity by precedence. New filenames keep the requested environment name.
-Key lookup tries the file's environment name before its configured aliases.
+globs. New filenames keep the requested environment name. Key lookup does
+not substitute other environment names. Environment aliases are unsupported;
+remove any existing `[aliases]` section from your config.
 `default_format` controls new environment creation, not discovery preference.
 Explicit creation `--format` wins over `ESEC_FORMAT` and the configured default.
 The built-in creation default remains dotenv with legacy `.env.<env>` names.
@@ -1256,3 +1300,8 @@ need no public key; it is inserted automatically. Defaults are encrypted in
 memory before writing. Examples must contain public dummy values, not real
 credentials; string fields starting with `_` and numeric/boolean values are
 not encrypted by the esec formats. Use `--no-template` for key-only setup.
+
+Inside an `esec vault forward` session, the same guarded `esec decrypt` and
+`esec run` commands use the forwarded broker. Only ciphertext and the sealed
+key are sent to it; inspection reports local metadata and remote approval
+requirements without asking the remote machine to open a key.

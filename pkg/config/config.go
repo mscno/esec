@@ -16,9 +16,8 @@ import (
 
 // Config contains preferences shared by esec and esec-vault.
 type Config struct {
-	DefaultFormat string            `toml:"default_format"`
-	Files         Files             `toml:"files"`
-	Aliases       map[string]string `toml:"aliases"`
+	DefaultFormat string `toml:"default_format"`
+	Files         Files  `toml:"files"`
 	// ProjectFormat is the format a project's esec.toml fixes for its
 	// secrets files; discovery then looks for that format only.
 	ProjectFormat string `toml:"-"`
@@ -36,7 +35,7 @@ func Defaults() Config {
 	return Config{DefaultFormat: "env", Files: Files{
 		Patterns: []string{".{format}.{env}", "{env}.{format}"},
 		Create:   ".{format}.{env}", Templates: []string{"example.{format}", ".{format}.example"},
-	}, Aliases: map[string]string{"prod": "production", "dev": "development", "stage": "staging"}}
+	}}
 }
 
 // Path follows esec-vault's existing config home, with a file-level override.
@@ -129,11 +128,6 @@ func (c Config) Validate() error {
 		}
 		if _, err := Expand(p, "prod", "etoml"); err != nil {
 			return err
-		}
-	}
-	for a, b := range c.Aliases {
-		if ValidateEnvironment(a) != nil || ValidateEnvironment(b) != nil || a == "" || b == "" {
-			return errors.New("aliases must map nonempty environment names to environment names")
 		}
 	}
 	return nil

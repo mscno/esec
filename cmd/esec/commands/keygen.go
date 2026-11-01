@@ -12,6 +12,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/mscno/esec"
+	"github.com/mscno/esec/pkg/config"
 	"github.com/mscno/esec/pkg/filelock"
 	"github.com/mscno/esec/pkg/keyringfile"
 	"github.com/mscno/esec/pkg/projectfile"
@@ -86,13 +87,28 @@ func (c *KeygenCmd) save(pub, priv string) error {
 		}
 		project = p
 	}
-	if err := projectfile.ValidateOrgRepo(project); err != nil {
-		return err
-	}
 	if c.Env != "" {
 		if _, err := processFileOrEnv(c.Env, ".ejson"); err != nil || strings.HasPrefix(c.Env, ".") || strings.ContainsAny(c.Env, "/\\") {
 			return fmt.Errorf("invalid environment %q", c.Env)
 		}
+	}
+	return saveProjectKeys(project, []projectKey{{env: c.Env, pub: pub, priv: priv}})
+}
+
+// projectKey is one environment key to store in the project keyring.
+// pub and priv are hex; they are never printed.
+type projectKey struct {
+	env, pub, priv string
+}
+
+// saveProjectKeys stores keys in the global project keyring. An environment
+// that already has a key is refused, and nothing is written in that case.
+func saveProjectKeys(project string, keys []projectKey) error {
+	if err := projectfile.ValidateOrgRepo(project); err != nil {
+		return err
+	}
+	if len(keys) == 0 {
+		return fmt.Errorf("no keys to store")
 	}
 	dir := esec.GlobalKeyringDir()
 	if dir == "" {
@@ -111,15 +127,27 @@ func (c *KeygenCmd) save(pub, priv string) error {
 	if err != nil {
 		return err
 	}
-	if c.Env != "" {
-		name := esec.EsecPrivateKey + "_" + strings.ToUpper(strings.ReplaceAll(c.Env, ".", "_"))
-		if _, ok := entries[name]; ok {
-			return fmt.Errorf("environment %q already has a key", c.Env)
+	for _, k := range keys {
+		if k.pub == "" || k.priv == "" {
+			return fmt.Errorf("missing key material")
 		}
-		entries[name] = priv
+		if k.env != "" {
+			if err := config.ValidateEnvironment(k.env); err != nil {
+				return fmt.Errorf("invalid environment %q", k.env)
+			}
+			name := envPrivateKeyName(k.env)
+			if _, ok := entries[name]; ok {
+				return fmt.Errorf("environment %q already has a key", k.env)
+			}
+			entries[name] = k.priv
+		}
+		entries[esec.EsecPrivateKey+"_"+strings.ToUpper(k.pub)] = k.priv
 	}
-	entries[esec.EsecPrivateKey+"_"+strings.ToUpper(pub)] = priv
 	return writeSavedKeyring(dir, p, project, entries, sealed)
+}
+
+func envPrivateKeyName(env string) string {
+	return esec.EsecPrivateKey + "_" + strings.ToUpper(strings.ReplaceAll(env, ".", "_"))
 }
 
 func readSavedKeyring(p, project string) (map[string]string, bool, error) {

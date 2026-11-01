@@ -19,20 +19,35 @@ const description = `esec encrypts and decrypts secrets files using public-key c
 
 A secrets file (.env, .ejson, .eyaml or .etoml, with an environment suffix such as .env.prod) holds its public key and encrypted values, and is committed. Its private key stays out of the repository: in the variable ESEC_PRIVATE_KEY_<ENV> (ESEC_PRIVATE_KEY_PROD for .env.prod), in a .esec-keyring file, in the global keyring that esec vault manages, or sealed in the repository (.esec/<env>.age) for a reader whose age identity is in ESEC_AGE_IDENTITY or ESEC_AGE_IDENTITY_FILE (CI, deploys).
 
-Commands take a filename or discover an environment across supported formats and naming patterns. "prod" also searches "production". Multiple matches fail; use --format or an explicit path. Preferences live in ~/.config/esec/config.toml.
+Commands take a filename or discover an environment across supported formats and naming patterns. Environment names match exactly: "prod" and "production" are different environments. Multiple matches fail; use --format or an explicit path. Preferences live in ~/.config/esec/config.toml.
 
     esec keygen                        # a key pair to start a file with
+    esec setup                         # wizard: project, environments, files and keys
     esec encrypt prod                  # discover and encrypt the matching file
     esec decrypt prod                  # print it decrypted
     esec get prod DATABASE_URL         # print one value
     esec export .env.prod              # NAME=value lines
     esec run prod -- ./server          # run with the values as environment variables
+    esec inspect prod                  # explain the read route without opening keys
 
 Scripts and agents: output goes to stdout and messages to stderr; "esec help <command>" explains one. Exit codes: 0 done, 1 failed, 80 bad usage; run returns its command's code.`
 
 // commandDetails are the explanations and examples "esec <command> --help"
 // shows, by command path.
 var commandDetails = map[string]string{
+	"inspect": `Resolves the same exact file, environment and protection as decrypt and run. Shows public metadata only: no secret-store entries are read, no seal opens, no hardware or approval is requested. Unknown availability stays unverified.
+
+Examples:
+    esec inspect production
+    esec inspect .env.production --json
+`,
+	"setup": `Creates a project, or adds environments to the one already here. It writes esec.toml, a key and a secrets file for each environment. With esec-vault signed in, it checks that the name is free and stores the keys through vault. Without that, pass --local to keep keys on this machine only. This is not "esec vault setup", which creates your personal identity.
+
+` + examples(
+		"esec setup",
+		"esec setup --project acme/store --env dev,staging,production --format env --yes",
+		"esec setup --add --env ops --yes",
+	),
 	"keygen": `Prints a new key pair. Put the public key in the secrets file as _ESEC_PUBLIC_KEY (ejson) or ESEC_PUBLIC_KEY (env), and keep the private key out of the repository.
 
 ` + examples(
@@ -216,6 +231,9 @@ func envSuffix(name string) string {
 
 // hints says what to do about a failed command, where the error cannot.
 func hints(err error) []string {
+	if h := hintText(err); h != "" {
+		return []string{h}
+	}
 	var nf *esec.KeyNotFoundError
 	if errors.As(err, &nf) {
 		if nf.Guarded && nf.Sealed != "" {
@@ -229,4 +247,15 @@ func hints(err error) []string {
 			"\n  with esec vault: esec vault sync fetches the keys of shared projects; esec vault run <env> -- <command> uses them"}
 	}
 	return nil
+}
+
+// hintText returns a next step carried by err, if it has one.
+func hintText(err error) string {
+	for err != nil {
+		if h, ok := err.(interface{ Hint() string }); ok && h.Hint() != "" {
+			return h.Hint()
+		}
+		err = errors.Unwrap(err)
+	}
+	return ""
 }

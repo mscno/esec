@@ -92,34 +92,22 @@ func regularFile(p string) error {
 }
 
 func discoveryCandidates(dir, input string, formats []FileFormat, c config.Config) (map[string]FileFormat, error) {
-	envs := map[string]bool{input: true}
-	// Aliases are additional discovery candidates, not silent precedence rules.
-	if a, ok := c.Aliases[input]; ok {
-		envs[a] = true
-	}
-	for a, b := range c.Aliases {
-		if b == input {
-			envs[a] = true
-		}
-	}
 	candidates := map[string]FileFormat{}
-	for env := range envs {
-		for _, f := range formats {
-			patterns := c.Files.Patterns
-			if env == "" {
-				patterns = []string{".{format}"}
+	for _, f := range formats {
+		patterns := c.Files.Patterns
+		if input == "" {
+			patterns = []string{".{format}"}
+		}
+		for _, pattern := range patterns {
+			name, err := config.Expand(pattern, input, string(f))
+			if err != nil {
+				return nil, err
 			}
-			for _, pattern := range patterns {
-				name, err := config.Expand(pattern, env, string(f))
-				if err != nil {
-					return nil, err
-				}
-				actual, err := ParseFormat(name)
-				if err != nil || actual != f {
-					return nil, fmt.Errorf("filename pattern %q does not identify format %s", pattern, f)
-				}
-				candidates[filepath.Join(dir, name)] = f
+			actual, err := ParseFormat(name)
+			if err != nil || actual != f {
+				return nil, fmt.Errorf("filename pattern %q does not identify format %s", pattern, f)
 			}
+			candidates[filepath.Join(dir, name)] = f
 		}
 	}
 	return candidates, nil

@@ -1,45 +1,48 @@
 package commands
 
 import (
+	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 
 	"github.com/mscno/esec"
 )
 
-// viaVault hands a read that failed on a guarded environment's key to
-// esec-vault, whose background service opens that key after the person's
-// dialog and touch: esec itself is never given the key. It returns err
-// unchanged unless the key is guarded and sealed, file names an environment
-// (a path is resolved by esec alone), and esec-vault is on PATH; otherwise
-// it runs esec vault with the arguments args builds for that environment
-// and returns its exit code.
-func viaVault(err error, file string, args func(env string) []string) error {
-	var nf *esec.KeyNotFoundError
-	if !errors.As(err, &nf) || !nf.Guarded || nf.Sealed == "" {
-		return err
+func readDocument(file, format, keyDir, key string) ([]byte, error) {
+	target, err := esec.ResolveRead(".", file, format)
+	if err != nil {
+		return nil, err
 	}
-	if file == "" || strings.ContainsAny(file, `/\`) || strings.HasPrefix(file, ".") {
-		return err
-	}
-	bin, lookErr := exec.LookPath("esec-vault")
-	if lookErr != nil {
-		return err
-	}
-	env := strings.TrimSuffix(filepath.Base(nf.Sealed), ".age")
-	a := args(env)
-	fmt.Fprintf(os.Stderr, "esec: %s is guarded: reading it through esec vault %s, which asks for your touch\n", env, a[0])
-	return &ExitError{Code: execExternalFn(bin, a)}
+	return esec.ReadDocument(target, esec.ReadOptions{KeyDir: keyDir, PrivateKey: key, Session: os.Getenv("ESEC_VAULT_SESSION")})
 }
 
-// withFormat adds --format to args when one was given.
-func withFormat(args []string, format string) []string {
-	if format == "" {
-		return args
+// InspectCmd explains the exact read plan without opening a key or asking consent.
+type InspectCmd struct {
+	File   string `arg:"" help:"Exact environment or filename"`
+	Format string `short:"f" env:"ESEC_FORMAT" help:"File format filter"`
+	KeyDir string `short:"d" default:"." env:"ESEC_KEY_DIR" help:"Local keyring directory"`
+	JSON   bool   `help:"Print public inspection metadata as JSON"`
+}
+
+// Run prints the public read plan without unlocking it.
+func (c *InspectCmd) Run(_ *cliCtx) error {
+	target, err := esec.ResolveRead(".", c.File, c.Format)
+	if err != nil {
+		if c.JSON {
+			failure := esec.ReadError{Code: "inspection_failed", Detail: err.Error()}
+			var re *esec.ReadError
+			if errors.As(err, &re) {
+				failure = *re
+			}
+			if encodeErr := json.NewEncoder(os.Stdout).Encode(&esec.ReadInspection{Route: "blocked", Key: "unknown", Reader: "not_verified", Blockers: []esec.ReadError{failure}}); encodeErr != nil {
+				return encodeErr
+			}
+		}
+		return err
 	}
-	return append(args, "--format", format)
+	result := esec.InspectRead(target, esec.ReadOptions{KeyDir: c.KeyDir})
+	if c.JSON {
+		return json.NewEncoder(os.Stdout).Encode(result)
+	}
+	return esec.WriteInspection(os.Stdout, result)
 }
