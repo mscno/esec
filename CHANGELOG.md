@@ -1,3 +1,9 @@
+# v0.18.2
+
+- Add successful-read route metadata for GUI integrations, including local keys,
+  sealed identities, workload credentials, and local or forwarded brokers.
+  Failed reads return no route metadata; existing decryption APIs remain compatible.
+
 # v0.18.1
 
 - Update setup and backup guidance for server-first esec-vault v0.29.0.

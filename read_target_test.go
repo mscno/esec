@@ -57,8 +57,8 @@ func TestReadResolutionUsesFileProjectAndExactName(t *testing.T) {
 	if named.Environment != "production" || byfile.Project != named.Project || byfile.Digest != named.Digest {
 		t.Fatalf("different targets: %+v %+v", named, byfile)
 	}
-	plain, err := ReadDocument(byfile, ReadOptions{})
-	if err != nil || !strings.Contains(string(plain), "TOKEN=hello") {
+	plain, info, err := ReadDocumentWithInfo(byfile, ReadOptions{})
+	if err != nil || info.Source != "local_key" || info.Guard != "none" || !strings.Contains(string(plain), "TOKEN=hello") {
 		t.Fatalf("direct read: %s %v", plain, err)
 	}
 	if _, err := ResolveRead(root, "prod", ""); err == nil {
@@ -174,8 +174,8 @@ func TestWorkloadIdentityOpensGuardedSealWithoutDaemon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := ReadDocument(target, ReadOptions{})
-	if err != nil || !strings.Contains(string(data), "TOKEN=hello") {
+	data, info, err := ReadDocumentWithInfo(target, ReadOptions{})
+	if err != nil || info.Source != "workload_identity" || !strings.Contains(string(data), "TOKEN=hello") {
 		t.Fatalf("workload: %s %v", data, err)
 	}
 	other, _ := age.GenerateX25519Identity()
@@ -198,8 +198,8 @@ func TestPublicKeyAddressedWorkloadCredentialStaysDirect(t *testing.T) {
 	if target.Route() != "workload_key" {
 		t.Fatal("explicit workload key did not select direct access")
 	}
-	data, err := ReadDocument(target, ReadOptions{})
-	if err != nil || !strings.Contains(string(data), "TOKEN=hello") {
+	data, info, err := ReadDocumentWithInfo(target, ReadOptions{})
+	if err != nil || info.Source != "workload_key" || !strings.Contains(string(data), "TOKEN=hello") {
 		t.Fatalf("workload key: %s %v", data, err)
 	}
 	_, wrong, _ := GenerateKeypair()
@@ -261,8 +261,8 @@ func TestPersonalIdentityReadsOrdinarySealLocally(t *testing.T) {
 		t.Fatalf("personal route: %+v", inspection)
 	}
 	t.Setenv("ESEC_SECRET_STORE", "file")
-	plain, err := ReadDocument(target, ReadOptions{})
-	if err != nil || !strings.Contains(string(plain), "TOKEN=hello") {
+	plain, info, err := ReadDocumentWithInfo(target, ReadOptions{})
+	if err != nil || info.Source != "sealed_identity" || !strings.Contains(string(plain), "TOKEN=hello") {
 		t.Fatalf("personal read: %s %v", plain, err)
 	}
 }
@@ -284,8 +284,8 @@ func TestComponentReadUsesItsProjectLocalKeyring(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := ReadDocument(target, ReadOptions{})
-	if err != nil || !strings.Contains(string(data), "TOKEN=hello") {
+	data, info, err := ReadDocumentWithInfo(target, ReadOptions{})
+	if err != nil || info.Source != "local_key" || !strings.Contains(string(data), "TOKEN=hello") {
 		t.Fatalf("project-local keyring: %s %v", data, err)
 	}
 }

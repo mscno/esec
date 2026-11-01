@@ -38,14 +38,46 @@ func (t *ReadTarget) Route() string {
 // ReadDocument executes the shared plan. Guarded keys never fall through to
 // ordinary cached private keys. Explicit age workload recipients stay unattended.
 func ReadDocument(t *ReadTarget, o ReadOptions) ([]byte, error) {
-	if InspectLocalRead(t, o).Route == "daemon" {
+	data, _, err := ReadDocumentWithInfo(t, o)
+	return data, err
+}
+
+// ReadInfo describes the executor of a successful read. It contains no keys,
+// values, credential paths or account identifiers. It does not attest key origin.
+type ReadInfo struct {
+	Source string `json:"source"`
+	Guard  string `json:"guard"`
+}
+
+// ReadDocumentWithInfo returns the actual successful route, including fallback
+// to a broker, rather than the pre-read plan. Errors return no data or provenance.
+func ReadDocumentWithInfo(t *ReadTarget, o ReadOptions) ([]byte, ReadInfo, error) {
+	info := ReadInfo{Guard: t.Guard}
+	data, err := readDocument(t, o, &info)
+	if err != nil {
+		return nil, ReadInfo{}, err
+	}
+	return data, info, nil
+}
+
+func readDocument(t *ReadTarget, o ReadOptions, info *ReadInfo) ([]byte, error) {
+	brokerRead := func() ([]byte, error) {
+		info.Source = "broker"
+		if o.Socket == "" && os.Getenv("ESEC_VAULT_FORWARD") != "" {
+			info.Source = "forwarded_broker"
+		}
 		return readBroker(t, o)
 	}
+	if InspectLocalRead(t, o).Route == "daemon" {
+		return brokerRead()
+	}
 	if t.Route() == "workload_key" {
+		info.Source = "workload_key"
 		return decryptReadKey(t, workloadReadKey(t))
 	}
 	keyDir := readKeyDirectory(t, o.KeyDir)
 	if t.Route() == "workload_identity" {
+		info.Source = "workload_identity"
 		p, err := openReadSeal(t, false)
 		if err != nil {
 			return nil, err
@@ -57,6 +89,7 @@ func ReadDocument(t *ReadTarget, o ReadOptions) ([]byte, error) {
 	}
 	key, err := findPrivateKeyForData(keyDir, t.Environment, o.PrivateKey, t.Content, t.Format, slog.New(slog.DiscardHandler))
 	if err == nil {
+		info.Source = "local_key"
 		return decryptData(key, t.Content, t.Format)
 	}
 	if !errors.Is(err, ErrKeyNotFound) {
@@ -68,6 +101,7 @@ func ReadDocument(t *ReadTarget, o ReadOptions) ([]byte, error) {
 			if guardRank(p.Guard) > 0 {
 				return nil, &ReadError{"protection_mismatch", "the sealed key requires hardware protection; refresh the project metadata"}
 			}
+			info.Source = "sealed_identity"
 			return decryptReadKey(t, p.Private)
 		}
 		var unavailable *ReadError
@@ -78,7 +112,7 @@ func ReadDocument(t *ReadTarget, o ReadOptions) ([]byte, error) {
 	// A broker may hold a key the process has no local credential for. Only a
 	// missing key allows this transition; corruption and denied reads do not.
 	if t.Project != "" {
-		return readBroker(t, o)
+		return brokerRead()
 	}
 	return nil, err
 }
