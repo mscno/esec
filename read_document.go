@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"filippo.io/age/plugin"
 	"github.com/mscno/esec/pkg/format"
 	"github.com/mscno/esec/pkg/seal"
 	"github.com/mscno/esec/pkg/secretstore"
@@ -15,6 +16,10 @@ import (
 
 // ReadOptions selects credentials and the optional broker; it never changes protection.
 type ReadOptions struct {
+	// LocalOnly refuses broker reads, including fallback for a missing local key.
+	LocalOnly bool
+	// AgeUI supplies prompts for standalone age identities; nil uses a terminal.
+	AgeUI      *plugin.ClientUI
 	KeyDir     string
 	PrivateKey string
 	Socket     string
@@ -66,9 +71,12 @@ func ReadDocumentWithInfo(t *ReadTarget, o ReadOptions) ([]byte, ReadInfo, error
 func readDocument(t *ReadTarget, o ReadOptions, info *ReadInfo) ([]byte, error) {
 	if t.Standalone {
 		info.Source = "local_age"
-		return readStandaloneDocument(t)
+		return readStandaloneDocument(t, o.AgeUI)
 	}
 	brokerRead := func() ([]byte, error) {
+		if o.LocalOnly {
+			return nil, &ReadError{"legacy_vault_required", "this file needs legacy Vault access; migrate it with esec adopt using your existing access before opening it in this app"}
+		}
 		info.Source = "broker"
 		if o.Socket == "" && os.Getenv("ESEC_VAULT_FORWARD") != "" {
 			info.Source = "forwarded_broker"
@@ -202,8 +210,8 @@ func readKeyDirectory(t *ReadTarget, configured string) string {
 	return filepath.Dir(t.Path)
 }
 
-func readStandaloneDocument(t *ReadTarget) ([]byte, error) {
-	ids, err := seal.LocalIdentities()
+func readStandaloneDocument(t *ReadTarget, ui *plugin.ClientUI) ([]byte, error) {
+	ids, err := seal.LocalIdentitiesWithUI(ui)
 	if err != nil {
 		return nil, err
 	}

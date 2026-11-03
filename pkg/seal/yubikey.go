@@ -19,6 +19,7 @@ import (
 type localYubiKey struct {
 	recipients []string
 	identities []string
+	ui         *plugin.ClientUI
 }
 
 func (y *localYubiKey) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
@@ -33,7 +34,11 @@ func (y *localYubiKey) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 		return nil, err
 	}
 	for _, ref := range refs {
-		id, err := plugin.NewIdentity(ref, plugin.NewTerminalUI(func(string, ...any) {}, func(string, ...any) {}))
+		ui := y.ui
+		if ui == nil {
+			ui = plugin.NewTerminalUI(func(string, ...any) {}, func(string, ...any) {})
+		}
+		id, err := plugin.NewIdentity(ref, ui)
 		if err != nil {
 			return nil, err
 		}

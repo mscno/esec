@@ -291,7 +291,13 @@ func EnvIdentities() ([]age.Identity, error) {
 // LocalIdentities uses explicit process credentials exclusively when supplied;
 // otherwise it loads only the machine's configured identity files. There is no
 // keychain, account lookup, network request, or daemon fallback.
-func LocalIdentities() ([]age.Identity, error) {
+func LocalIdentities() ([]age.Identity, error) { return LocalIdentitiesWithUI(nil) }
+
+// LocalIdentitiesWithUI uses a caller-provided prompt UI for local age plugins.
+func LocalIdentitiesWithUI(ui *plugin.ClientUI) ([]age.Identity, error) {
+	if ui == nil {
+		ui = plugin.NewTerminalUI(func(string, ...any) {}, func(string, ...any) {})
+	}
 	if os.Getenv(EnvIdentity) != "" || os.Getenv(EnvIdentityFile) != "" {
 		text := os.Getenv(EnvIdentity)
 		if f := os.Getenv(EnvIdentityFile); f != "" {
@@ -301,7 +307,7 @@ func LocalIdentities() ([]age.Identity, error) {
 			}
 			text += "\n" + string(b)
 		}
-		return parseLocalIdentities(text)
+		return parseLocalIdentitiesWithUI(text, ui)
 	}
 	c, err := config.Load()
 	if err != nil {
@@ -329,12 +335,12 @@ func LocalIdentities() ([]age.Identity, error) {
 			text.WriteByte('\n')
 		}
 	}
-	ids, err := ParseIdentities(text.String(), plugin.NewTerminalUI(func(string, ...any) {}, func(string, ...any) {}))
+	ids, err := ParseIdentities(text.String(), ui)
 	if err != nil {
 		return nil, err
 	}
 	if len(c.Age.YubiKeyRecipients) > 0 {
-		ids = append(ids, &localYubiKey{recipients: c.Age.YubiKeyRecipients})
+		ids = append(ids, &localYubiKey{recipients: c.Age.YubiKeyRecipients, ui: ui})
 	}
 	if len(ids) == 0 {
 		return nil, errors.New("no age identity configured; run esec setup or set ESEC_AGE_IDENTITY_FILE")
@@ -344,7 +350,12 @@ func LocalIdentities() ([]age.Identity, error) {
 
 // Explicit hardware references still go through policy verification. Native
 // identities remain usable for unattended deployment without attached hardware.
+// parseLocalIdentities retains the default terminal UI for package callers.
 func parseLocalIdentities(text string) ([]age.Identity, error) {
+	return parseLocalIdentitiesWithUI(text, plugin.NewTerminalUI(func(string, ...any) {}, func(string, ...any) {}))
+}
+
+func parseLocalIdentitiesWithUI(text string, ui *plugin.ClientUI) ([]age.Identity, error) {
 	var ordinary, hardware []string
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
@@ -358,12 +369,12 @@ func parseLocalIdentities(text string) ([]age.Identity, error) {
 			ordinary = append(ordinary, line)
 		}
 	}
-	ids, err := ParseIdentities(strings.Join(ordinary, "\n"), plugin.NewTerminalUI(func(string, ...any) {}, func(string, ...any) {}))
+	ids, err := ParseIdentities(strings.Join(ordinary, "\n"), ui)
 	if err != nil {
 		return nil, err
 	}
 	if len(hardware) > 0 {
-		ids = append(ids, &localYubiKey{identities: hardware})
+		ids = append(ids, &localYubiKey{identities: hardware, ui: ui})
 	}
 	return ids, nil
 }

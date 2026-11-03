@@ -36,6 +36,8 @@ Scripts and agents: output goes to stdout and messages to stderr; "esec help <co
 // commandDetails are the explanations and examples "esec <command> --help"
 // shows, by command path.
 var commandDetails = map[string]string{
+	"files":      "Lists file paths, environments and key names without decrypting values.\n\n" + examples("esec files --dir . --json"),
+	"secrets":    "Structured local document operations for native editors. Reads never contact a broker. Updates accept revision, key, value and create in JSON stdin.\n\n" + examples("esec secrets show --file .env.dev --json", "esec secrets update --file .env.dev"),
 	"init":       "Creates age-sealed environments without a server. Dev includes your developer and recovery recipients; production excludes the developer identity.\n\n" + examples("esec init --project acme/store --env dev,production --yes", "esec init --env test --encrypt-existing --yes"),
 	"identity":   "Creates a new software identity for a deployment or offline recovery. Prints only its public recipient; stores the private key in a new 0600 file. It is not automatically granted access or loaded locally.\n\n" + examples("esec identity create --out /secure/deployment.age"),
 	"recipients": "Lists recipients or rotates the environment key when they change. An added machine recipient can decrypt without hardware touch. Removed recipients retain access to older ciphertext and previously copied values.\n\n" + examples("esec recipients production", "esec recipients production --add age1..."),

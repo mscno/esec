@@ -49,6 +49,8 @@ func commandExit(err error) (int, bool) {
 }
 
 type cli struct {
+	Files       FilesCmd        `cmd:"" help:"List local encrypted files and public metadata as JSON"`
+	Secrets     SecretsCmd      `cmd:"" help:"Read and update local secret documents for native editors"`
 	Inspect     InspectCmd      `cmd:"" help:"Explain a read: file, reader, key, guard, route and blockers; no secrets or prompts"`
 	Keygen      KeygenCmd       `cmd:"" help:"Generate a new keypair"`
 	Setup       MachineSetupCmd `cmd:"" help:"Configure this machine's developer and YubiKey age identities"`

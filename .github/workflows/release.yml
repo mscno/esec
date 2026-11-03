@@ -66,3 +66,43 @@ jobs:
               uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
               with:
                   subject-path: "dist/*_source.tar.gz"
+
+    macos:
+        needs: release
+        strategy:
+            matrix:
+                include:
+                    - runner: macos-15
+                      arch: arm64
+                    - runner: macos-15-intel
+                      arch: amd64
+        runs-on: ${{ matrix.runner }}
+        env:
+            DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+            - uses: actions/setup-go@v7
+              with:
+                  go-version-file: go.mod
+            - name: Test and build app
+              env:
+                  RELEASE_TAG: ${{ github.ref_name }}
+              run: |
+                  export ESEC_VERSION="${RELEASE_TAG#v}"
+                  swift test --package-path macos/Esec
+                  macos/Esec/bundle.sh
+            - name: Publish app
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  RELEASE_TAG: ${{ github.ref_name }}
+                  ARCH: ${{ matrix.arch }}
+              run: |
+                  artifact="Esec_${RELEASE_TAG#v}_darwin_${ARCH}.zip"
+                  ditto -c -k --sequesterRsrc --keepParent macos/Esec/build/Esec.app "$artifact"
+                  shasum -a 256 "$artifact" > "$artifact.sha256"
+                  gh release upload "$RELEASE_TAG" "$artifact" "$artifact.sha256"
+            - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+              with:
+                  subject-path: Esec_*.zip

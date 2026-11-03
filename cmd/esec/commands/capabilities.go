@@ -14,5 +14,6 @@ type CapabilitiesCmd struct{}
 // Run implements the capabilities command.
 func (c *CapabilitiesCmd) Run(_ *cliCtx) error {
 	fmt.Println(keyringfile.Capability)
+	fmt.Println("local-documents-v1")
 	return nil
 }

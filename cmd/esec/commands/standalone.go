@@ -296,6 +296,11 @@ func applyCiphertextChanges(root string, changes map[string][]byte, expected map
 			return err
 		}
 	}
+	for p, before := range expected {
+		if err := before.check(p); err != nil {
+			return err
+		}
+	}
 	if err := os.Mkdir(journal, 0700); err != nil {
 		return fmt.Errorf("pending write exists; run esec repair: %w", err)
 	}
@@ -318,7 +323,7 @@ func applyCiphertextChanges(root string, changes map[string][]byte, expected map
 		old := expected[p]
 		manifest[rel] = journalEntry{Before: old.Hash, Absent: old.Absent, After: digest(b)}
 	}
-	for p := range changes {
+	for p := range expected {
 		if err := expected[p].check(p); err != nil {
 			return err
 		}

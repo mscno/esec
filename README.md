@@ -6,11 +6,40 @@ uses local [age](https://age-encryption.org/) identities and optional
 [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey) hardware.
 It needs no Esec server, account, daemon, or menu bar app.
 
-**The standalone commands below are new source changes, not yet a published
-release.** Build this checkout with `go build -o ./build/esec ./cmd/esec`.
-Existing released versions use the [legacy workflow](docs/legacy-vault.md).
-Do not uninstall Vault until existing projects and historical recovery have
-been migrated and tested.
+## Install
+
+Download the CLI for your platform from [v0.19.0 releases](https://github.com/mscno/esec/releases/tag/v0.19.0), or:
+
+```sh
+go install github.com/mscno/esec/cmd/esec@v0.19.0
+# With mise:
+mise use -g go:github.com/mscno/esec/cmd/esec@0.19.0
+```
+
+The optional **Esec.app** is available in the same release for Apple Silicon
+(`arm64`) and Intel (`amd64`), on macOS 14 or later. Unzip it into Applications.
+It bundles this version of `esec`, so no separate CLI installation is required
+for browsing. The app is ad-hoc signed, **not Developer ID signed or notarized**;
+macOS may require approval in System Settings → Privacy & Security on first launch.
+The release supplies SHA-256 checksums and GitHub build attestations.
+
+The app remembers local project folders, opens individual files, compares
+keys across environments, and saves edits encrypted. Decrypt and Show reveals
+values immediately; hide individual values or all values, or Lock to discard
+the document. Values are hidden when the app loses focus and discarded on sleep,
+window close, or quit. A badge explains the successful read route. Hardware
+PINs use a masked prompt over anonymous pipes, never command-line arguments.
+
+There is no helper, broker session, account, sync, or server UI. The app runs
+short-lived local CLI commands. It can import the old app's remembered checkout
+paths once, but never imports or removes keys. Add Folder can scan a project or
+a parent folder. Local raw-key/keyring files still work. Files needing legacy
+broker approval must first be migrated with `esec adopt` using their existing
+access; the new app does not bypass that policy.
+
+Quit EsecVault before opening Esec, and turn off the old app's Open at Login.
+Keep the old app and Vault recovery material until legacy migrations and
+historical recovery have been verified. See the [legacy workflow](docs/legacy-vault.md).
 
 ## Set up a machine
 
@@ -202,7 +231,7 @@ manifest was not prepared: preserve it and inspect the failure before removing
 it and retrying. This is recovery from ordinary interrupted writes, not a claim
 of guaranteed recovery from every filesystem/power failure.
 
-Retire the server/app/daemon only after every active project and deployment
+Retire the legacy Vault server/app/daemon only after every active project and deployment
 works independently and recovery of important historical revisions has been
 tested. Legacy `esec encrypt`/`decrypt` with raw keys and `.esec-keyring` remain
 supported for unmigrated files; the former project wizard is `esec legacy-setup`.

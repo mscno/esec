@@ -1,3 +1,40 @@
+# v0.19.0
+
+- Add standalone `setup`, `init`, `adopt`, `recipients`, `rotate`, `repair`, and
+  `identity create`. Machine defaults use a local age identity for development,
+  pasted YubiKey recipients for production and recovery, and explicit deployment
+  recipients. No Esec server, account, or daemon is required.
+- Seal environment keys to age recipients in versioned `.esec/keys/` files.
+  Recipient changes rotate keys and ciphertext together, retain historical
+  generations, detect concurrent edits, and support interrupted-write repair.
+  Standalone metadata fails closed instead of falling back to raw keys.
+- Require always-touch metadata for YubiKey decryption. Hardware recipients can
+  be pasted during setup without connecting a key. Each recipient is an
+  independent way to decrypt; software deployment/recovery identities do not
+  require hardware touch.
+- Initialize missing files with only a public key. Ask explicitly before
+  encrypting existing plaintext, including multiline values. Keep raw-key and
+  keyring compatibility for legacy files; rename the old wizard `legacy-setup`.
+- Add `run --preserve-env NAME` for explicit local process overrides, including
+  empty values, while file values remain the default.
+- Move the optional macOS credential browser into Esec. Browse local projects,
+  show values on single-line rows, compare environments, and save edits encrypted.
+  The app bundles its matching CLI and has no Vault UI, helper, daemon, or server
+  connection. Show/Hide, Lock, read-route badges, masked hardware prompts, and
+  revision-checked encrypted saves remain available.
+- Add local `files` and `secrets show/update` document commands. GUI values and
+  PINs travel through pipes; reads leave disk untouched and edits write only
+  ciphertext. Cancelling or locking cancels pending reads and hardware prompts.
+- Publish ad-hoc signed macOS app archives for Apple Silicon and Intel with
+  checksums and build provenance. Developer ID signing/notarization is deferred.
+
+Existing projects are not automatically migrated. Start with `esec setup` and
+`esec adopt dev`, verify access and independent recovery, and then migrate other
+environments deliberately. Keep old keys, seals, and backups for historical
+recovery. Older Esec versions and other implementations cannot read the new
+standalone seal layout. Revocation cannot erase previously copied secrets or
+revoke old ciphertext; rotate upstream credentials after exposure.
+
 # v0.18.3
 
 - Local setup now creates new secrets files with only their public key. Never
