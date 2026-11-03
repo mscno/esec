@@ -70,4 +70,3 @@ private func comparisonFixture() throws -> (SecretComparisonStore, URL) {
     #expect(model.documents.isEmpty)
     #expect(model.revealed.isEmpty)
 }
-
