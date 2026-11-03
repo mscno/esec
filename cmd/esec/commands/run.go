@@ -16,6 +16,7 @@ type RunCmd struct {
 	Format       string   `help:"File format (ejson, env, eyaml, etoml)" default:"" short:"f" env:"ESEC_FORMAT"`
 	KeyFromStdin bool     `help:"Read the key from stdin" short:"k"`
 	KeyDir       string   `help:"Directory containing the '.esec-keyring' file" default:"." short:"d" env:"ESEC_KEY_DIR"`
+	PreserveEnv  []string `help:"Keep existing process values for these keys instead of decrypted defaults (repeat or comma-separate)"`
 	Command      []string `arg:"" optional:"" name:"command" help:"Command to run with the decrypted environment variables"`
 }
 
@@ -54,6 +55,17 @@ func (c *RunCmd) Run(ctx *cliCtx) error {
 	// Set up environment variables
 	cmd.Env = os.Environ() // Start with current environment
 	for k, v := range envVars {
+		preserve := false
+		for _, name := range c.PreserveEnv {
+			for _, part := range strings.Split(name, ",") {
+				if part == k {
+					_, preserve = os.LookupEnv(k)
+				}
+			}
+		}
+		if preserve {
+			continue
+		}
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
 

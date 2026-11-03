@@ -47,6 +47,12 @@ func edit(raw []byte, orig, want *File) ([]byte, bool) {
 		if w.Guard != o.Guard {
 			d.set(table, "guard", w.Guard)
 		}
+		if w.Access != o.Access {
+			d.set(table, "access", w.Access)
+		}
+		if !slices.Equal(w.Recipients, o.Recipients) {
+			d.setRaw(table, "recipients", tomlStrings(w.Recipients))
+		}
 		if !slices.Equal(w.Readers, o.Readers) {
 			d.setRaw(table, "readers", tomlStrings(w.Readers))
 		}

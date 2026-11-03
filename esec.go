@@ -357,7 +357,16 @@ func DecryptFromFS(v fs.FS, config DecryptFromEmbedConfig) ([]byte, error) {
 	}
 
 	// Find the private key
-	privkey, err := findPrivateKeyForData(config.Keydir, envName, config.UserSuppliedPrivateKey, data, config.Format, config.Logger)
+	var privkey [32]byte
+	standalone, err := embeddedStandalone(v, envName)
+	if err != nil {
+		return nil, err
+	}
+	if standalone {
+		privkey, err = openEmbeddedSeal(v, envName, data, config.Format, ErrKeyNotFound)
+	} else {
+		privkey, err = findPrivateKeyForData(config.Keydir, envName, config.UserSuppliedPrivateKey, data, config.Format, config.Logger)
+	}
 	if errors.Is(err, ErrKeyNotFound) {
 		privkey, err = openEmbeddedSeal(v, envName, data, config.Format, err)
 	}
@@ -396,7 +405,16 @@ func DecryptFromEmbedFS(v embed.FS, envName string, format FileFormat) ([]byte, 
 	}
 
 	// Find the private key
-	privkey, err := findPrivateKeyForData("", envName, "", data, format, slog.New(slog.DiscardHandler))
+	var privkey [32]byte
+	standalone, err := embeddedStandalone(v, envName)
+	if err != nil {
+		return nil, err
+	}
+	if standalone {
+		privkey, err = openEmbeddedSeal(v, envName, data, format, ErrKeyNotFound)
+	} else {
+		privkey, err = findPrivateKeyForData("", envName, "", data, format, slog.New(slog.DiscardHandler))
+	}
 	if errors.Is(err, ErrKeyNotFound) {
 		privkey, err = openEmbeddedSeal(v, envName, data, format, err)
 	}

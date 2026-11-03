@@ -29,11 +29,26 @@ func openEmbeddedSeal(fsys fs.FS, env string, data []byte, fileFormat FileFormat
 	if env == "" {
 		return key, notFound
 	}
-	sealed, err := fs.ReadFile(fsys, path.Join(seal.Dir, env+".age"))
+	name := path.Join(seal.Dir, env+".age")
+	standalone, err := embeddedStandalone(fsys, env)
 	if err != nil {
+		return key, err
+	}
+	if pf, e := embeddedProject(fsys); e == nil && len(pf.Env[env].Recipients) > 0 {
+		standalone = true
+		name = path.Join(seal.Dir, "keys", env, pf.Env[env].Key+".age")
+	}
+	sealed, err := fs.ReadFile(fsys, name)
+	if err != nil {
+		if standalone {
+			return key, fmt.Errorf("standalone embedded seal missing: %w", err)
+		}
 		return key, notFound
 	}
 	ids, err := seal.EnvIdentities()
+	if standalone {
+		ids, err = seal.LocalIdentities()
+	}
 	if err != nil {
 		return key, err
 	}
@@ -57,6 +72,27 @@ func openEmbeddedSeal(fsys fs.FS, env string, data []byte, fileFormat FileFormat
 	return parseResolvedKey(p.Private, seal.EnvIdentity, &pub, nil)
 }
 
+func embeddedStandalone(fsys fs.FS, env string) (bool, error) {
+	pf, err := embeddedProject(fsys)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return false, fmt.Errorf("invalid embedded project metadata: %w", err)
+	}
+	if err == nil && len(pf.Env[env].Recipients) > 0 {
+		return true, nil
+	}
+	// A standalone seal without its metadata must never fall back to a raw key.
+	name := path.Join(seal.Dir, "keys", env)
+	if err != nil {
+		name = path.Join(seal.Dir, "keys")
+	}
+	if _, e := fs.Stat(fsys, name); e == nil {
+		return false, errors.New("embedded standalone keys require matching esec.toml recipient metadata")
+	} else if !errors.Is(e, fs.ErrNotExist) {
+		return false, e
+	}
+	return false, nil
+}
+
 // embeddedProject reads the esec.toml embedded in fsys.
 func embeddedProject(fsys fs.FS) (*projectfile.File, error) {
 	data, err := fs.ReadFile(fsys, projectfile.ProjectFileName)
@@ -69,6 +105,20 @@ func embeddedProject(fsys fs.FS) (*projectfile.File, error) {
 // sniffEmbeddedSeal names the environment when no ESEC_PRIVATE_KEY* says
 // it: the one environment whose embedded seal the age identity opens.
 func sniffEmbeddedSeal(fsys fs.FS) (string, error) {
+	if pf, err := embeddedProject(fsys); err == nil {
+		var names []string
+		for _, env := range pf.Envs() {
+			if len(pf.Env[env].Recipients) > 0 {
+				names = append(names, env)
+			}
+		}
+		if len(names) == 1 {
+			return names[0], nil
+		}
+		if len(names) > 1 {
+			return "", errors.New("multiple standalone environments embedded; set DecryptFromEmbedConfig.EnvName explicitly")
+		}
+	}
 	entries, err := fs.ReadDir(fsys, seal.Dir)
 	if err != nil {
 		return "", errors.New("no sealed keys embedded")

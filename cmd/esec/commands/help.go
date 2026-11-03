@@ -17,12 +17,13 @@ import (
 
 const description = `esec encrypts and decrypts secrets files using public-key cryptography.
 
-A secrets file (.env, .ejson, .eyaml or .etoml, with an environment suffix such as .env.prod) holds its public key and encrypted values, and is committed. Its private key stays out of the repository: in the variable ESEC_PRIVATE_KEY_<ENV> (ESEC_PRIVATE_KEY_PROD for .env.prod), in a .esec-keyring file, in the global keyring that esec vault manages, or sealed in the repository (.esec/<env>.age) for a reader whose age identity is in ESEC_AGE_IDENTITY or ESEC_AGE_IDENTITY_FILE (CI, deploys).
+A secrets file holds a public key and encrypted values and can be committed. New environments use age-sealed keys in .esec/keys/: a local developer identity for dev/test/staging, YubiKey recipients for production/recovery, and explicitly selected deployment identities. No server or daemon is required. Legacy files still support ESEC_PRIVATE_KEY_<ENV> and .esec-keyring.
 
 Commands take a filename or discover an environment across supported formats and naming patterns. Environment names match exactly: "prod" and "production" are different environments. Multiple matches fail; use --format or an explicit path. Preferences live in ~/.config/esec/config.toml.
 
     esec keygen                        # a key pair to start a file with
-    esec setup                         # wizard: project, environments, files and keys
+    esec setup                         # configure this machine
+    esec init --project acme/api --env dev --yes
     esec encrypt prod                  # discover and encrypt the matching file
     esec decrypt prod                  # print it decrypted
     esec get prod DATABASE_URL         # print one value
@@ -35,18 +36,24 @@ Scripts and agents: output goes to stdout and messages to stderr; "esec help <co
 // commandDetails are the explanations and examples "esec <command> --help"
 // shows, by command path.
 var commandDetails = map[string]string{
+	"init":       "Creates age-sealed environments without a server. Dev includes your developer and recovery recipients; production excludes the developer identity.\n\n" + examples("esec init --project acme/store --env dev,production --yes", "esec init --env test --encrypt-existing --yes"),
+	"identity":   "Creates a new software identity for a deployment or offline recovery. Prints only its public recipient; stores the private key in a new 0600 file. It is not automatically granted access or loaded locally.\n\n" + examples("esec identity create --out /secure/deployment.age"),
+	"recipients": "Lists recipients or rotates the environment key when they change. An added machine recipient can decrypt without hardware touch. Removed recipients retain access to older ciphertext and previously copied values.\n\n" + examples("esec recipients production", "esec recipients production --add age1..."),
+	"rotate":     "Creates a fresh environment key, reseals it to the existing recipients, and re-encrypts the file. Old encrypted key generations remain for historical recovery.\n\n" + examples("esec rotate dev"),
+	"adopt":      "Migrates a legacy environment by rotating its key and sealing the new key to configured standalone recipients. Existing guard approval is honored before opening the old file. Old keys, seals and recovery paths are preserved.\n\n" + examples("esec adopt dev", "esec adopt production --machine-recipient age1..."),
+	"repair":     "Completes an interrupted encrypted write using its local ciphertext journal. Does not retrieve keys or contact a server.\n\n" + examples("esec repair"),
 	"inspect": `Resolves the same exact file, environment and protection as decrypt and run. Shows public metadata only: no secret-store entries are read, no seal opens, no hardware or approval is requested. Unknown availability stays unverified.
 
 Examples:
     esec inspect production
     esec inspect .env.production --json
 `,
-	"setup": `Creates a project, or adds environments to the one already here. It writes esec.toml, a key and a secrets file for each environment. With esec-vault signed in, it checks that the name is free and stores the keys through vault. Without that, pass --local to keep keys on this machine only. This is not "esec vault setup", which creates your personal identity.
+	"setup": `Configures this machine's age identity files and default public recipients. Creates a software development identity when requested; a YubiKey provides production access and dev recovery. No project, server login, or daemon is created. YubiKey slots must require touch every time.
 
 ` + examples(
 		"esec setup",
-		"esec setup --project acme/store --env dev,staging,production --format env --yes",
-		"esec setup --add --env ops --yes",
+		"esec setup --generate-dev --yes",
+		"esec setup --generate-dev --yubikey-recipient age1yubikey1... --yes",
 	),
 	"keygen": `Prints a new key pair. Put the public key in the secrets file as _ESEC_PUBLIC_KEY (ejson) or ESEC_PUBLIC_KEY (env), and keep the private key out of the repository.
 
@@ -134,12 +141,12 @@ func printExternal(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "More commands, from esec-<name> programs on PATH:")
 	if !slices.Contains(found, "vault") {
-		fmt.Fprintln(w, "  vault    Identity, backup and team sharing (not installed: "+vaultInstall+")")
+		fmt.Fprintln(w, "  vault    Legacy migration support (not installed; standalone setup does not need it)")
 	}
 	for _, name := range found {
 		about := ""
 		if name == "vault" {
-			about = `Identity, backup and team sharing; see "esec vault --help"`
+			about = `Legacy Vault access for unmigrated projects; see "esec vault --help"`
 		}
 		fmt.Fprintf(w, "  %-8s %s\n", name, strings.TrimSpace(about))
 	}

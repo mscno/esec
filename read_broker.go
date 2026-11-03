@@ -110,6 +110,13 @@ func readBroker(t *ReadTarget, o ReadOptions) ([]byte, error) {
 // InspectLocalRead never reads secret-store entries, opens seals, or requests consent.
 func InspectLocalRead(t *ReadTarget, o ReadOptions) *ReadInspection {
 	i := &ReadInspection{ReadTarget: t, Route: t.Route(), Key: "absent", Reader: "not_verified", Broker: "not_required", Consent: "not_required", Hardware: "not_required", Blockers: []ReadError{}}
+	if t.Standalone {
+		i.Key = "age_sealed_unverified"
+		if t.Access == "production" {
+			i.Hardware = "depends_on_recipient"
+		}
+		return i
+	}
 	dir := readKeyDirectory(t, o.KeyDir)
 	for _, path := range resolveKeyringCandidates(dir) {
 		if _, err := os.Stat(path); err == nil {
@@ -150,6 +157,9 @@ func InspectLocalRead(t *ReadTarget, o ReadOptions) *ReadInspection {
 // InspectRead enriches the local plan with non-interactive daemon metadata.
 func InspectRead(t *ReadTarget, o ReadOptions) *ReadInspection {
 	i := InspectLocalRead(t, o)
+	if t.Standalone {
+		return i
+	}
 	if o.Socket == "" && os.Getenv("ESEC_VAULT_FORWARD") != "" {
 		if i.Route == "daemon" {
 			i.Broker = "forwarded"

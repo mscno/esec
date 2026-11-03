@@ -18,9 +18,68 @@ import (
 type Config struct {
 	DefaultFormat string `toml:"default_format"`
 	Files         Files  `toml:"files"`
+	Age           Age    `toml:"-"`
 	// ProjectFormat is the format a project's esec.toml fixes for its
 	// secrets files; discovery then looks for that format only.
 	ProjectFormat string `toml:"-"`
+}
+
+// Age contains machine-local defaults. Only public recipients and identity
+// filenames belong here. Project files cannot configure identity paths.
+type Age struct {
+	IdentityFiles      []string `toml:"identity_files,omitempty"`
+	DeveloperRecipient string   `toml:"developer_recipient,omitempty"`
+	YubiKeyRecipients  []string `toml:"yubikey_recipients,omitempty"`
+	RecoveryRecipients []string `toml:"recovery_recipients,omitempty"`
+}
+
+// Save atomically writes non-secret machine preferences with private permissions.
+func (c Config) Save() error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	p, err := Path()
+	if err != nil {
+		return err
+	}
+	b, err := toml.Marshal(c)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(p), ".config-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.Write(b); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(f.Name(), p); err != nil {
+		return err
+	}
+	return c.SaveAge()
+}
+
+// IdentityPath expands only ~/; it never evaluates shell expressions.
+func IdentityPath(p string) (string, error) {
+	if strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		p = filepath.Join(home, p[2:])
+	}
+	if !filepath.IsAbs(p) {
+		return "", errors.New("identity files must have absolute paths (or start with ~/)")
+	}
+	return filepath.Clean(p), nil
 }
 
 // Files describes relative filenames, using {env} and {format} placeholders.
@@ -57,7 +116,7 @@ func Path() (string, error) {
 }
 
 // Load returns defaults when the file is absent, and rejects invalid settings.
-func Load() (Config, error) {
+func loadBase() (Config, error) {
 	c := Defaults()
 	p, err := Path()
 	if err != nil {
@@ -158,4 +217,69 @@ func Expand(pattern, env, format string) (string, error) {
 		return "", fmt.Errorf("unsafe filename pattern %q: use relative paths and {env}/{format}", pattern)
 	}
 	return filepath.Clean(p), nil
+}
+
+// AgePath is separate from config.toml so older Esec/Vault versions can coexist
+// throughout migration without rejecting new configuration fields.
+func AgePath() (string, error) {
+	p, e := Path()
+	if e != nil {
+		return "", e
+	}
+	return filepath.Join(filepath.Dir(p), "age.toml"), nil
+}
+
+// Load combines shared preferences with standalone machine identity settings.
+func Load() (Config, error) {
+	c, err := loadBase()
+	if err != nil {
+		return c, err
+	}
+	p, err := AgePath()
+	if err != nil {
+		return c, err
+	}
+	b, err := os.ReadFile(p) //nolint:gosec // explicitly configured machine preference path
+	if errors.Is(err, os.ErrNotExist) {
+		return c, nil
+	}
+	if err != nil {
+		return c, err
+	}
+	if err := toml.NewDecoder(bytes.NewReader(b)).DisallowUnknownFields().Decode(&c.Age); err != nil {
+		return c, fmt.Errorf("invalid age config: %w", err)
+	}
+	return c, nil
+}
+
+// SaveAge writes only standalone settings, preserving legacy config.toml.
+func (c Config) SaveAge() error {
+	p, err := AgePath()
+	if err != nil {
+		return err
+	}
+	b, err := toml.Marshal(c.Age)
+	if err != nil {
+		return err
+	}
+	if err = os.MkdirAll(filepath.Dir(p), 0700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(p), ".age-config-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err = f.Write(b); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), p)
 }

@@ -18,6 +18,9 @@ import (
 // ReadTarget is one resolved, immutable read. Content is ciphertext, never plaintext.
 // The logical environment remains distinct from an environment sharing its key.
 type ReadTarget struct {
+	Standalone     bool       `json:"standalone,omitempty"`
+	Recipients     []string   `json:"recipients,omitempty"`
+	Access         string     `json:"access,omitempty"`
 	Project        string     `json:"project,omitempty"`
 	Environment    string     `json:"environment"`
 	Path           string     `json:"file"`
@@ -98,6 +101,9 @@ func ResolveRead(dir, input, format string) (*ReadTarget, error) {
 	}
 	t.KeyEnvironment = t.Environment
 	if pf == nil {
+		if err := rejectMissingStandaloneProject(t); err != nil {
+			return nil, err
+		}
 		return t, nil
 	}
 	if err := t.applyProject(pf); err != nil {
@@ -116,6 +122,10 @@ func (t *ReadTarget) applyProject(pf *projectfile.File) error {
 		if env == t.Environment && e.Key != "" && !strings.EqualFold(e.Key, t.PublicKey) {
 			return &ReadError{"key_mismatch", "the file's public key differs from esec.toml for " + env}
 		}
+		if len(e.Recipients) > 0 {
+			t.Standalone, t.Recipients, t.Access = true, e.Recipients, e.Access
+			t.KeyEnvironment = env
+		}
 		if t.Seal == "" || (env == t.Environment && guardRank(e.GuardLevel()) >= guardRank(t.Guard)) {
 			t.KeyEnvironment = env
 			t.Seal = seal.Path(t.Root, env)
@@ -127,6 +137,17 @@ func (t *ReadTarget) applyProject(pf *projectfile.File) error {
 			t.Seal = seal.Path(t.Root, env)
 			t.Readers = e.Readers
 		}
+	}
+	if t.Standalone {
+		t.Seal = seal.StandaloneKeyPath(t.Root, t.KeyEnvironment, t.PublicKey)
+		if _, err := os.Stat(t.Seal); err != nil {
+			return &ReadError{"seal_missing", "standalone age seal unavailable: " + t.Seal}
+		}
+		t.SealStatus = "present_unverified"
+		return nil
+	}
+	if err := rejectUnboundStandalone(t.Root, t.PublicKey); err != nil {
+		return err
 	}
 	if err := t.applyRecords(); err != nil {
 		return err
@@ -142,6 +163,31 @@ func (t *ReadTarget) applyProject(pf *projectfile.File) error {
 		t.Seal = ""
 	} else if t.SealStatus == "absent" {
 		t.SealStatus = "present_unverified"
+	}
+	return nil
+}
+
+// Metadata can define a custom filename, so its loss also loses the environment
+// mapping. Match the immutable public-key generation across environment folders.
+func rejectUnboundStandalone(root, public string) error {
+	entries, err := os.ReadDir(filepath.Join(root, seal.Dir, "keys"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		_, err := os.Stat(seal.StandaloneKeyPath(root, entry.Name(), public))
+		if err == nil {
+			return &ReadError{"standalone_metadata_missing", "restore matching esec.toml recipient metadata for this standalone key"}
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	return nil
 }
@@ -260,4 +306,16 @@ func explicitReadInput(dir, input string) (string, string, error) {
 		dir = filepath.Dir(absolute)
 	}
 	return dir, input, nil
+}
+
+func rejectMissingStandaloneProject(t *ReadTarget) error {
+	for dir := filepath.Dir(t.Path); ; dir = filepath.Dir(dir) {
+		if err := rejectUnboundStandalone(dir, t.PublicKey); err != nil {
+			return err
+		}
+		if filepath.Dir(dir) == dir {
+			break
+		}
+	}
+	return nil
 }

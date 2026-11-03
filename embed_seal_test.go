@@ -78,3 +78,51 @@ func TestDecryptFromFSWithEmbeddedSeal(t *testing.T) {
 		t.Fatalf("decrypt with the root key: %s %v", out, err)
 	}
 }
+
+func TestStandaloneEmbeddedMetadataFailsClosed(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv(seal.EnvIdentityFile, "")
+	deploy, _ := age.GenerateX25519Identity()
+	other, _ := age.GenerateX25519Identity()
+	pub, priv, err := GenerateKeypair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var enc bytes.Buffer
+	if _, err := Encrypt(strings.NewReader("ESEC_PUBLIC_KEY="+pub+"\nTOKEN=synthetic-embedded-secret\n"), &enc, FileFormatEnv); err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := seal.Seal(seal.Payload{Project: "test/app", Env: "production", Private: priv}, deploy.Recipient())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pf := &projectfile.File{Project: "test/app", Env: map[string]projectfile.Env{"production": {Key: pub, Access: "production", Recipients: []string{deploy.Recipient().String()}}}}
+	metadata, err := pf.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fsys := fstest.MapFS{".env.production": {Data: enc.Bytes()}, "esec.toml": {Data: metadata}, ".esec/keys/production/" + pub + ".age": {Data: sealed}}
+	conf := DecryptFromEmbedConfig{EnvName: "production", Format: FileFormatEnv, UserSuppliedPrivateKey: priv}
+	t.Setenv(seal.EnvIdentity, deploy.String())
+	if b, err := DecryptFromFS(fsys, conf); err != nil || !bytes.Contains(b, []byte("synthetic-embedded-secret")) {
+		t.Fatal("deployment identity failed", err)
+	}
+	t.Setenv(seal.EnvIdentity, other.String())
+	if _, err := DecryptFromFS(fsys, conf); err == nil {
+		t.Fatal("raw key bypassed standalone")
+	}
+	fsys["esec.toml"] = &fstest.MapFile{Data: []byte("invalid [ toml")}
+	if _, err := DecryptFromFS(fsys, conf); err == nil {
+		t.Fatal("malformed metadata fell back to raw key")
+	}
+	delete(fsys, "esec.toml")
+	if _, err := DecryptFromFS(fsys, conf); err == nil {
+		t.Fatal("missing metadata fell back to raw key")
+	}
+	pf.Env["production"] = projectfile.Env{Key: pub}
+	legacy, _ := pf.Marshal()
+	fsys["esec.toml"] = &fstest.MapFile{Data: legacy}
+	if _, err := DecryptFromFS(fsys, conf); err == nil {
+		t.Fatal("missing recipients fell back to raw key")
+	}
+}

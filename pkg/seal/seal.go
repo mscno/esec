@@ -27,6 +27,7 @@ import (
 	"filippo.io/age"
 	"filippo.io/age/armor"
 	"filippo.io/age/plugin"
+	"github.com/mscno/esec/pkg/config"
 	"golang.org/x/crypto/curve25519"
 )
 
@@ -285,6 +286,92 @@ func EnvIdentities() ([]age.Identity, error) {
 	}
 	ui := plugin.NewTerminalUI(func(string, ...any) {}, func(string, ...any) {})
 	return ParseIdentities(text, ui)
+}
+
+// LocalIdentities uses explicit process credentials exclusively when supplied;
+// otherwise it loads only the machine's configured identity files. There is no
+// keychain, account lookup, network request, or daemon fallback.
+func LocalIdentities() ([]age.Identity, error) {
+	if os.Getenv(EnvIdentity) != "" || os.Getenv(EnvIdentityFile) != "" {
+		text := os.Getenv(EnvIdentity)
+		if f := os.Getenv(EnvIdentityFile); f != "" {
+			b, err := os.ReadFile(f) //nolint:gosec // explicit process identity file
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", EnvIdentityFile, err)
+			}
+			text += "\n" + string(b)
+		}
+		return parseLocalIdentities(text)
+	}
+	c, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	var text strings.Builder
+	for _, name := range c.Age.IdentityFiles {
+		p, err := config.IdentityPath(name)
+		if err != nil {
+			return nil, err
+		}
+		b, err := os.ReadFile(p) //nolint:gosec // absolute machine-configured identity file
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read configured identity %s: %w", p, err)
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			// Hardware refs are discovered with verified slot metadata below.
+			if strings.HasPrefix(strings.TrimSpace(line), "AGE-PLUGIN-YUBIKEY-") {
+				continue
+			}
+			text.WriteString(line)
+			text.WriteByte('\n')
+		}
+	}
+	ids, err := ParseIdentities(text.String(), plugin.NewTerminalUI(func(string, ...any) {}, func(string, ...any) {}))
+	if err != nil {
+		return nil, err
+	}
+	if len(c.Age.YubiKeyRecipients) > 0 {
+		ids = append(ids, &localYubiKey{recipients: c.Age.YubiKeyRecipients})
+	}
+	if len(ids) == 0 {
+		return nil, errors.New("no age identity configured; run esec setup or set ESEC_AGE_IDENTITY_FILE")
+	}
+	return ids, nil
+}
+
+// Explicit hardware references still go through policy verification. Native
+// identities remain usable for unattended deployment without attached hardware.
+func parseLocalIdentities(text string) ([]age.Identity, error) {
+	var ordinary, hardware []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "AGE-PLUGIN-YUBIKEY-") {
+			name, _, err := plugin.ParseIdentity(line)
+			if err != nil || name != "yubikey" {
+				return nil, errors.New("invalid YubiKey identity reference")
+			}
+			hardware = append(hardware, line)
+		} else {
+			ordinary = append(ordinary, line)
+		}
+	}
+	ids, err := ParseIdentities(strings.Join(ordinary, "\n"), plugin.NewTerminalUI(func(string, ...any) {}, func(string, ...any) {}))
+	if err != nil {
+		return nil, err
+	}
+	if len(hardware) > 0 {
+		ids = append(ids, &localYubiKey{identities: hardware})
+	}
+	return ids, nil
+}
+
+// StandaloneKeyPath addresses immutable generations so rotation cannot destroy
+// the key needed by an interrupted write or an older checkout.
+func StandaloneKeyPath(root, env, pub string) string {
+	return filepath.Join(root, Dir, "keys", env, pub+".age")
 }
 
 // X25519Identity turns a hex private key into an age identity.

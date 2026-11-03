@@ -84,6 +84,10 @@ type Files struct {
 
 // Env describes one environment.
 type Env struct {
+	// Recipients selects standalone age access. No broker or private-key
+	// fallback is permitted. Access describes the intended deployment context.
+	Recipients []string `toml:"recipients,omitempty"`
+	Access     string   `toml:"access,omitempty"`
 	// Key is the environment's current public key (64 lowercase hex).
 	Key string `toml:"key,omitempty"`
 	// Guard is none (the default), session or touch.
@@ -96,7 +100,7 @@ type Env struct {
 
 // Equal reports whether two environments say the same.
 func (e Env) Equal(o Env) bool {
-	return e.Key == o.Key && e.Guard == o.Guard && slices.Equal(e.Readers, o.Readers)
+	return e.Key == o.Key && e.Guard == o.Guard && e.Access == o.Access && slices.Equal(e.Recipients, o.Recipients) && slices.Equal(e.Readers, o.Readers)
 }
 
 // GuardLevel returns the environment's guard, none when unset.
@@ -182,6 +186,17 @@ func (f *File) Validate() error {
 
 // validate checks one environment of the file.
 func (e Env) validate(name string) error {
+	if e.Access != "" && e.Access != "development" && e.Access != "production" {
+		return fmt.Errorf("environment %s: access must be development or production", name)
+	}
+	if e.Access != "" && len(e.Recipients) == 0 {
+		return fmt.Errorf("environment %s: standalone access requires recipients", name)
+	}
+	for _, r := range e.Recipients {
+		if r == "" || len(r) > 4096 || strings.ContainsAny(r, " \t\r\n\x00") {
+			return fmt.Errorf("environment %s: invalid age recipient", name)
+		}
+	}
 	if !validEnv(name) {
 		return fmt.Errorf("invalid environment %q: use dot-separated lowercase letters and digits", name)
 	}
@@ -342,6 +357,7 @@ func (f *File) clone() *File {
 	c := &File{Project: f.Project, Files: f.Files, Env: make(map[string]Env, len(f.Env))}
 	for k, v := range f.Env {
 		v.Readers = slices.Clone(v.Readers)
+		v.Recipients = slices.Clone(v.Recipients)
 		c.Env[k] = v
 	}
 	return c

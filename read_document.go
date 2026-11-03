@@ -23,6 +23,9 @@ type ReadOptions struct {
 
 // Route reports the required executor before any keyring can be opened.
 func (t *ReadTarget) Route() string {
+	if t.Standalone {
+		return "local_age"
+	}
 	if t.Guard != "none" {
 		if hasReadIdentity() {
 			return "workload_identity"
@@ -61,6 +64,10 @@ func ReadDocumentWithInfo(t *ReadTarget, o ReadOptions) ([]byte, ReadInfo, error
 }
 
 func readDocument(t *ReadTarget, o ReadOptions, info *ReadInfo) ([]byte, error) {
+	if t.Standalone {
+		info.Source = "local_age"
+		return readStandaloneDocument(t)
+	}
 	brokerRead := func() ([]byte, error) {
 		info.Source = "broker"
 		if o.Socket == "" && os.Getenv("ESEC_VAULT_FORWARD") != "" {
@@ -193,4 +200,23 @@ func readKeyDirectory(t *ReadTarget, configured string) string {
 		return t.Root
 	}
 	return filepath.Dir(t.Path)
+}
+
+func readStandaloneDocument(t *ReadTarget) ([]byte, error) {
+	ids, err := seal.LocalIdentities()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(t.Seal)
+	if err != nil {
+		return nil, err
+	}
+	p, err := seal.Open(data, t.Project, t.KeyEnvironment, t.PublicKey, ids...)
+	if err != nil {
+		return nil, fmt.Errorf("open standalone age key for %s: %w", t.Environment, err)
+	}
+	if guardRank(p.Guard) < guardRank(t.Guard) {
+		return nil, &ReadError{"protection_mismatch", "the sealed payload has weaker protection than its metadata"}
+	}
+	return decryptReadKey(t, p.Private)
 }
