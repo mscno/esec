@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"filippo.io/age"
 	"filippo.io/age/plugin"
 	"github.com/mscno/esec/pkg/format"
 	"github.com/mscno/esec/pkg/seal"
@@ -15,6 +16,9 @@ import (
 
 // ReadOptions selects local credentials and age plugin prompts.
 type ReadOptions struct {
+	// AgeIdentities, when non-nil, are exclusive in-memory identities for this read.
+	// They never fall back to process credentials, local files, or keyrings.
+	AgeIdentities []age.Identity
 	// AgeUI supplies prompts for standalone age identities; nil uses a terminal.
 	AgeUI      *plugin.ClientUI
 	KeyDir     string
@@ -66,7 +70,18 @@ func ReadDocumentWithInfo(t *ReadTarget, o ReadOptions) ([]byte, ReadInfo, error
 func readDocument(t *ReadTarget, o ReadOptions, info *ReadInfo) ([]byte, error) {
 	if t.Standalone {
 		info.Source = "local_age"
-		return readStandaloneDocument(t, o.AgeUI)
+		return readStandaloneDocument(t, o)
+	}
+	if o.AgeIdentities != nil {
+		info.Source = "workload_identity"
+		p, err := openReadSealWithIdentities(t, o.AgeIdentities)
+		if err != nil {
+			return nil, err
+		}
+		if guardRank(p.Guard) < guardRank(t.Guard) {
+			return nil, &ReadError{"protection_mismatch", "the sealed payload has weaker protection than its metadata"}
+		}
+		return decryptReadKey(t, p.Private)
 	}
 	if t.Route() == "blocked" {
 		return nil, legacyGuardError()
@@ -118,6 +133,14 @@ func legacyGuardError() *ReadError {
 }
 
 func openReadSeal(t *ReadTarget, ui *plugin.ClientUI) (*seal.Payload, error) {
+	ids, err := seal.LocalIdentitiesWithUI(ui)
+	if err != nil {
+		return nil, &ReadError{"identity_unavailable", err.Error()}
+	}
+	return openReadSealWithIdentities(t, ids)
+}
+
+func openReadSealWithIdentities(t *ReadTarget, ids []age.Identity) (*seal.Payload, error) {
 	if t.Seal == "" {
 		return nil, &ReadError{"seal_missing", "no sealed key for " + t.Environment}
 	}
@@ -125,11 +148,6 @@ func openReadSeal(t *ReadTarget, ui *plugin.ClientUI) (*seal.Payload, error) {
 	if err != nil {
 		return nil, err
 	}
-	ids, err := seal.LocalIdentitiesWithUI(ui)
-	if err != nil {
-		return nil, &ReadError{"identity_unavailable", err.Error()}
-	}
-
 	p, err := seal.Open(data, t.Project, t.KeyEnvironment, t.PublicKey, ids...)
 	if err != nil {
 		return nil, &ReadError{"recipient_missing", fmt.Sprintf("the supplied identity cannot open %s: %v", t.Seal, err)}
@@ -178,10 +196,14 @@ func readKeyDirectory(t *ReadTarget, configured string) string {
 	return filepath.Dir(t.Path)
 }
 
-func readStandaloneDocument(t *ReadTarget, ui *plugin.ClientUI) ([]byte, error) {
-	ids, err := seal.LocalIdentitiesWithUI(ui)
-	if err != nil {
-		return nil, err
+func readStandaloneDocument(t *ReadTarget, o ReadOptions) ([]byte, error) {
+	ids := o.AgeIdentities
+	if ids == nil {
+		var err error
+		ids, err = seal.LocalIdentitiesWithUI(o.AgeUI)
+		if err != nil {
+			return nil, err
+		}
 	}
 	data, err := os.ReadFile(t.Seal)
 	if err != nil {

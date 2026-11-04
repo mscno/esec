@@ -56,9 +56,12 @@ var ErrNotFound = errors.New("project file not found")
 
 // File is the content of esec.toml.
 type File struct {
-	Project string         `toml:"project"`
-	Files   Files          `toml:"files,omitempty"`
-	Env     map[string]Env `toml:"env,omitempty"`
+	Project string `toml:"project"`
+	// RecoveryRecipients labels offline public recovery identities. It grants no access;
+	// each environment must explicitly include a recipient in its own list.
+	RecoveryRecipients []string       `toml:"recovery_recipients,omitempty"`
+	Files              Files          `toml:"files,omitempty"`
+	Env                map[string]Env `toml:"env,omitempty"`
 
 	// raw and orig are the file as read, so Save changes only what changed
 	// and keeps comments and layout.
@@ -173,6 +176,11 @@ func (f *File) Validate() error {
 		}
 		if format := strings.TrimPrefix(f.Files.Format, "."); format != "" && format != named {
 			return fmt.Errorf("files.name %q is a %s file but files.format is %s", n, named, format)
+		}
+	}
+	for _, r := range f.RecoveryRecipients {
+		if r == "" || len(r) > 4096 || strings.ContainsAny(r, " \t\r\n\x00") {
+			return errors.New("invalid public recovery recipient")
 		}
 	}
 	for name, e := range f.Env {
@@ -353,7 +361,7 @@ func (f *File) Save(dir string) error {
 }
 
 func (f *File) clone() *File {
-	c := &File{Project: f.Project, Files: f.Files, Env: make(map[string]Env, len(f.Env))}
+	c := &File{RecoveryRecipients: slices.Clone(f.RecoveryRecipients), Project: f.Project, Files: f.Files, Env: make(map[string]Env, len(f.Env))}
 	for k, v := range f.Env {
 		v.Readers = slices.Clone(v.Readers)
 		v.Recipients = slices.Clone(v.Recipients)
@@ -364,7 +372,7 @@ func (f *File) clone() *File {
 
 // same reports whether two files say the same.
 func (f *File) same(o *File) bool {
-	if f.Project != o.Project || f.Files != o.Files {
+	if f.Project != o.Project || f.Files != o.Files || !slices.Equal(f.RecoveryRecipients, o.RecoveryRecipients) {
 		return false
 	}
 	for k, v := range f.Env {

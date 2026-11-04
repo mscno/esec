@@ -11,7 +11,7 @@ import (
 // be provided by an external `esec-<command>` binary on PATH (git-style
 // subcommand passthrough).
 var builtinCommands = map[string]bool{
-	"plan": true, "apply": true, "status": true,
+	"recovery": true, "plan": true, "apply": true, "status": true,
 	"files": true, "secrets": true, "init": true, "identity": true, "recipients": true, "rotate": true, "adopt": true, "repair": true,
 	"inspect": true,
 	"keygen":  true,

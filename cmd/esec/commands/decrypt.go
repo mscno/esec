@@ -11,16 +11,21 @@ import (
 
 // DecryptCmd decrypts a secrets file.
 type DecryptCmd struct {
-	File         string `arg:"" help:"File or Environment to decrypt" default:""`
-	Format       string `help:"File format (ejson, env, eyaml, etoml)" default:"" short:"f" env:"ESEC_FORMAT"`
-	KeyFromStdin bool   `help:"Read the key from stdin" short:"k"`
-	KeyDir       string `help:"Directory containing the '.esec-keyring' file" default:"." short:"d" env:"ESEC_KEY_DIR"`
+	File           string `arg:"" help:"File or Environment to decrypt" default:""`
+	Format         string `help:"File format (ejson, env, eyaml, etoml)" default:"" short:"f" env:"ESEC_FORMAT"`
+	Recovery       bool   `help:"Prompt privately for a recovery phrase; decrypt in memory without saving its identity"`
+	RecoveryFormat string `default:"esec-v1" enum:"esec-v1,vault-v2" help:"Recovery phrase derivation format"`
+	KeyFromStdin   bool   `help:"Read the key from stdin" short:"k"`
+	KeyDir         string `help:"Directory containing the '.esec-keyring' file" default:"." short:"d" env:"ESEC_KEY_DIR"`
 }
 
 // Run executes the decrypt command.
 func (c *DecryptCmd) Run(ctx *cliCtx) error {
 	ctx.Logger.Debug("decrypting secret", "file", c.File, "format", c.Format, "key_dir", c.KeyDir, "key_from_stdin", c.KeyFromStdin)
 
+	if c.Recovery && c.KeyFromStdin {
+		return fmt.Errorf("--recovery and --key-from-stdin are mutually exclusive")
+	}
 	var key string
 	if c.KeyFromStdin {
 		ctx.Logger.Debug("reading private key from stdin")
@@ -31,8 +36,8 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 		}
 		key = strings.TrimSpace(string(data))
 		ctx.Logger.Debug("private key read from stdin", "key_length", len(key))
-	} else {
-		ctx.Logger.Debug("using key from keyring", "key_dir", c.KeyDir)
+	} else if !c.Recovery {
+		ctx.Logger.Debug("using configured local credentials", "key_dir", c.KeyDir)
 	}
 
 	fileName, _, err := fileutils.Resolve(".", c.File, c.Format)
@@ -54,7 +59,12 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 	ctx.Logger.Debug("file details", "path", fileName, "size", fileInfo.Size(), "mode", fileInfo.Mode())
 
 	ctx.Logger.Debug("decrypting file", "path", fileName)
-	data, err := readDocument(fileName, c.Format, c.KeyDir, key)
+	var data []byte
+	if c.Recovery {
+		data, err = readRecoveryDocument(fileName, c.Format, c.RecoveryFormat)
+	} else {
+		data, err = readDocument(fileName, c.Format, c.KeyDir, key)
+	}
 	if err != nil {
 		ctx.Logger.Debug("decryption failed", "path", fileName, "error", err)
 		return err

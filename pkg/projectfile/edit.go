@@ -20,6 +20,9 @@ func edit(raw []byte, orig, want *File) ([]byte, bool) {
 	if want.Project != orig.Project {
 		d.set("", "project", want.Project)
 	}
+	if !slices.Equal(want.RecoveryRecipients, orig.RecoveryRecipients) {
+		d.setRaw("", "recovery_recipients", tomlStrings(want.RecoveryRecipients))
+	}
 	if want.Files.Format != orig.Files.Format {
 		d.set("files", "format", want.Files.Format)
 	}

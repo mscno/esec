@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"filippo.io/age"
 	"github.com/mscno/esec"
 	"github.com/mscno/esec/pkg/config"
 	"github.com/mscno/esec/pkg/filelock"
@@ -38,6 +39,7 @@ type EnvironmentPlan struct {
 	Removed            []string `json:"removed"`
 	Recipients         []string `json:"recipients"`
 	SoftwareRecipients []string `json:"software_recipients,omitempty"`
+	RecoveryRecipients []string `json:"recovery_recipients,omitempty"`
 	Sensitive          bool     `json:"sensitive"`
 	Plaintext          bool     `json:"plaintext,omitempty"`
 }
@@ -153,6 +155,11 @@ func newAccessPlan(dir string) (*AccessPlan, error) {
 	if _, err := os.Stat(filepath.Join(root, ".esec", "pending")); !errors.Is(err, os.ErrNotExist) {
 		return nil, errors.New("a pending write needs attention; run esec repair before planning access changes")
 	}
+	for _, r := range pf.RecoveryRecipients {
+		if _, err := seal.ParseRecipient(r); err != nil {
+			return nil, fmt.Errorf("invalid recovery_recipients entry: %w", err)
+		}
+	}
 	if unknown := pf.Unknown(); len(unknown) > 0 {
 		return nil, fmt.Errorf("unknown esec.toml fields: %s", strings.Join(unknown, ", "))
 	}
@@ -232,6 +239,9 @@ func (p *AccessPlan) planEnvironment(name string, cfg config.Config) (Environmen
 		return item, err
 	}
 	for _, r := range item.Recipients {
+		if slices.Contains(p.project.RecoveryRecipients, r) {
+			item.RecoveryRecipients = append(item.RecoveryRecipients, r)
+		}
 		if !strings.HasPrefix(r, "age1yubikey1") {
 			item.SoftwareRecipients = append(item.SoftwareRecipients, r)
 		}
@@ -348,8 +358,8 @@ func rejectDevelopmentRecipients(pf *projectfile.File, env, access string, rs []
 			continue
 		}
 		for _, r := range rs {
-			if !strings.HasPrefix(r, "age1yubikey1") && slices.Contains(e.Recipients, r) {
-				return fmt.Errorf("%s: a software recipient already used by development environment %s cannot be a production deployment identity; create a separate identity", env, name)
+			if !strings.HasPrefix(r, "age1yubikey1") && !slices.Contains(pf.RecoveryRecipients, r) && slices.Contains(e.Recipients, r) {
+				return fmt.Errorf("%s: a software recipient already used by development environment %s cannot be a production deployment identity; create a separate identity, or declare an offline recovery identity in top-level recovery_recipients", env, name)
 			}
 		}
 	}
@@ -391,6 +401,9 @@ func printAccessPlan(p *AccessPlan, asJSON bool) error {
 		for _, r := range e.Removed {
 			fmt.Printf("  - %s\n", r)
 		}
+		for _, r := range e.RecoveryRecipients {
+			fmt.Printf("  Recovery: %s\n", r)
+		}
 		if e.Action == "legacy" {
 			fmt.Printf("  Use esec adopt %s with existing local recovery access first.\n", e.Environment)
 		}
@@ -401,7 +414,7 @@ func printAccessPlan(p *AccessPlan, asJSON bool) error {
 			fmt.Println("  Previous recipients cannot be verified from public metadata; all requested recipients will be applied with a new key.")
 		}
 		if e.Access == "production" && len(e.SoftwareRecipients) > 0 {
-			fmt.Println("  Software deployment recipients can decrypt without YubiKey touch:")
+			fmt.Println("  Software recipients (deployment or recovery) can decrypt without YubiKey touch:")
 			for _, r := range e.SoftwareRecipients {
 				fmt.Printf("    %s\n", r)
 			}
@@ -421,6 +434,8 @@ type ApplyCmd struct {
 	PlanHash         string `help:"Require the exact hash printed by esec plan (required with --yes)"`
 	Yes              bool   `help:"Apply a reviewed plan without prompting; requires --plan-hash"`
 	ApproveSensitive bool   `help:"With --yes, explicitly approve production, removals, and untracked generations"`
+	Recovery         bool   `help:"Prompt privately for a recovery phrase; keep its derived identity in memory for this apply only"`
+	RecoveryFormat   string `default:"esec-v1" enum:"esec-v1,vault-v2" help:"Recovery phrase derivation format"`
 	EncryptExisting  bool   `help:"Allow creation to encrypt an existing plaintext dotenv file"`
 }
 
@@ -463,7 +478,15 @@ func (c *ApplyCmd) Run(ctx *cliCtx) error {
 	if fresh.Hash != p.Hash {
 		return errors.New("files or policy changed after confirmation; review a fresh plan")
 	}
-	return applyAccessPlan(ctx, fresh, c.EncryptExisting)
+	options := esec.ReadOptions{}
+	if c.Recovery {
+		id, err := promptRecoveryIdentity(c.RecoveryFormat)
+		if err != nil {
+			return err
+		}
+		options.AgeIdentities = []age.Identity{id}
+	}
+	return applyAccessPlan(ctx, fresh, c.EncryptExisting, options)
 }
 
 func (c *ApplyCmd) confirm(p *AccessPlan) error {
@@ -498,7 +521,7 @@ func (c *ApplyCmd) confirm(p *AccessPlan) error {
 	return nil
 }
 
-func applyAccessPlan(ctx *cliCtx, p *AccessPlan, encryptExisting bool) error {
+func applyAccessPlan(ctx *cliCtx, p *AccessPlan, encryptExisting bool, options esec.ReadOptions) error {
 	var writes []pendingEnvironment
 	for _, e := range p.Environments {
 		if e.Action == "current" {
@@ -522,7 +545,7 @@ func applyAccessPlan(ctx *cliCtx, p *AccessPlan, encryptExisting bool) error {
 				return errors.New("shared-key aliases require a combined offline migration")
 			}
 		}
-		pub, priv, encrypted, err := rotatedCiphertext(t)
+		pub, priv, encrypted, err := rotatedCiphertextWithOptions(t, options)
 		if err != nil {
 			return err
 		}

@@ -23,8 +23,12 @@ into an ordinary keyring lookup. Supply an age reader identity explicitly, or
 export a verified recovered credential named `ESEC_PRIVATE_KEY_<PUBLIC_KEY>`
 into the one migration process, then run `esec adopt FILE`.
 
-A 24-word Vault recovery phrase is not an age identity string. Recovery of
-old phrase-encrypted archives requires their offline format converter; do not
+A 24-word Vault recovery phrase is not an age identity string. Esec can derive
+the historical v2 root recipient with `esec recovery recipient --format vault-v2`.
+For repository age seals addressed to that root, use `esec recovery verify FILE
+--format vault-v2` or `esec adopt FILE --recovery --recovery-format vault-v2`.
+The hidden prompts accept the phrase and its optional passphrase. Recovery of
+arbitrary old Vault archives still requires their offline format converter; do not
 paste the phrase into `ESEC_AGE_IDENTITY`, command arguments, or a chat. Preserve
 the encrypted archive and matching repository seals until conversion has been
 verified. This repository's normal workflow is age identities and YubiKeys.

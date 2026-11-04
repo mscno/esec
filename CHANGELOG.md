@@ -1,3 +1,16 @@
+# v0.21.0
+
+- Add offline 24-word recovery identity creation/import, optional passphrases,
+  public recipient inspection, verification, and explicit private identity export.
+  Phrase/passphrase input uses a hidden controlling terminal; only public defaults
+  are stored. Support the historical Vault v2 root derivation explicitly.
+- Add `decrypt --recovery`, `apply --recovery`, and `adopt --recovery` with exclusive in-memory identity
+  use. Wrong phrases/passphrases never fall back to other local credentials.
+- Include configured recovery recipients in new dev and production environments.
+  Existing per-environment TOML lists remain authoritative; removals are applied
+  with rotation and are never silently undone by local defaults. Public recovery
+  role labels distinguish offline recovery from everyday developer identities.
+
 # v0.20.0
 
 - Remove broker RPC, remote forwarding, daemon notifications, the legacy setup

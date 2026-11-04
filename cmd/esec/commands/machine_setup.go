@@ -25,7 +25,7 @@ type MachineSetupCmd struct {
 	DeveloperIdentity string   `type:"path" help:"Existing native age developer identity file"`
 	YubikeyIdentity   string   `type:"path" help:"Existing age-plugin-yubikey identity file (a hardware reference)"`
 	YubikeyRecipient  []string `help:"Public age recipient of that YubiKey slot; must use always-touch"`
-	RecoveryRecipient []string `help:"Additional offline recovery recipients (public keys only)"`
+	RecoveryRecipient []string `help:"Default offline recovery recipients for new environments, including production (public keys only)"`
 	Yes               bool     `help:"Use the supplied choices without prompting"`
 }
 

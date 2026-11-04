@@ -8,12 +8,12 @@ It needs no Esec server, account, daemon, or menu bar app.
 
 ## Install
 
-Download the CLI for your platform from [v0.20.0 releases](https://github.com/mscno/esec/releases/tag/v0.20.0), or:
+Download the CLI for your platform from [v0.21.0 releases](https://github.com/mscno/esec/releases/tag/v0.21.0), or:
 
 ```sh
-go install github.com/mscno/esec/cmd/esec@v0.20.0
+go install github.com/mscno/esec/cmd/esec@v0.21.0
 # With mise:
-mise use -g go:github.com/mscno/esec/cmd/esec@0.20.0
+mise use -g go:github.com/mscno/esec/cmd/esec@0.21.0
 ```
 
 The optional **Esec.app** is available in the same release for Apple Silicon
@@ -88,7 +88,7 @@ esec init --env production --yes
 | Environment | Default recipients |
 | --- | --- |
 | dev/test/staging and other ordinary names | This machine's developer identity, configured YubiKeys, optional recovery recipients |
-| prod/production, including dotted suffixes | Configured YubiKeys and explicitly supplied deployment recipients |
+| prod/production, including dotted suffixes | Configured YubiKeys, configured offline recovery recipients, and explicitly supplied deployment recipients |
 
 Use `--production` for a custom sensitive environment name. Names match exactly;
 `prod` and `production` remain separate environments. Treat staging as production
@@ -305,10 +305,112 @@ esec identity create --out /secure/deployment.age
 Add its public recipient to production in `esec.toml` and review/apply on an
 authorized machine. Configure only that deployment's private identity as
 `ESEC_AGE_IDENTITY` or `ESEC_AGE_IDENTITY_FILE` in the deployment environment.
-A software identity declared for dev/test cannot also be a production recipient.
-Local production access uses a configured YubiKey; deployment identities are
-independent, explicit unattended access. Add another YubiKey recipient for
-production recovery rather than granting a developer machine production access.
+An everyday developer identity cannot also be a production recipient. Explicitly
+label offline recovery identities in top-level `recovery_recipients` when sharing
+them across dev and production; this label itself grants no access.
+Routine local production access uses a configured YubiKey; deployment identities are
+independent, explicit unattended access. Use another YubiKey or an offline recovery phrase for
+production recovery. Keep the phrase-derived private key off developer machines.
+
+## Offline recovery phrases
+
+Set up two YubiKey public recipients with repeated `--yubikey-recipient` options,
+then create a separate recovery phrase in your own terminal:
+
+```sh
+esec setup --yubikey-recipient "$YUBIKEY_1" --yubikey-recipient "$YUBIKEY_2" --yes
+esec recovery create
+```
+
+Creation generates 24 random English BIP39 words, accepts an optional passphrase,
+and requires you to re-enter the words before registering the public recipient.
+The words are displayed only on the controlling terminal, never stdout. Secret
+input is hidden and never accepted in command arguments or environment variables.
+Esec saves only the public recovery recipient in `~/.config/esec/age.toml`.
+Keep the words, derivation format (`esec-v1`), public recipient, and any passphrase
+in your offline backup. Do not reuse a cryptocurrency wallet seed.
+
+Both YubiKeys and the recovery recipient become defaults for **new environments,
+including production**. Dev/test also includes the developer identity. These
+are independent ways to decrypt: either YubiKey, or the phrase **plus its
+passphrase if one was set**, is sufficient. The two YubiKeys are not required
+together. A phrase/passphrase is an emergency production route without touch.
+
+```sh
+esec init --project acme/api --env dev,test,production --yes
+```
+
+The generated project records the recovery role separately from access:
+
+```toml
+project = "acme/api"
+recovery_recipients = ["age1...recovery..."] # role label only; grants no access
+
+[env.production]
+access = "production"
+# key = "..." is generated and maintained by Esec
+recipients = ["age1yubikey1...one...", "age1yubikey1...two...", "age1...recovery..."]
+```
+
+Replace these placeholders with complete public recipients. To make an
+existing production environment hardware-only for human access, remove the
+recovery recipient from **that environment's `recipients`**, then run:
+
+```sh
+esec plan --env production
+esec apply --env production
+```
+
+The local default and root role label never silently add it back. Merely editing
+TOML does not revoke access: apply rotates the environment key and ciphertext.
+Old commits and copied secrets remain readable. `esec encrypt` and ordinary
+rotation preserve the environment's existing access, rather than merging in
+machine defaults. A manually authored TOML declaration is used exactly as written.
+
+Recover without installing any private identity:
+
+```sh
+esec recovery verify production       # in-memory check; prints no secrets
+esec decrypt production --recovery    # plaintext to stdout; source file unchanged
+esec apply --env dev,test --recovery   # recover access by applying a reviewed plan
+```
+
+Each asks privately for the words and passphrase. An empty passphrase works only
+if none was originally set. A different passphrase derives a different identity;
+there is no fallback to an empty passphrase or other local credentials. To restore
+a new developer machine, create its identity, add its public recipient to the
+appropriate TOML lists, and use `apply --recovery` from a trusted terminal. This
+keeps the phrase-derived private identity transient.
+
+Existing phrase and explicit private-key export options:
+
+```sh
+esec recovery import                 # register an existing esec-v1 public default
+esec recovery recipient              # print only the derived public recipient
+esec recovery export --out /secure/recovery.age --expect-recipient "$RECOVERY_RECIPIENT"
+```
+
+Import repeats a nonempty passphrase to catch typos and optionally accepts
+`--expect-recipient`. Export requires the expected public recipient and a separate
+confirmation; it creates a new 0600 file, never overwrites a file, and never adds
+it to automatic identity discovery. That exported file is a plaintext private
+key: it replaces the need to type the phrase/passphrase, so keep it offline.
+
+For an **old Vault v2 root phrase**, use `--format vault-v2` with the recovery
+subcommands, or `--recovery-format vault-v2` with `decrypt --recovery`,
+`apply --recovery`, or `adopt --recovery`. This reproduces the old root recipient and its exact passphrase
+bytes. It can open age seals addressed to that root; it does not reconstruct the
+separate random user identity or decode arbitrary old Vault archives. New
+`esec-v1` recovery uses a different, versioned derivation. Do not guess between
+formats or assume that the same words mean the same recipient everywhere.
+
+Changing a passphrase changes the public recipient. Add and verify the new
+recipient through plan/apply before removing the old one; old commits still need
+the old phrase/passphrase. Keep the encrypted files and `.esec/keys/` backed up:
+the phrase recovers an identity, not missing ciphertext.
+
+The derivation specification and compatibility details are in
+[recovery-format.md](docs/recovery-format.md).
 
 ## Migrate older files offline
 
@@ -324,7 +426,9 @@ esec run dev -- your-test-command
 `adopt` opens the old file with local credentials, creates a new environment
 key, re-encrypts its values, and seals the new key to standalone recipients.
 Raw keys and old encrypted seals remain available for historical recovery.
-For legacy hardware-guarded files, explicitly supply an authorized age identity
+For a legacy seal addressed to your old Vault v2 root, use
+`esec adopt production --recovery --recovery-format vault-v2`. Otherwise, for
+legacy hardware-guarded files, explicitly supply an authorized age identity
 through `ESEC_AGE_IDENTITY_FILE` or export a recovered
 `ESEC_PRIVATE_KEY_<FILE_PUBLIC_KEY>` credential for that one process. Ordinary
 keyring caches do not override a legacy hardware guard. No command contacts a
@@ -338,7 +442,10 @@ esec adopt production --machine-recipient "$DEPLOY_RECIPIENT"
 ```
 
 Keep development machine identities separate from deployment identities.
-Default software recovery identities apply to dev/test, not production.
+Configured offline recovery recipients are included when initializing or adopting
+new environments, including production. Each environment’s explicit TOML
+recipient list is authoritative afterward; removing a recipient and applying
+does not re-add it from machine defaults.
 Adding a deployment recipient grants that identity unattended decryption; a
 local human's normal production route remains their always-touch YubiKey.
 

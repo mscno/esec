@@ -36,6 +36,7 @@ Scripts and agents: output goes to stdout and messages to stderr; "esec help <co
 // commandDetails are the explanations and examples "esec <command> --help"
 // shows, by command path.
 var commandDetails = map[string]string{
+	"recovery":   "Recovery phrases stay offline. Creation and import register only a public default for new dev and production environments; esec.toml remains authoritative afterward. All secret input uses a hidden controlling terminal. Optional passphrases are part of identity derivation, not a removable file password.\n\n" + examples("esec recovery create", "esec recovery import", "esec recovery verify production", "esec decrypt production --recovery", "esec apply --recovery"),
 	"plan":       "Preview public recipient changes and an approval hash without opening any key.\n\n" + examples("esec plan", "esec plan --env dev,test --json"),
 	"apply":      "Apply esec.toml recipient changes after confirmation. New access rotates environment keys. Production, removals, and untracked generations require stronger approval. All environments are prepared before any active ciphertext is changed.\n\n" + examples("esec apply", "esec apply --env dev,test", "esec apply --yes --plan-hash REVIEWED_HASH"),
 	"status":     "Check desired access against the applied encrypted key generations. --check exits 2 for drift, creation, or legacy migration; invalid configuration exits 1.\n\n" + examples("esec status", "esec status --check", "esec status --json"),

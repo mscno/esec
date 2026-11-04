@@ -72,6 +72,7 @@ func (c *InitCmd) Run(ctx *cliCtx) error {
 	if err != nil {
 		return err
 	}
+	pf.RecoveryRecipients = seal.CanonicalRecipients(append(pf.RecoveryRecipients, cfg.Age.RecoveryRecipients...))
 	if _, err := os.Stat(filepath.Join(root, ".esec", "pending")); !errors.Is(err, os.ErrNotExist) {
 		return errors.New("resolve .esec/pending with esec repair before creating environments")
 	}
@@ -139,10 +140,7 @@ func defaultRecipients(c config.Config, production bool, machines []string, noRe
 			return nil, errors.New("no recovery recipient configured; add a YubiKey/offline recipient with esec setup, or explicitly use --no-recovery")
 		}
 	}
-	extra := slices.Clone(machines)
-	if !production {
-		extra = append(extra, c.Age.RecoveryRecipients...)
-	}
+	extra := append(slices.Clone(machines), c.Age.RecoveryRecipients...)
 	for _, r := range extra {
 		out = appendUnique(out, r)
 	}
@@ -531,6 +529,8 @@ func (c *RotateCmd) Run(ctx *cliCtx) error {
 
 // AdoptCmd migrates an existing environment while preserving legacy recovery.
 type AdoptCmd struct {
+	Recovery         bool     `help:"Prompt privately for a recovery phrase to open the old age seal"`
+	RecoveryFormat   string   `default:"esec-v1" enum:"esec-v1,vault-v2" help:"Recovery phrase derivation format"`
 	File             string   `arg:"" help:"Existing environment to migrate with a new key"`
 	MachineRecipient []string `help:"Explicit deployment recipients"`
 	Production       bool     `help:"Treat this custom environment as production"`
@@ -560,10 +560,22 @@ func (c *AdoptCmd) Run(ctx *cliCtx) error {
 	} else {
 		t.Access = "development"
 	}
-	return rotateStandalone(ctx, t, rs)
+	options := esec.ReadOptions{}
+	if c.Recovery {
+		id, err := promptRecoveryIdentity(c.RecoveryFormat)
+		if err != nil {
+			return err
+		}
+		options.AgeIdentities = []age.Identity{id}
+	}
+	return rotateStandaloneWithOptions(ctx, t, rs, options)
 }
 
 func rotateStandalone(ctx *cliCtx, t *esec.ReadTarget, rs []string) error {
+	return rotateStandaloneWithOptions(ctx, t, rs, esec.ReadOptions{})
+}
+
+func rotateStandaloneWithOptions(ctx *cliCtx, t *esec.ReadTarget, rs []string, options esec.ReadOptions) error {
 	if err := validateRecipientChange(t, rs); err != nil {
 		return err
 	}
@@ -594,7 +606,7 @@ func rotateStandalone(ctx *cliCtx, t *esec.ReadTarget, rs []string) error {
 		return err
 	}
 	expected := map[string]sourceSnapshot{t.Path: fileBefore, markerPath: markerBefore}
-	pub, priv, encrypted, err := rotatedCiphertext(t)
+	pub, priv, encrypted, err := rotatedCiphertextWithOptions(t, options)
 	if err != nil {
 		return err
 	}
@@ -603,6 +615,9 @@ func rotateStandalone(ctx *cliCtx, t *esec.ReadTarget, rs []string) error {
 	}
 	pf, err := projectfile.Load(t.Root)
 	if err != nil {
+		return err
+	}
+	if err := registerLegacyRecovery(pf, t.Standalone); err != nil {
 		return err
 	}
 	for env, e := range pf.Env {
@@ -789,9 +804,9 @@ func rejectSharedFiles(t *esec.ReadTarget) error {
 	})
 }
 
-func rotatedCiphertext(t *esec.ReadTarget) (pub, priv string, encrypted []byte, err error) {
+func rotatedCiphertextWithOptions(t *esec.ReadTarget, options esec.ReadOptions) (pub, priv string, encrypted []byte, err error) {
 	// Ask the normal reader to decrypt: legacy hardware protection is honored.
-	plain, err := esec.ReadDocument(t, esec.ReadOptions{})
+	plain, err := esec.ReadDocument(t, options)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -890,6 +905,9 @@ func validateRecipientChange(t *esec.ReadTarget, rs []string) error {
 	if err != nil {
 		return err
 	}
+	if !t.Standalone {
+		pf.RecoveryRecipients = seal.CanonicalRecipients(append(pf.RecoveryRecipients, cfg.Age.RecoveryRecipients...))
+	}
 	return rejectDevelopmentRecipients(pf, t.Environment, t.Access, rs)
 }
 
@@ -910,4 +928,16 @@ func writeStandaloneGeneration(root, project, env, pub, access string, rs []stri
 		return err
 	}
 	return writeImmutableFile(root, seal.AccessRecordPath(root, env, pub), append(encoded, '\n'))
+}
+
+func registerLegacyRecovery(pf *projectfile.File, standalone bool) error {
+	if standalone {
+		return nil
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	pf.RecoveryRecipients = seal.CanonicalRecipients(append(pf.RecoveryRecipients, cfg.Age.RecoveryRecipients...))
+	return nil
 }

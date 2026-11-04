@@ -49,6 +49,7 @@ func commandExit(err error) (int, bool) {
 }
 
 type cli struct {
+	Recovery   RecoveryCmd     `cmd:"" help:"Create, verify, or restore an offline recovery phrase identity"`
 	Plan       PlanCmd         `cmd:"" help:"Preview esec.toml access changes without decrypting"`
 	Apply      ApplyCmd        `cmd:"" help:"Apply reviewed esec.toml access with confirmation and key rotation"`
 	Status     StatusCmd       `cmd:"" help:"Check desired access against applied encrypted keys"`

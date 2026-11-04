@@ -183,6 +183,16 @@ func TestWorkloadIdentityOpensGuardedSealWithoutDaemon(t *testing.T) {
 	if _, err := ReadDocument(target, ReadOptions{}); err == nil {
 		t.Fatal("an unauthorized identity opened the seal")
 	}
+	// Explicit transient recovery identities replace even wrong process credentials.
+	if _, err := ReadDocument(target, ReadOptions{AgeIdentities: []age.Identity{id}}); err != nil {
+		t.Fatal("in-memory identity could not open historical guarded seal", err)
+	}
+	t.Setenv("ESEC_AGE_IDENTITY", id.String())
+	for _, ids := range [][]age.Identity{{other}, {}} {
+		if _, err := ReadDocument(target, ReadOptions{AgeIdentities: ids}); err == nil {
+			t.Fatal("explicit in-memory identities fell back to a valid process credential")
+		}
+	}
 }
 
 func TestPublicKeyAddressedWorkloadCredentialStaysDirect(t *testing.T) {

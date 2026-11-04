@@ -162,13 +162,13 @@ func TestStandaloneProductionExcludesDeveloper(t *testing.T) {
 	initStandalone(t, root, ctx)
 	cfg, _ := config.Load()
 	// Public test recipient: parsing performs no hardware interaction.
-	cfg.Age.YubiKeyRecipients = []string{plugin.EncodeRecipient("yubikey", []byte("synthetic-test-recipient"))}
+	cfg.Age.YubiKeyRecipients = []string{plugin.EncodeRecipient("yubikey", []byte("synthetic-test-recipient")), plugin.EncodeRecipient("yubikey", []byte("synthetic-second-recipient"))}
 	machine, _ := age.GenerateX25519Identity()
 	rs, err := defaultRecipients(cfg, true, []string{machine.Recipient().String()}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rs) != 2 || slicesContains(rs, dev.Recipient().String()) || !slicesContains(rs, machine.Recipient().String()) {
+	if len(rs) != 4 || !slicesContains(rs, cfg.Age.RecoveryRecipients[0]) || slicesContains(rs, dev.Recipient().String()) || !slicesContains(rs, machine.Recipient().String()) {
 		t.Fatal("production recipients are incorrect")
 	}
 	if _, err := defaultRecipients(cfg, true, []string{dev.Recipient().String()}, false); err == nil {
