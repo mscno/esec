@@ -43,8 +43,7 @@ const ProjectFileName = "esec.toml"
 const (
 	// GuardNone keeps the key in the keyring; tools read it directly.
 	GuardNone = "none"
-	// GuardSession wraps the key to the hardware guard; one touch unlocks it
-	// for a broker session.
+	// GuardSession is historical guarded metadata retained for offline migration.
 	GuardSession = "session"
 	// GuardTouch wraps the key to the hardware guard; every read needs a touch.
 	GuardTouch = "touch"
@@ -94,7 +93,7 @@ type Env struct {
 	Guard string `toml:"guard,omitempty"`
 	// Readers are who the environment's key is sealed to, in .esec/: people
 	// ("mads (gh:583231)"), groups ("group acme/backend") and keys
-	// ("deploy (age1…)"). esec vault writes it; the seal is the authority.
+	// ("deploy (age1…)"). Retained for historical seal validation.
 	Readers []string `toml:"readers,omitempty"`
 }
 

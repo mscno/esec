@@ -14,7 +14,7 @@ import (
 	"github.com/mscno/esec/pkg/projectfile"
 )
 
-// Config contains preferences shared by esec and esec-vault.
+// Config contains local Esec preferences.
 type Config struct {
 	DefaultFormat string `toml:"default_format"`
 	Files         Files  `toml:"files"`
@@ -97,12 +97,12 @@ func Defaults() Config {
 	}}
 }
 
-// Path follows esec-vault's existing config home, with a file-level override.
+// Path resolves the local config directory, with a file-level override.
 func Path() (string, error) {
 	if p := os.Getenv("ESEC_CONFIG"); p != "" {
 		return p, nil
 	}
-	if p := os.Getenv("ESEC_VAULT_HOME"); p != "" {
+	if p := Home(); p != "" {
 		return filepath.Join(p, "config.toml"), nil
 	}
 	if p := os.Getenv("XDG_CONFIG_HOME"); p != "" {
@@ -219,8 +219,7 @@ func Expand(pattern, env, format string) (string, error) {
 	return filepath.Clean(p), nil
 }
 
-// AgePath is separate from config.toml so older Esec/Vault versions can coexist
-// throughout migration without rejecting new configuration fields.
+// AgePath keeps local age identities separate from file-discovery preferences.
 func AgePath() (string, error) {
 	p, e := Path()
 	if e != nil {
@@ -282,4 +281,13 @@ func (c Config) SaveAge() error {
 		return err
 	}
 	return os.Rename(f.Name(), p)
+}
+
+// Home returns an explicit config root. The old variable remains a path-only
+// compatibility alias for existing encrypted keyring locations.
+func Home() string {
+	if p := os.Getenv("ESEC_HOME"); p != "" {
+		return p
+	}
+	return os.Getenv("ESEC_VAULT_HOME")
 }

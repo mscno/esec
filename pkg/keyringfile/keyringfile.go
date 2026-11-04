@@ -182,7 +182,7 @@ func (c Codec) Decode(path string, data []byte) ([]byte, error) {
 	}
 	key, err := CacheKey(s)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w (backend %q; run 'esec vault status')", path, err, s.Backend())
+		return nil, fmt.Errorf("%s: %w (local backend %q; restore the original cache key or recover a standalone keyring)", path, err, s.Backend())
 	}
 	return Open(data, key, path)
 }

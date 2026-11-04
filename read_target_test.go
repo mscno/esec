@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"filippo.io/age"
+	"github.com/mscno/esec/pkg/config"
 	"github.com/mscno/esec/pkg/projectfile"
 	"github.com/mscno/esec/pkg/seal"
-	"github.com/mscno/esec/pkg/secretstore"
 )
 
 func readFixture(t *testing.T, guard string) (string, string) {
@@ -101,7 +101,7 @@ func TestGuardPrecedesCachedAndExplicitKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if target.Route() != "daemon" {
+	if target.Route() != "blocked" {
 		t.Fatal("guard selected a direct read")
 	}
 	if plain, err := ReadDocument(target, ReadOptions{PrivateKey: priv}); err == nil || len(plain) != 0 {
@@ -116,7 +116,7 @@ func TestGuardPrecedesCachedAndExplicitKeys(t *testing.T) {
 		t.Fatal("inspection disclosed file content or a credential")
 	}
 	if len(inspection.Blockers) == 0 {
-		t.Fatal("missing daemon was not explained")
+		t.Fatal("offline migration was not explained")
 	}
 }
 
@@ -222,7 +222,7 @@ func TestExplicitReadIgnoresUnrelatedCallerProject(t *testing.T) {
 	}
 }
 
-func TestPersonalIdentityReadsOrdinarySealLocally(t *testing.T) {
+func TestConfiguredAgeIdentityReadsOrdinarySealLocally(t *testing.T) {
 	root, priv := readFixture(t, "none")
 	pf, _ := projectfile.Load(root)
 	_, identityPrivate, err := GenerateKeypair()
@@ -240,17 +240,18 @@ func TestPersonalIdentityReadsOrdinarySealLocally(t *testing.T) {
 	if err := seal.Write(root, "production", sealed); err != nil {
 		t.Fatal(err)
 	}
-	store, err := secretstore.Default()
+	identityFile := filepath.Join(t.TempDir(), "developer.age")
+	if err := os.WriteFile(identityFile, []byte(reader.String()+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Set("identity-private", identityPrivate); err != nil {
+	cfg.Age.IdentityFiles = []string{identityFile}
+	if err := cfg.Save(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(secretstore.Home(), "identity.esec"), []byte("identity metadata"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("ESEC_VAULT_SOCK", filepath.Join(t.TempDir(), "missing.sock"))
 	target, err := ResolveRead(root, "production", "")
 	if err != nil {
 		t.Fatal(err)
@@ -287,29 +288,5 @@ func TestComponentReadUsesItsProjectLocalKeyring(t *testing.T) {
 	data, info, err := ReadDocumentWithInfo(target, ReadOptions{})
 	if err != nil || info.Source != "local_key" || !strings.Contains(string(data), "TOKEN=hello") {
 		t.Fatalf("project-local keyring: %s %v", data, err)
-	}
-}
-
-func TestForwardedReadCarriesCiphertextAndNeverPrivateCredentials(t *testing.T) {
-	t.Setenv("ESEC_VAULT_FORWARD", "/tmp/esec-forwarded.sock")
-	path := filepath.Join(t.TempDir(), "prod.age")
-	if err := os.WriteFile(path, []byte("sealed key"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	target := &ReadTarget{Project: "a/b", Environment: "prod", KeyEnvironment: "prod", Guard: "touch", Seal: path, Content: []byte("ciphertext")}
-	req, sock, err := prepareReadRequest(target, ReadOptions{PrivateKey: "never-send-this-key"}, "read_document")
-	if err != nil || sock != "/tmp/esec-forwarded.sock" || string(req.Content) != "ciphertext" || string(req.Seal) != "sealed key" {
-		t.Fatalf("forwarded request: %+v %s %v", req, sock, err)
-	}
-	encoded, err := json.Marshal(req)
-	if err != nil || strings.Contains(string(encoded), "never-send-this-key") {
-		t.Fatal("private credential sent to a broker")
-	}
-	inspection := InspectRead(target, ReadOptions{})
-	if inspection.Broker != "forwarded" || inspection.Hardware != "remote_not_verified" {
-		t.Fatalf("forward inspection: %+v", inspection)
-	}
-	if _, _, err := prepareReadRequest(target, ReadOptions{}, "inspect_read"); err == nil {
-		t.Fatal("remote inspection could request a guarded read")
 	}
 }

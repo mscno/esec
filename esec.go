@@ -33,6 +33,7 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
+	"github.com/mscno/esec/pkg/config"
 	"github.com/mscno/esec/pkg/crypto"
 	"github.com/mscno/esec/pkg/dotenv"
 	"github.com/mscno/esec/pkg/fileutils"
@@ -71,7 +72,7 @@ func GlobalKeyringDir() string {
 	if dir := os.Getenv(EsecKeyringDir); dir != "" {
 		return dir
 	}
-	if home := os.Getenv("ESEC_VAULT_HOME"); home != "" {
+	if home := config.Home(); home != "" {
 		return filepath.Join(home, "keyrings")
 	}
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
@@ -348,12 +349,12 @@ func DecryptFromFS(v fs.FS, config DecryptFromEmbedConfig) ([]byte, error) {
 
 	// Generate the filename based on the format and environment name
 	fileName := fileutils.GenerateFilename(fileutils.FileFormat(config.Format), envName)
-	config.Logger.Debug("reading file from vault", "file", fileName)
+	config.Logger.Debug("reading encrypted embedded file", "file", fileName)
 
 	// Attempt to read the file from the embedded filesystem
 	data, err := fs.ReadFile(v, fileName)
 	if err != nil {
-		return nil, fmt.Errorf("error reading file from vault: %v", err)
+		return nil, fmt.Errorf("error reading encrypted embedded file: %v", err)
 	}
 
 	// Find the private key
@@ -401,7 +402,7 @@ func DecryptFromEmbedFS(v embed.FS, envName string, format FileFormat) ([]byte, 
 	// Attempt to read the file from the embedded filesystem
 	data, err := v.ReadFile(fileName)
 	if err != nil {
-		return nil, fmt.Errorf("error reading file from vault: %v", err)
+		return nil, fmt.Errorf("error reading encrypted embedded file: %v", err)
 	}
 
 	// Find the private key
@@ -791,17 +792,17 @@ type KeyNotFoundError struct {
 	// identity was given.
 	Sealed string
 	// Guarded is set when that environment is guarded: people open it with
-	// a touch of a security key, through esec vault.
+	// an explicitly supplied age identity or recovered per-key credential.
 	Guarded bool
 }
 
 func (e *KeyNotFoundError) Error() string {
-	switch {
-	case e.Sealed != "" && e.Guarded:
+	if e.Sealed != "" && e.Guarded {
 		env := strings.TrimSuffix(filepath.Base(e.Sealed), ".age")
-		return fmt.Sprintf("private key %q is sealed in %s and guarded by your security key: read it through the background service, which asks for a touch: esec vault decrypt %s [KEY], or esec vault run %s -- COMMAND (machines: set %s)", e.Name, e.Sealed, env, env, seal.EnvIdentity)
-	case e.Sealed != "":
-		return fmt.Sprintf("private key %q is sealed in %s: open it with esec vault (esec vault run ENV -- COMMAND), or give a reader's age identity in %s", e.Name, e.Sealed, seal.EnvIdentity)
+		return fmt.Sprintf("private key %q is sealed in %s with legacy hardware protection: provide an authorized identity in %s or %s, then migrate with esec adopt %s", e.Name, e.Sealed, seal.EnvIdentityFile, seal.EnvIdentity, env)
+	}
+	if e.Sealed != "" {
+		return fmt.Sprintf("private key %q is sealed in %s: provide an authorized age identity in %s", e.Name, e.Sealed, seal.EnvIdentityFile)
 	}
 	if e.NoFiles && len(e.Tried) > 0 {
 		return fmt.Sprintf("private key %q not found in environment variables, and keyring file does not exist at %q", e.Name, e.Tried[0])

@@ -1,9 +1,7 @@
 package commands
 
 import (
-	"encoding/json"
 	"log/slog"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,59 +57,17 @@ func guardedRepo(t *testing.T, guard string) {
 	t.Chdir(repo)
 }
 
-func TestGuardedReadsUseDocumentProtocolForNamesAndFiles(t *testing.T) {
+func TestGuardedReadsRequireOfflineCredentialForNamesAndFiles(t *testing.T) {
 	guardedRepo(t, projectfile.GuardTouch)
-	dir, err := os.MkdirTemp("", "esec-read-") //nolint:usetesting // Darwin Unix sockets need a short path
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	sock := filepath.Join(dir, "r.sock")
-	t.Setenv("ESEC_VAULT_SOCK", sock)
-	ln, err := net.Listen("unix", sock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	done := make(chan struct{})
-	defer close(done)
-	target, err := esec.ResolveRead(".", "prod", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			func() {
-				defer conn.Close()
-				var req map[string]string
-				if json.NewDecoder(conn).Decode(&req) != nil {
-					return
-				}
-				if req["op"] != "read_document" || req["env"] != "prod" {
-					if err := json.NewEncoder(conn).Encode(map[string]any{"ok": false, "error": "wrong canonical read"}); err != nil {
-						t.Error(err)
-					}
-					return
-				}
-				if err := json.NewEncoder(conn).Encode(map[string]any{"ok": true, "document": []byte("ESEC_PUBLIC_KEY=" + target.PublicKey + "\nAPI=sk_live\n")}); err != nil {
-					t.Error(err)
-				}
-			}()
-		}
-	}()
 	ctx := &cliCtx{Logger: slog.New(slog.DiscardHandler)}
 	for _, input := range []string{"prod", ".env.prod"} {
 		got, msg := captureOutput(func() error { return (&DecryptCmd{File: input, KeyDir: "."}).Run(ctx) })
-		if msg != "" || !strings.Contains(got, "API=sk_live") {
-			t.Fatalf("decrypt %s: %q %s", input, got, msg)
+		if got != "" || !strings.Contains(msg, "legacy_guard_requires_migration") {
+			t.Fatalf("unexpected guarded read: %q %s", got, msg)
 		}
 		got, msg = captureOutput(func() error { return (&GetCmd{File: input, Key: "API", KeyDir: "."}).Run(ctx) })
-		if msg != "" || got != "sk_live" {
-			t.Fatalf("get %s: %q %s", input, got, msg)
+		if got != "" || !strings.Contains(msg, "legacy_guard_requires_migration") {
+			t.Fatalf("unexpected guarded get: %q %s", got, msg)
 		}
 	}
 }

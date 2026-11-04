@@ -86,7 +86,7 @@ func (c *InitCmd) Run(ctx *cliCtx) error {
 	}
 	// Persist every recovery seal before changing any secrets file.
 	for _, w := range writes {
-		if err := writeStandaloneSeal(root, w.env, w.pub, w.sealed); err != nil {
+		if err := writeStandaloneGeneration(root, pf.Project, w.env, w.pub, accessName(w.production), w.recipients, w.sealed); err != nil {
 			return err
 		}
 	}
@@ -139,7 +139,11 @@ func defaultRecipients(c config.Config, production bool, machines []string, noRe
 			return nil, errors.New("no recovery recipient configured; add a YubiKey/offline recipient with esec setup, or explicitly use --no-recovery")
 		}
 	}
-	for _, r := range append(append([]string{}, c.Age.RecoveryRecipients...), machines...) {
+	extra := slices.Clone(machines)
+	if !production {
+		extra = append(extra, c.Age.RecoveryRecipients...)
+	}
+	for _, r := range extra {
 		out = appendUnique(out, r)
 	}
 	for _, r := range out {
@@ -152,7 +156,7 @@ func defaultRecipients(c config.Config, production bool, machines []string, noRe
 	}
 	return out, nil
 }
-func sealStandalone(project, env, priv string, recipients []string) ([]byte, error) {
+func sealStandalone(project, env, priv, access string, recipients []string) ([]byte, error) {
 	var rs []age.Recipient
 	for _, s := range recipients {
 		r, err := seal.ParseRecipient(s)
@@ -162,7 +166,7 @@ func sealStandalone(project, env, priv string, recipients []string) ([]byte, err
 		rs = append(rs, r)
 	}
 	// Access is enforced by the actual age recipients. No daemon/session guard.
-	return seal.Seal(seal.Payload{Project: project, Env: env, Private: priv, Guard: "none"}, rs...)
+	return seal.Seal(seal.Payload{Project: project, Env: env, Private: priv, Guard: "none", Access: access, Recipients: seal.CanonicalRecipients(recipients)}, rs...)
 }
 func encryptBytes(b []byte, f esec.FileFormat) ([]byte, error) {
 	var out bytes.Buffer
@@ -170,8 +174,7 @@ func encryptBytes(b []byte, f esec.FileFormat) ([]byte, error) {
 	return out.Bytes(), err
 }
 
-func writeStandaloneSeal(root, env, pub string, data []byte) error {
-	p := seal.StandaloneKeyPath(root, env, pub)
+func writeImmutableFile(root, p string, data []byte) error {
 	if err := safeProjectPath(root, p); err != nil {
 		return err
 	}
@@ -447,9 +450,11 @@ func (c *RepairCmd) Run(ctx *cliCtx) error {
 // RecipientsCmd always rotates the Esec key. Removing recipients without
 // rotation would leave copied old private keys valid for future values.
 type RecipientsCmd struct {
-	File   string   `arg:"" help:"Environment or encrypted file"`
-	Add    []string `help:"Public age recipients to add"`
-	Remove []string `help:"Public age recipients to remove (rotates the environment key)"`
+	File             string   `arg:"" help:"Environment or encrypted file"`
+	Add              []string `help:"Public age recipients to add"`
+	Remove           []string `help:"Public age recipients to remove (rotates the environment key)"`
+	Yes              bool     `help:"Confirm the explicit recipient edits without prompting"`
+	ApproveSensitive bool     `help:"With --yes, approve production access changes or recipient removal"`
 }
 
 // Run lists or updates environment recipients.
@@ -462,6 +467,9 @@ func (c *RecipientsCmd) Run(ctx *cliCtx) error {
 		return errors.New("legacy environment: run esec adopt first")
 	}
 	if len(c.Add) == 0 && len(c.Remove) == 0 {
+		if t.PolicyStatus != "current" {
+			say(ctx, "Recipient metadata is %s; run esec plan to compare applied access.", t.PolicyStatus)
+		}
 		for _, r := range t.Recipients {
 			fmt.Println(r)
 		}
@@ -473,6 +481,33 @@ func (c *RecipientsCmd) Run(ctx *cliCtx) error {
 	}
 	for _, r := range c.Add {
 		rs = appendUnique(rs, r)
+	}
+	if t.PolicyStatus == "drift" {
+		return errors.New("esec.toml already has unapplied access edits; review esec plan and use esec apply")
+	}
+	if err := validateRecipientChange(t, rs); err != nil {
+		return err
+	}
+	if slices.Equal(seal.CanonicalRecipients(t.Recipients), seal.CanonicalRecipients(rs)) {
+		say(ctx, "Recipients are unchanged.")
+		return nil
+	}
+	item := EnvironmentPlan{Environment: t.Environment, Action: "rotate", Access: t.Access, Recipients: seal.CanonicalRecipients(rs), Added: recipientDifference(rs, t.Recipients), Removed: recipientDifference(t.Recipients, rs)}
+	item.Sensitive = t.Access == "production" || len(item.Removed) > 0
+	if item.Access == "production" {
+		for _, r := range rs {
+			if !strings.HasPrefix(r, "age1yubikey1") {
+				item.SoftwareRecipients = append(item.SoftwareRecipients, r)
+			}
+		}
+	}
+	plan := &AccessPlan{Project: t.Project, Hash: digest([]byte(t.Digest + strings.Join(rs, "\n"))), Environments: []EnvironmentPlan{item}}
+	if err := printAccessPlan(plan, false); err != nil {
+		return err
+	}
+	approval := ApplyCmd{Yes: c.Yes, ApproveSensitive: c.ApproveSensitive, PlanHash: plan.Hash}
+	if err := approval.confirm(plan); err != nil {
+		return err
 	}
 	return rotateStandalone(ctx, t, rs)
 }
@@ -575,11 +610,11 @@ func rotateStandalone(ctx *cliCtx, t *esec.ReadTarget, rs []string) error {
 			return errors.New("shared-key environment aliases require an explicit combined migration")
 		}
 	}
-	sealed, err := sealStandalone(t.Project, t.Environment, priv, rs)
+	sealed, err := sealStandalone(t.Project, t.Environment, priv, t.Access, rs)
 	if err != nil {
 		return err
 	}
-	if err := writeStandaloneSeal(t.Root, t.Environment, pub, sealed); err != nil {
+	if err := writeStandaloneGeneration(t.Root, t.Project, t.Environment, pub, t.Access, rs, sealed); err != nil {
 		return err
 	}
 	pf.Env[t.Environment] = projectfile.Env{Key: pub, Recipients: rs, Access: t.Access}
@@ -634,6 +669,20 @@ func (c *InitCmd) prepareEnvironment(ctx *cliCtx, root, env string, pf *projectf
 	if err != nil {
 		return w, before, fmt.Errorf("%s: %w", env, err)
 	}
+	return c.prepareConfiguredEnvironment(ctx, root, env, pf, production, recips)
+}
+
+func (c *InitCmd) prepareConfiguredEnvironment(ctx *cliCtx, root, env string, pf *projectfile.File, production bool, recips []string) (w pendingEnvironment, before sourceSnapshot, err error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return w, before, err
+	}
+	if err := validateAccessPolicy(env, projectfile.Env{Access: accessName(production), Recipients: recips}, cfg); err != nil {
+		return w, before, err
+	}
+	if err := rejectDevelopmentRecipients(pf, env, accessName(production), recips); err != nil {
+		return w, before, err
+	}
 	format := pf.FilesFormat()
 	if format == "" {
 		format = "env"
@@ -673,7 +722,7 @@ func (c *InitCmd) prepareEnvironment(ctx *cliCtx, root, env string, pf *projectf
 	if !bytes.Equal(verified.Bytes(), body) {
 		return w, before, errors.New("new environment failed round-trip verification; existing file was not changed")
 	}
-	sealed, err := sealStandalone(pf.Project, env, priv, recips)
+	sealed, err := sealStandalone(pf.Project, env, priv, accessName(production), recips)
 	if err != nil {
 		return w, before, err
 	}
@@ -734,7 +783,7 @@ func rejectSharedFiles(t *esec.ReadTarget) error {
 		}
 		key, e := esec.ExtractPublicKey(b, esec.FileFormat(f))
 		if e == nil && hex.EncodeToString(key[:]) == t.PublicKey {
-			return fmt.Errorf("another file uses this key: %s; migrate shared-key files together before retiring Vault", p)
+			return fmt.Errorf("another file uses this key: %s; migrate shared-key files together", p)
 		}
 		return nil
 	})
@@ -827,21 +876,38 @@ func readJournalCiphertext(journal, rel string, e journalEntry) ([]byte, error) 
 }
 
 func validateRecipientChange(t *esec.ReadTarget, rs []string) error {
-	if len(rs) == 0 {
-		return errors.New("at least one recipient must remain")
-	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	for _, r := range rs {
-		if _, err := seal.ParseRecipient(r); err != nil {
-			return err
-		}
-		if t.Access == "production" && r == cfg.Age.DeveloperRecipient {
-			return errors.New("refusing to grant the everyday developer identity production access")
-		}
+	if err := validateAccessPolicy(t.Environment, projectfile.Env{Access: t.Access, Recipients: rs}, cfg); err != nil {
+		return err
 	}
+	if t.AppliedPolicy != nil && t.AppliedPolicy.Access == "production" && t.Access != "production" {
+		return errors.New("production access cannot be downgraded")
+	}
+	pf, err := projectfile.Load(t.Root)
+	if err != nil {
+		return err
+	}
+	return rejectDevelopmentRecipients(pf, t.Environment, t.Access, rs)
+}
 
-	return nil
+func accessName(production bool) string {
+	if production {
+		return "production"
+	}
+	return "development"
+}
+
+func writeStandaloneGeneration(root, project, env, pub, access string, rs []string, data []byte) error {
+	if err := writeImmutableFile(root, seal.StandaloneKeyPath(root, env, pub), data); err != nil {
+		return err
+	}
+	record := seal.AccessRecord{Version: 1, Project: project, Environment: env, PublicKey: pub, Access: access, Recipients: seal.CanonicalRecipients(rs), SealHash: seal.Hash(data)}
+	encoded, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeImmutableFile(root, seal.AccessRecordPath(root, env, pub), append(encoded, '\n'))
 }

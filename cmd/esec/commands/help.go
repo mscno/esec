@@ -36,13 +36,16 @@ Scripts and agents: output goes to stdout and messages to stderr; "esec help <co
 // commandDetails are the explanations and examples "esec <command> --help"
 // shows, by command path.
 var commandDetails = map[string]string{
+	"plan":       "Preview public recipient changes and an approval hash without opening any key.\n\n" + examples("esec plan", "esec plan --env dev,test --json"),
+	"apply":      "Apply esec.toml recipient changes after confirmation. New access rotates environment keys. Production, removals, and untracked generations require stronger approval. All environments are prepared before any active ciphertext is changed.\n\n" + examples("esec apply", "esec apply --env dev,test", "esec apply --yes --plan-hash REVIEWED_HASH"),
+	"status":     "Check desired access against the applied encrypted key generations. --check exits 2 for drift, creation, or legacy migration; invalid configuration exits 1.\n\n" + examples("esec status", "esec status --check", "esec status --json"),
 	"files":      "Lists file paths, environments and key names without decrypting values.\n\n" + examples("esec files --dir . --json"),
 	"secrets":    "Structured local document operations for native editors. Reads never contact a broker. Updates accept revision, key, value and create in JSON stdin.\n\n" + examples("esec secrets show --file .env.dev --json", "esec secrets update --file .env.dev"),
 	"init":       "Creates age-sealed environments without a server. Dev includes your developer and recovery recipients; production excludes the developer identity.\n\n" + examples("esec init --project acme/store --env dev,production --yes", "esec init --env test --encrypt-existing --yes"),
-	"identity":   "Creates a new software identity for a deployment or offline recovery. Prints only its public recipient; stores the private key in a new 0600 file. It is not automatically granted access or loaded locally.\n\n" + examples("esec identity create --out /secure/deployment.age"),
-	"recipients": "Lists recipients or rotates the environment key when they change. An added machine recipient can decrypt without hardware touch. Removed recipients retain access to older ciphertext and previously copied values.\n\n" + examples("esec recipients production", "esec recipients production --add age1..."),
+	"identity":   "Creates a new software identity for a deployment or offline recovery. Use identity list to display configured public recipients. Creation prints only its public recipient and stores the private key in a new 0600 file. It is not automatically granted access or loaded locally.\n\n" + examples("esec identity list", "esec identity create --out /secure/deployment.age"),
+	"recipients": "Lists desired recipients or confirms and rotates the environment key when they change. Unapplied TOML edits must first go through plan/apply. An added machine recipient can decrypt without hardware touch. Removed recipients retain access to older ciphertext and previously copied values.\n\n" + examples("esec recipients production", "esec recipients production --add age1..."),
 	"rotate":     "Creates a fresh environment key, reseals it to the existing recipients, and re-encrypts the file. Old encrypted key generations remain for historical recovery.\n\n" + examples("esec rotate dev"),
-	"adopt":      "Migrates a legacy environment by rotating its key and sealing the new key to configured standalone recipients. Existing guard approval is honored before opening the old file. Old keys, seals and recovery paths are preserved.\n\n" + examples("esec adopt dev", "esec adopt production --machine-recipient age1..."),
+	"adopt":      "Migrates a legacy environment by rotating its key and sealing the new key to configured standalone recipients. Legacy guarded files require an explicit age identity or recovered public-key-addressed credential. Old keys, seals and recovery paths are preserved.\n\n" + examples("esec adopt dev", "esec adopt production --machine-recipient age1..."),
 	"repair":     "Completes an interrupted encrypted write using its local ciphertext journal. Does not retrieve keys or contact a server.\n\n" + examples("esec repair"),
 	"inspect": `Resolves the same exact file, environment and protection as decrypt and run. Shows public metadata only: no secret-store entries are read, no seal opens, no hardware or approval is requested. Unknown availability stays unverified.
 
@@ -123,11 +126,7 @@ func helpArgs(args []string) []string {
 	return args
 }
 
-// vaultInstall says how to install esec-vault, which provides "esec vault".
-const vaultInstall = "go install github.com/mscno/esec-vault/cmd/esec-vault@latest (or a release from https://github.com/mscno/esec-vault/releases)"
-
-// printHelp is kong's help, and at the top level the commands that
-// esec-<name> programs on PATH add (git-style), so "esec vault" shows up.
+// printHelp lists supported external editor integrations alongside builtins.
 func printHelp(options kong.HelpOptions, ctx *kong.Context) error {
 	if err := kong.DefaultHelpPrinter(options, ctx); err != nil {
 		return err
@@ -140,17 +139,12 @@ func printHelp(options kong.HelpOptions, ctx *kong.Context) error {
 
 func printExternal(w io.Writer) {
 	found := externalCommands()
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "More commands, from esec-<name> programs on PATH:")
-	if !slices.Contains(found, "vault") {
-		fmt.Fprintln(w, "  vault    Legacy migration support (not installed; standalone setup does not need it)")
+	if len(found) == 0 {
+		return
 	}
+	fmt.Fprintln(w, "\nMore commands, from esec-<name> programs on PATH:")
 	for _, name := range found {
-		about := ""
-		if name == "vault" {
-			about = `Legacy Vault access for unmigrated projects; see "esec vault --help"`
-		}
-		fmt.Fprintf(w, "  %-8s %s\n", name, strings.TrimSpace(about))
+		fmt.Fprintf(w, "  %s\n", name)
 	}
 }
 
@@ -165,8 +159,8 @@ func externalCommands() []string {
 		for _, e := range entries {
 			name, ok := strings.CutPrefix(e.Name(), "esec-")
 			name = strings.TrimSuffix(name, ".exe")
-			// esec-vault-server is a server, not a command of esec.
-			if !ok || name == "" || name == "vault-server" || builtinCommands[name] || slices.Contains(out, name) || strings.ContainsAny(name, ".") {
+			// Never advertise retired service commands.
+			if !ok || name == "" || retiredCommand(name) || builtinCommands[name] || slices.Contains(out, name) || strings.ContainsAny(name, ".") {
 				continue
 			}
 			if _, err := exec.LookPath(e.Name()); err == nil {
@@ -252,8 +246,7 @@ func hints(err error) []string {
 		return []string{"give esec the private key in one of these ways:" +
 			"\n  export " + nf.Name + "=<private key>" +
 			"\n  add the line " + nf.Name + "=<private key> to .esec-keyring (never commit it)" +
-			"\n  pass it on stdin with -k" +
-			"\n  with esec vault: esec vault sync fetches the keys of shared projects; esec vault run <env> -- <command> uses them"}
+			"\n  pass it on stdin with -k"}
 	}
 	return nil
 }

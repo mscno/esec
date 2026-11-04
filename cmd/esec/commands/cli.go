@@ -49,25 +49,25 @@ func commandExit(err error) (int, bool) {
 }
 
 type cli struct {
-	Files       FilesCmd        `cmd:"" help:"List local encrypted files and public metadata as JSON"`
-	Secrets     SecretsCmd      `cmd:"" help:"Read and update local secret documents for native editors"`
-	Inspect     InspectCmd      `cmd:"" help:"Explain a read: file, reader, key, guard, route and blockers; no secrets or prompts"`
-	Keygen      KeygenCmd       `cmd:"" help:"Generate a new keypair"`
-	Setup       MachineSetupCmd `cmd:"" help:"Configure this machine's developer and YubiKey age identities"`
-	Init        InitCmd         `cmd:"" help:"Create standalone environments encrypted to configured age recipients"`
-	Identity    IdentityCmd     `cmd:"" help:"Create independent age identities for machines or recovery"`
-	Recipients  RecipientsCmd   `cmd:"" help:"List recipients, or change them and rotate the key"`
-	Rotate      RotateCmd       `cmd:"" help:"Rotate a standalone environment key"`
-	Adopt       AdoptCmd        `cmd:"" help:"Migrate an existing environment to standalone age access with a new key"`
-	Repair      RepairCmd       `cmd:"" help:"Complete an interrupted encrypted write"`
-	LegacySetup SetupCmd        `cmd:"" hidden:"" help:"Legacy project setup (use init for standalone environments)"`
-	Encrypt     EncryptCmd      `cmd:"" help:"Encrypt a secrets file in place"`
-	Decrypt     DecryptCmd      `cmd:"" help:"Decrypt a secrets file to stdout"`
-	Export      ExportCmd       `cmd:"" help:"Print decrypted secrets as NAME=value lines, without the public key"`
-	Get         GetCmd          `cmd:"" help:"Decrypt a secrets file and print a single value"`
-	Run         RunCmd          `cmd:"" help:"Run a command with decrypted secrets as environment variables"`
-
-	Capabilities CapabilitiesCmd `cmd:"" hidden:"" help:"Print supported optional features, one per line"`
+	Plan       PlanCmd         `cmd:"" help:"Preview esec.toml access changes without decrypting"`
+	Apply      ApplyCmd        `cmd:"" help:"Apply reviewed esec.toml access with confirmation and key rotation"`
+	Status     StatusCmd       `cmd:"" help:"Check desired access against applied encrypted keys"`
+	Files      FilesCmd        `cmd:"" help:"List local encrypted files and public metadata as JSON"`
+	Secrets    SecretsCmd      `cmd:"" help:"Read and update local secret documents for native editors"`
+	Inspect    InspectCmd      `cmd:"" help:"Explain a read: file, reader, key, guard, route and blockers; no secrets or prompts"`
+	Keygen     KeygenCmd       `cmd:"" help:"Generate a new keypair"`
+	Setup      MachineSetupCmd `cmd:"" help:"Configure this machine's developer and YubiKey age identities"`
+	Init       InitCmd         `cmd:"" help:"Create standalone environments encrypted to configured age recipients"`
+	Identity   IdentityCmd     `cmd:"" help:"Create independent age identities for machines or recovery"`
+	Recipients RecipientsCmd   `cmd:"" help:"List recipients, or change them and rotate the key"`
+	Rotate     RotateCmd       `cmd:"" help:"Rotate a standalone environment key"`
+	Adopt      AdoptCmd        `cmd:"" help:"Migrate an existing environment to standalone age access with a new key"`
+	Repair     RepairCmd       `cmd:"" help:"Complete an interrupted encrypted write"`
+	Encrypt    EncryptCmd      `cmd:"" help:"Encrypt a secrets file in place"`
+	Decrypt    DecryptCmd      `cmd:"" help:"Decrypt a secrets file to stdout"`
+	Export     ExportCmd       `cmd:"" help:"Print decrypted secrets as NAME=value lines, without the public key"`
+	Get        GetCmd          `cmd:"" help:"Decrypt a secrets file and print a single value"`
+	Run        RunCmd          `cmd:"" help:"Run a command with decrypted secrets as environment variables"`
 
 	Version kong.VersionFlag `help:"Show version"`
 	Debug   bool             `help:"Enable debug logging" env:"ESEC_DEBUG"`
@@ -77,7 +77,7 @@ type cli struct {
 // Execute runs the CLI with the given version string.
 func Execute(version string) {
 	// Git-style subcommand passthrough: `esec <x>` runs `esec-<x>` from PATH
-	// when <x> is not a builtin command (e.g. `esec vault` → `esec-vault`).
+	// when <x> is not a builtin command (for example, editor integrations).
 	if code, handled := maybeExecExternal(os.Args); handled {
 		os.Exit(code)
 	}

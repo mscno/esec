@@ -1,17 +1,6 @@
-// Package secretstore keeps small device secrets (keys, tokens) out of plain
-// files where the platform allows it. esec and esec-vault share one store so a
-// secret written by one tool is found by the other.
-//
-// The backend is chosen once and recorded in <home>/secret-store.toml:
-//
-//	backend = "os"        # macOS Keychain, Windows Credential Manager, Linux Secret Service
-//	backend = "tpm"       # Linux: systemd-creds sealed to the TPM; survives reboots
-//	backend = "file"      # 0600 file; survives reboots, no hardware binding
-//	backend = "keyctl"    # Linux kernel user keyring; cleared at reboot
-//
-// ESEC_SECRET_STORE overrides the recorded choice. Without either, the OS
-// store is used. Detect picks the best backend for the current machine; only
-// esec-vault calls it, when it first needs to store a device secret.
+// Package secretstore preserves local cache-key access for legacy encrypted
+// keyrings. New environments use age identities instead. It contains no Esec
+// server connection, user account flow, or broker protocol.
 package secretstore
 
 import (
@@ -21,10 +10,12 @@ import (
 	"path/filepath"
 	"regexp"
 
+	"github.com/mscno/esec/pkg/config"
 	"github.com/pelletier/go-toml/v2"
 )
 
-// Service is the name every backend files secrets under.
+// Service is the historical local keychain identifier. Changing it would
+// strand existing encrypted-keyring cache keys; it does not name a service to run.
 const Service = "esec-vault"
 
 // Backend names.
@@ -67,10 +58,10 @@ func ValidName(name string) error {
 	return nil
 }
 
-// Home returns the esec-vault home directory: $ESEC_VAULT_HOME, else
+// Home returns the local compatibility directory: ESEC_HOME (or its old alias), else
 // $XDG_CONFIG_HOME/esec, else ~/.config/esec.
 func Home() string {
-	if h := os.Getenv("ESEC_VAULT_HOME"); h != "" {
+	if h := config.Home(); h != "" {
 		return h
 	}
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
@@ -79,7 +70,7 @@ func Home() string {
 	if home, err := os.UserHomeDir(); err == nil {
 		return filepath.Join(home, ".config", "esec")
 	}
-	return ".esec-vault"
+	return ".esec"
 }
 
 // Config is the content of secret-store.toml.

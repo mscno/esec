@@ -76,7 +76,7 @@ func TestKeyNotFoundHint(t *testing.T) {
 		t.Fatal("not ErrKeyNotFound")
 	}
 	h := hints(err)
-	if len(h) != 1 || !strings.Contains(h[0], "export ESEC_PRIVATE_KEY_PROD=") || !strings.Contains(h[0], "esec vault sync fetches") {
+	if len(h) != 1 || !strings.Contains(h[0], "export ESEC_PRIVATE_KEY_PROD=") || strings.Contains(h[0], "esec vault") {
 		t.Fatalf("hints: %q", h)
 	}
 	if hints(errors.New("other")) != nil {
@@ -84,12 +84,11 @@ func TestKeyNotFoundHint(t *testing.T) {
 	}
 }
 
-// A guarded key opens only through esec vault: the error names the
-// commands for its environment, and no hint offers keys that cannot work.
+// Guarded legacy files explain the offline migration path.
 func TestGuardedKeyNotFound(t *testing.T) {
 	nf := &esec.KeyNotFoundError{Name: "ESEC_PRIVATE_KEY_PRODUCTION", Sealed: "/repo/.esec/production.age", Guarded: true}
 	err := fmt.Errorf("decrypting file .env.production: %w", nf)
-	if msg := err.Error(); !strings.Contains(msg, "esec vault decrypt production [KEY]") || !strings.Contains(msg, "esec vault run production -- COMMAND") {
+	if msg := err.Error(); !strings.Contains(msg, "esec adopt production") || strings.Contains(msg, "esec vault") {
 		t.Fatalf("error: %s", msg)
 	}
 	if h := hints(err); h != nil {
@@ -97,12 +96,12 @@ func TestGuardedKeyNotFound(t *testing.T) {
 	}
 }
 
-// The top-level help lists esec vault, installed or not.
-func TestHelpListsVault(t *testing.T) {
+// The top-level help never advertises retired service extensions.
+func TestHelpOmitsVault(t *testing.T) {
 	var buf bytes.Buffer
 	t.Setenv("PATH", t.TempDir())
 	printExternal(&buf)
-	if !strings.Contains(buf.String(), "vault") || !strings.Contains(buf.String(), "not installed") {
+	if strings.Contains(buf.String(), "vault") {
 		t.Fatalf("without esec-vault:\n%s", buf.String())
 	}
 }

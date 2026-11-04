@@ -13,7 +13,7 @@ func readDocument(file, format, keyDir, key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return esec.ReadDocument(target, esec.ReadOptions{KeyDir: keyDir, PrivateKey: key, Session: os.Getenv("ESEC_VAULT_SESSION")})
+	return esec.ReadDocument(target, esec.ReadOptions{KeyDir: keyDir, PrivateKey: key})
 }
 
 // InspectCmd explains the exact read plan without opening a key or asking consent.
@@ -34,7 +34,7 @@ func (c *InspectCmd) Run(_ *cliCtx) error {
 			if errors.As(err, &re) {
 				failure = *re
 			}
-			if encodeErr := json.NewEncoder(os.Stdout).Encode(&esec.ReadInspection{Route: "blocked", Key: "unknown", Reader: "not_verified", Blockers: []esec.ReadError{failure}}); encodeErr != nil {
+			if encodeErr := json.NewEncoder(os.Stdout).Encode(&esec.ReadInspection{Route: "blocked", Key: "unknown", Blockers: []esec.ReadError{failure}}); encodeErr != nil {
 				return encodeErr
 			}
 		}

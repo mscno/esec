@@ -1,3 +1,21 @@
+# v0.20.0
+
+- Remove broker RPC, remote forwarding, daemon notifications, the legacy setup
+  wizard, and retired service command dispatch. Reads and inspection stay local.
+  Preserve offline raw-key, sealed-keyring, and historical age-envelope readers.
+- Add `plan`, `apply`, and `status --check` for desired access in `esec.toml`.
+  Plans disclose recipient additions/removals, software production access, and
+  missing migration metadata. Interactive changes require confirmation; scripts
+  must bind approval to an exact plan hash, with extra sensitive-change approval.
+- Record applied policy alongside immutable sealed keys and authenticate it in
+  the encrypted payload. Warn on drift; never treat editing TOML as completed
+  revocation. Prepare all selected environments before publishing ciphertext.
+- Keep production defaults limited to YubiKeys and explicit deployment
+  identities. Development software identities cannot be reused for production.
+  Document Linux developer onboarding and independent deployment identities.
+- Confirm recipient CLI edits and retain historical generations. Keep support
+  for explicit plaintext-adoption consent, revision checks, and write repair.
+
 # v0.19.0
 
 - Add standalone `setup`, `init`, `adopt`, `recipients`, `rotate`, `repair`, and

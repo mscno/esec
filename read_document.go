@@ -11,19 +11,14 @@ import (
 	"filippo.io/age/plugin"
 	"github.com/mscno/esec/pkg/format"
 	"github.com/mscno/esec/pkg/seal"
-	"github.com/mscno/esec/pkg/secretstore"
 )
 
-// ReadOptions selects credentials and the optional broker; it never changes protection.
+// ReadOptions selects local credentials and age plugin prompts.
 type ReadOptions struct {
-	// LocalOnly refuses broker reads, including fallback for a missing local key.
-	LocalOnly bool
 	// AgeUI supplies prompts for standalone age identities; nil uses a terminal.
 	AgeUI      *plugin.ClientUI
 	KeyDir     string
 	PrivateKey string
-	Socket     string
-	Session    string
 }
 
 // Route reports the required executor before any keyring can be opened.
@@ -38,7 +33,7 @@ func (t *ReadTarget) Route() string {
 		if workloadReadKey(t) != "" {
 			return "workload_key"
 		}
-		return "daemon"
+		return "blocked"
 	}
 	return "direct"
 }
@@ -57,8 +52,8 @@ type ReadInfo struct {
 	Guard  string `json:"guard"`
 }
 
-// ReadDocumentWithInfo returns the actual successful route, including fallback
-// to a broker, rather than the pre-read plan. Errors return no data or provenance.
+// ReadDocumentWithInfo returns the successful local read route.
+// Errors return no data or provenance.
 func ReadDocumentWithInfo(t *ReadTarget, o ReadOptions) ([]byte, ReadInfo, error) {
 	info := ReadInfo{Guard: t.Guard}
 	data, err := readDocument(t, o, &info)
@@ -73,18 +68,8 @@ func readDocument(t *ReadTarget, o ReadOptions, info *ReadInfo) ([]byte, error) 
 		info.Source = "local_age"
 		return readStandaloneDocument(t, o.AgeUI)
 	}
-	brokerRead := func() ([]byte, error) {
-		if o.LocalOnly {
-			return nil, &ReadError{"legacy_vault_required", "this file needs legacy Vault access; migrate it with esec adopt using your existing access before opening it in this app"}
-		}
-		info.Source = "broker"
-		if o.Socket == "" && os.Getenv("ESEC_VAULT_FORWARD") != "" {
-			info.Source = "forwarded_broker"
-		}
-		return readBroker(t, o)
-	}
-	if InspectLocalRead(t, o).Route == "daemon" {
-		return brokerRead()
+	if t.Route() == "blocked" {
+		return nil, legacyGuardError()
 	}
 	if t.Route() == "workload_key" {
 		info.Source = "workload_key"
@@ -93,7 +78,7 @@ func readDocument(t *ReadTarget, o ReadOptions, info *ReadInfo) ([]byte, error) 
 	keyDir := readKeyDirectory(t, o.KeyDir)
 	if t.Route() == "workload_identity" {
 		info.Source = "workload_identity"
-		p, err := openReadSeal(t, false)
+		p, err := openReadSeal(t, o.AgeUI)
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +96,7 @@ func readDocument(t *ReadTarget, o ReadOptions, info *ReadInfo) ([]byte, error) 
 		return nil, err
 	}
 	if t.Seal != "" {
-		p, openErr := openReadSeal(t, true)
+		p, openErr := openReadSeal(t, o.AgeUI)
 		if openErr == nil {
 			if guardRank(p.Guard) > 0 {
 				return nil, &ReadError{"protection_mismatch", "the sealed key requires hardware protection; refresh the project metadata"}
@@ -124,15 +109,15 @@ func readDocument(t *ReadTarget, o ReadOptions, info *ReadInfo) ([]byte, error) 
 			return nil, openErr
 		}
 	}
-	// A broker may hold a key the process has no local credential for. Only a
-	// missing key allows this transition; corruption and denied reads do not.
-	if t.Project != "" {
-		return brokerRead()
-	}
+
 	return nil, err
 }
 
-func openReadSeal(t *ReadTarget, personal bool) (*seal.Payload, error) {
+func legacyGuardError() *ReadError {
+	return &ReadError{"legacy_guard_requires_migration", "this legacy guarded file needs an explicit age identity (ESEC_AGE_IDENTITY_FILE) or a recovered public-key-addressed credential; then run esec adopt to migrate it to local age access"}
+}
+
+func openReadSeal(t *ReadTarget, ui *plugin.ClientUI) (*seal.Payload, error) {
 	if t.Seal == "" {
 		return nil, &ReadError{"seal_missing", "no sealed key for " + t.Environment}
 	}
@@ -140,28 +125,11 @@ func openReadSeal(t *ReadTarget, personal bool) (*seal.Payload, error) {
 	if err != nil {
 		return nil, err
 	}
-	ids, err := seal.EnvIdentities()
+	ids, err := seal.LocalIdentitiesWithUI(ui)
 	if err != nil {
-		return nil, err
+		return nil, &ReadError{"identity_unavailable", err.Error()}
 	}
-	if personal && len(ids) == 0 {
-		store, err := secretstore.Default()
-		if err != nil {
-			return nil, err
-		}
-		private, err := store.Get("identity-private")
-		if errors.Is(err, secretstore.ErrNotFound) {
-			return nil, &ReadError{"identity_unavailable", "the local identity is unavailable; run esec vault setup"}
-		}
-		if err != nil {
-			return nil, &ReadError{"identity_access_failed", err.Error()}
-		}
-		id, err := seal.X25519Identity(private)
-		if err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
+
 	p, err := seal.Open(data, t.Project, t.KeyEnvironment, t.PublicKey, ids...)
 	if err != nil {
 		return nil, &ReadError{"recipient_missing", fmt.Sprintf("the supplied identity cannot open %s: %v", t.Seal, err)}
@@ -185,7 +153,7 @@ func decryptReadKey(t *ReadTarget, private string) ([]byte, error) {
 }
 
 // Public-key-addressed process credentials are explicit per-key workload
-// capabilities (machine run emits them). Named variables and keyring caches
+// capabilities for deployment or offline recovery. Named variables and keyring caches
 // alone never choose this route for a guarded read.
 func workloadReadKey(t *ReadTarget) string {
 	for _, suffix := range []string{strings.ToUpper(t.PublicKey), strings.ToLower(t.PublicKey)} {
@@ -222,6 +190,12 @@ func readStandaloneDocument(t *ReadTarget, ui *plugin.ClientUI) ([]byte, error) 
 	p, err := seal.Open(data, t.Project, t.KeyEnvironment, t.PublicKey, ids...)
 	if err != nil {
 		return nil, fmt.Errorf("open standalone age key for %s: %w", t.Environment, err)
+	}
+	if err := t.AppliedPolicy.CheckPayload(p); err != nil {
+		return nil, err
+	}
+	if t.PolicyStatus == "drift" {
+		slog.Warn("esec.toml access differs from the sealed key; run esec plan, then esec apply", "environment", t.Environment)
 	}
 	if guardRank(p.Guard) < guardRank(t.Guard) {
 		return nil, &ReadError{"protection_mismatch", "the sealed payload has weaker protection than its metadata"}

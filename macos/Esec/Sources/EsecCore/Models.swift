@@ -31,7 +31,7 @@ public struct SecretReadIssue: Sendable {
     public init(_ message: String) { self.message = message }
     public var title: String { "Could not decrypt this file" }
     public var guidance: String {
-        if message.contains("legacy_vault_required") { return "This environment still uses legacy Vault access. Migrate it with esec adopt using your existing access, then reopen it here." }
+        if message.contains("legacy_guard_requires_migration") { return "This environment needs offline migration. Supply its recovery key or an authorized age identity to esec adopt, then reopen it here." }
         if message.localizedCaseInsensitiveContains("yubikey") { return "Connect the configured YubiKey, install age-plugin-yubikey, and approve its PIN/touch prompt." }
         return "Check your local Esec identity configuration and the error below, then retry."
     }

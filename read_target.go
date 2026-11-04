@@ -18,22 +18,24 @@ import (
 // ReadTarget is one resolved, immutable read. Content is ciphertext, never plaintext.
 // The logical environment remains distinct from an environment sharing its key.
 type ReadTarget struct {
-	Standalone     bool       `json:"standalone,omitempty"`
-	Recipients     []string   `json:"recipients,omitempty"`
-	Access         string     `json:"access,omitempty"`
-	Project        string     `json:"project,omitempty"`
-	Environment    string     `json:"environment"`
-	Path           string     `json:"file"`
-	Root           string     `json:"root,omitempty"`
-	Format         FileFormat `json:"format"`
-	PublicKey      string     `json:"public_key"`
-	Digest         string     `json:"digest"`
-	Guard          string     `json:"guard"`
-	KeyEnvironment string     `json:"key_environment"`
-	Seal           string     `json:"seal,omitempty"`
-	SealStatus     string     `json:"seal_status"`
-	Readers        []string   `json:"readers,omitempty"`
-	Content        []byte     `json:"-"`
+	PolicyStatus   string             `json:"policy_status,omitempty"`
+	AppliedPolicy  *seal.AccessRecord `json:"-"`
+	Standalone     bool               `json:"standalone,omitempty"`
+	Recipients     []string           `json:"recipients,omitempty"`
+	Access         string             `json:"access,omitempty"`
+	Project        string             `json:"project,omitempty"`
+	Environment    string             `json:"environment"`
+	Path           string             `json:"file"`
+	Root           string             `json:"root,omitempty"`
+	Format         FileFormat         `json:"format"`
+	PublicKey      string             `json:"public_key"`
+	Digest         string             `json:"digest"`
+	Guard          string             `json:"guard"`
+	KeyEnvironment string             `json:"key_environment"`
+	Seal           string             `json:"seal,omitempty"`
+	SealStatus     string             `json:"seal_status"`
+	Readers        []string           `json:"readers,omitempty"`
+	Content        []byte             `json:"-"`
 }
 
 // ReadError is a stable, machine-readable failure with an actionable explanation.
@@ -139,12 +141,7 @@ func (t *ReadTarget) applyProject(pf *projectfile.File) error {
 		}
 	}
 	if t.Standalone {
-		t.Seal = seal.StandaloneKeyPath(t.Root, t.KeyEnvironment, t.PublicKey)
-		if _, err := os.Stat(t.Seal); err != nil {
-			return &ReadError{"seal_missing", "standalone age seal unavailable: " + t.Seal}
-		}
-		t.SealStatus = "present_unverified"
-		return nil
+		return t.applyStandalone()
 	}
 	if err := rejectUnboundStandalone(t.Root, t.PublicKey); err != nil {
 		return err
@@ -317,5 +314,26 @@ func rejectMissingStandaloneProject(t *ReadTarget) error {
 			break
 		}
 	}
+	return nil
+}
+
+func (t *ReadTarget) applyStandalone() error {
+	t.Seal = seal.StandaloneKeyPath(t.Root, t.KeyEnvironment, t.PublicKey)
+	if _, err := os.Stat(t.Seal); err != nil {
+		return &ReadError{"seal_missing", "standalone age seal unavailable: " + t.Seal}
+	}
+	record, err := seal.LoadAccessRecord(t.Root, t.Project, t.KeyEnvironment, t.PublicKey)
+	if err != nil {
+		return &ReadError{"access_record_invalid", err.Error()}
+	}
+	t.AppliedPolicy = record
+	t.PolicyStatus = "untracked"
+	if record != nil {
+		t.PolicyStatus = "current"
+		if !record.Matches(t.Access, t.Recipients) {
+			t.PolicyStatus = "drift"
+		}
+	}
+	t.SealStatus = "present_unverified"
 	return nil
 }

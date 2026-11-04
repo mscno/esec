@@ -8,12 +8,12 @@ It needs no Esec server, account, daemon, or menu bar app.
 
 ## Install
 
-Download the CLI for your platform from [v0.19.0 releases](https://github.com/mscno/esec/releases/tag/v0.19.0), or:
+Download the CLI for your platform from [v0.20.0 releases](https://github.com/mscno/esec/releases/tag/v0.20.0), or:
 
 ```sh
-go install github.com/mscno/esec/cmd/esec@v0.19.0
+go install github.com/mscno/esec/cmd/esec@v0.20.0
 # With mise:
-mise use -g go:github.com/mscno/esec/cmd/esec@0.19.0
+mise use -g go:github.com/mscno/esec/cmd/esec@0.20.0
 ```
 
 The optional **Esec.app** is available in the same release for Apple Silicon
@@ -34,12 +34,12 @@ There is no helper, broker session, account, sync, or server UI. The app runs
 short-lived local CLI commands. It can import the old app's remembered checkout
 paths once, but never imports or removes keys. Add Folder can scan a project or
 a parent folder. Local raw-key/keyring files still work. Files needing legacy
-broker approval must first be migrated with `esec adopt` using their existing
-access; the new app does not bypass that policy.
+hardware guards must first be migrated with `esec adopt` using an explicitly
+supplied age identity or recovered per-key credential.
 
-Quit EsecVault before opening Esec, and turn off the old app's Open at Login.
-Keep the old app and Vault recovery material until legacy migrations and
-historical recovery have been verified. See the [legacy workflow](docs/legacy-vault.md).
+The CLI also has no broker client, daemon notifications, server setup, or
+service command dispatch. Preserve old keys, encrypted archives, and historical
+seals until recovery is verified. See [offline migration](docs/legacy-vault.md).
 
 ## Set up a machine
 
@@ -68,8 +68,10 @@ esec setup --recovery-recipient "$OFFLINE_RECIPIENT" --yes
 Machine preferences live in `~/.config/esec/age.toml`. They contain public
 recipients and identity **paths**, never private keys. The generated private
 identity lives in `~/.config/esec/identities/developer.age` with mode `0600`.
-`XDG_CONFIG_HOME`, `ESEC_VAULT_HOME`, and `ESEC_CONFIG` relocate configuration;
-the age file sits beside `config.toml`, so old Vault clients remain usable.
+`ESEC_HOME`, `XDG_CONFIG_HOME`, and `ESEC_CONFIG` relocate configuration.
+`ESEC_VAULT_HOME` remains a deprecated **path-only** alias for old local keyring
+locations; it never enables a service connection. The age file sits beside
+`config.toml`.
 
 A second YubiKey or separately stored recovery identity protects against losing
 one hardware key. Native age identities work without plugins. YubiKey access
@@ -86,7 +88,7 @@ esec init --env production --yes
 | Environment | Default recipients |
 | --- | --- |
 | dev/test/staging and other ordinary names | This machine's developer identity, configured YubiKeys, optional recovery recipients |
-| prod/production, including dotted suffixes | Configured YubiKeys, optional recovery recipients, explicitly supplied machine recipients |
+| prod/production, including dotted suffixes | Configured YubiKeys and explicitly supplied deployment recipients |
 
 Use `--production` for a custom sensitive environment name. Names match exactly;
 `prod` and `production` remain separate environments. Treat staging as production
@@ -105,8 +107,8 @@ Multiline dotenv entries are normalized in memory before encryption. Existing
 encrypted files use `esec adopt`, described below.
 
 Commit the encrypted environment files, `esec.toml`, and `.esec/keys/`.
-The latter holds age-encrypted Esec environment keys, including immutable old
-generations for historical recovery. Never commit software private identities,
+The latter holds age-encrypted Esec environment keys and their public `.age.json`
+applied-access records, including immutable old generations for historical recovery. Never commit software private identities,
 raw keyrings, or plaintext secrets. Ignore `.esec/.mutation-lock` and
 `.esec/pending/`; the latter is a temporary encrypted write journal.
 The project label is descriptive, with no server reservation or organisation
@@ -198,10 +200,119 @@ identity backups belong in separate protected offline storage; copying their
 paths or public recipients is not a private-key backup. There is no automatic
 server backup, rclone integration, or escrow in the standalone workflow.
 
-## Migrate from Vault
+## Review and apply repository access
 
-Start with one non-production environment. Leave Vault available for old files
-and their existing guard approvals:
+`esec.toml` is the source of truth for desired public recipients. Private
+identities never belong in it. For new environments, omit `key`; Esec writes
+and manages it. Keep `key` unchanged when editing an existing environment.
+Replace the illustrative recipient strings below with complete public keys:
+
+```toml
+project = "acme/api"
+
+[env.dev]
+access = "development"
+recipients = [
+  "age1...",          # developer Mac
+  "age1...",          # Linux developer machine
+  "age1yubikey1...",   # recovery YubiKey
+]
+
+[env.test]
+access = "development"
+recipients = ["age1...", "age1...", "age1yubikey1..."]
+
+[env.production]
+access = "production"
+recipients = [
+  "age1yubikey1...",   # human access / recovery
+  "age1...",          # independent production deployment identity
+]
+```
+
+```sh
+esec plan                  # no decryption, network, or hardware prompt
+esec apply                 # review changes and confirm before key access
+esec status --check        # exit 0=current, 2=changes needed, 1=invalid
+```
+
+`plan` shows added/removed recipients and flags software production access.
+Editing TOML does not grant or revoke access until `apply` succeeds. Ordinary
+reads warn about unapplied changes while using the existing encrypted key.
+`recipients FILE` lists desired recipients; `plan` compares them with applied
+records. Public records are bound to the seal hash and checked against the
+policy inside the encrypted payload when decrypted. A metadata-only plan is
+not proof that a person owns a recipient or that hardware is present.
+
+`apply` prepares and verifies every selected environment before changing active
+files. It rotates keys for recipient changes, preserves old generations,
+rejects stale edits and symlink destinations, and journals only new ciphertext.
+Missing files get only a public-key header. Existing plaintext requires
+`--encrypt-existing`; example files are never copied. A deleted environment
+entry is flagged, not interpreted as permission to delete files or revoke keys.
+
+Production, recipient removals, and untracked old generations require typing
+`apply PROJECT`. Noninteractive use must name the reviewed plan hash, and add
+`--approve-sensitive` for those cases:
+
+```sh
+esec plan --env dev,test --json
+esec apply --env dev,test --yes --plan-hash REVIEWED_HASH
+# Add --approve-sensitive only after reviewing a sensitive change.
+```
+
+Changing any planned inputs invalidates the hash. Commit `esec.toml`, changed
+encrypted files, and `.esec/keys/` together. Removing a recipient cannot revoke
+old commits or previously copied values; rotate upstream credentials after
+exposure. CI can run `esec status --check` without any private identity.
+
+## Add another developer machine or deployment
+
+On the **new Linux dev machine**, generate its own identity and configure the
+public recovery YubiKey recipient (the YubiKey need not be connected):
+
+```sh
+esec setup --generate-dev --yubikey-recipient "$YUBIKEY_RECIPIENT" --yes
+```
+
+Use `esec identity list` to see the configured public recipients later.
+Share only its public developer recipient with an already authorized
+machine. On that authorized machine, add it to dev/test in `esec.toml`, then:
+
+```sh
+esec plan --env dev,test
+esec apply --env dev,test
+```
+
+The new machine pulls the updated ciphertext, TOML, and key generations and
+can use `esec run dev -- your-command`. Its private identity stays on that
+machine. A supported shortcut for a single environment is:
+
+```sh
+esec recipients dev --add "$LINUX_DEV_RECIPIENT"
+```
+
+The shortcut previews and confirms its explicit change. Scripts can pass
+`--yes`; production changes and removals also need `--approve-sensitive`.
+It refuses to mix an explicit edit with pre-existing unapplied TOML changes.
+
+Create a **separate deployment identity**, ideally in the target environment:
+
+```sh
+esec identity create --out /secure/deployment.age
+```
+
+Add its public recipient to production in `esec.toml` and review/apply on an
+authorized machine. Configure only that deployment's private identity as
+`ESEC_AGE_IDENTITY` or `ESEC_AGE_IDENTITY_FILE` in the deployment environment.
+A software identity declared for dev/test cannot also be a production recipient.
+Local production access uses a configured YubiKey; deployment identities are
+independent, explicit unattended access. Add another YubiKey recipient for
+production recovery rather than granting a developer machine production access.
+
+## Migrate older files offline
+
+Configure local age identities, then migrate one environment at a time:
 
 ```sh
 esec setup
@@ -210,31 +321,41 @@ esec inspect dev
 esec run dev -- your-test-command
 ```
 
-`adopt` opens the legacy file using its existing access rules, generates a new
-Esec key, re-encrypts the file, and seals that key to the standalone recipients.
-Old raw keys, legacy seals, and backups remain untouched. Production migration
-is explicit, including any deployment recipients:
+`adopt` opens the old file with local credentials, creates a new environment
+key, re-encrypts its values, and seals the new key to standalone recipients.
+Raw keys and old encrypted seals remain available for historical recovery.
+For legacy hardware-guarded files, explicitly supply an authorized age identity
+through `ESEC_AGE_IDENTITY_FILE` or export a recovered
+`ESEC_PRIVATE_KEY_<FILE_PUBLIC_KEY>` credential for that one process. Ordinary
+keyring caches do not override a legacy hardware guard. No command contacts a
+broker or offers to install one.
+
+Production migration uses configured YubiKeys and only explicitly named
+software deployment recipients:
 
 ```sh
 esec adopt production --machine-recipient "$DEPLOY_RECIPIENT"
 ```
 
-Migration currently refuses shared-key files or environment aliases: they need
-a coordinated migration. Other Esec implementations/editors must understand
-this new seal layout before they can decrypt standalone environments. Old
-versions retain raw-key compatibility for legacy environments, but cannot open
-the new standalone seals.
+Keep development machine identities separate from deployment identities.
+Default software recovery identities apply to dev/test, not production.
+Adding a deployment recipient grants that identity unattended decryption; a
+local human's normal production route remains their always-touch YubiKey.
 
-If interrupted, `esec repair` finishes a prepared encrypted transaction. It
-refuses conflicting edits instead of overwriting them. A journal without a
-manifest was not prepared: preserve it and inspect the failure before removing
-it and retrying. This is recovery from ordinary interrupted writes, not a claim
-of guaranteed recovery from every filesystem/power failure.
+Shared-key files and environment aliases require coordinated offline migration
+and are refused by single-file adoption. Keep old encrypted backups until every
+active environment and deployment can be read independently. Do not delete
+historical keys as part of upgrading the tool.
 
-Retire the legacy Vault server/app/daemon only after every active project and deployment
-works independently and recovery of important historical revisions has been
-tested. Legacy `esec encrypt`/`decrypt` with raw keys and `.esec-keyring` remain
-supported for unmigrated files; the former project wizard is `esec legacy-setup`.
+`esec repair` completes an interrupted prepared ciphertext transaction. It
+refuses conflicting edits. Preserve a pending journal without a manifest and
+investigate it before retrying; it was not prepared for publication.
+
+Existing v0.19 age environments show `untracked` until an approved `esec apply`
+rotates them and writes an applied-access record. Reads still work with their
+age identities. Public metadata alone cannot prove the old recipient set.
+Older readers can open the age payload, but do not enforce the new record
+binding or warn about drift; upgrade readers before relying on those checks.
 
 Esec's existing file encryption is based on NaCl box and inspired by
 [Shopify EJSON](https://github.com/Shopify/ejson). Age wraps environment keys;

@@ -329,7 +329,7 @@ func TestDecryptFromEmbedFS(t *testing.T) {
 		// This will fail because our test.ejson file doesn't have a test.ejson variant
 		// but that's expected - we're just checking the lookuper gets called
 		assert.Error(t, err)
-		assert.True(t, strings.Contains(err.Error(), "error reading file from vault"))
+		assert.True(t, strings.Contains(err.Error(), "error reading encrypted embedded file"))
 	})
 
 	t.Run("using combined lookupers with fallback", func(t *testing.T) {

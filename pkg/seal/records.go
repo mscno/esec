@@ -79,7 +79,7 @@ func ParseRecords(data []byte) (Records, error) {
 // Save writes the records atomically.
 func (rs Records) Save(root string) error {
 	var buf bytes.Buffer
-	buf.WriteString("# Who each environment's key in .esec/ is sealed to, signed by whoever sealed it.\n# Written by esec vault: do not edit. Change readers with esec vault share / unshare.\n\n")
+	buf.WriteString("# Who each environment's key in .esec/ is sealed to, signed by whoever sealed it.\n# Historical signed access record; preserve it for offline recovery.\n\n")
 	enc := toml.NewEncoder(&buf)
 	enc.SetIndentTables(false)
 	if err := enc.Encode(map[string]*Record(rs)); err != nil {

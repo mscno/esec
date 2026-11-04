@@ -3,6 +3,7 @@ package commands
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -114,6 +115,33 @@ func requireAlwaysTouch(list, recipient string) error {
 // IdentityCmd groups independent machine identity commands.
 type IdentityCmd struct {
 	Create IdentityCreateCmd `cmd:"" help:"Create an independent software age identity for a machine or offline recovery"`
+	List   IdentityListCmd   `cmd:"" help:"Show this machine's configured public recipients; no private keys"`
+}
+
+// IdentityListCmd prints only public machine defaults for sharing with a repo.
+type IdentityListCmd struct {
+	JSON bool `help:"Print configured public recipients as JSON"`
+}
+
+// Run reads public configuration without opening identity files or hardware.
+func (c *IdentityListCmd) Run(_ *cliCtx) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if c.JSON {
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{"developer": cfg.Age.DeveloperRecipient, "yubikey": cfg.Age.YubiKeyRecipients, "recovery": cfg.Age.RecoveryRecipients})
+	}
+	if cfg.Age.DeveloperRecipient != "" {
+		fmt.Printf("developer  %s\n", cfg.Age.DeveloperRecipient)
+	}
+	for _, r := range cfg.Age.YubiKeyRecipients {
+		fmt.Printf("yubikey    %s\n", r)
+	}
+	for _, r := range cfg.Age.RecoveryRecipients {
+		fmt.Printf("recovery   %s\n", r)
+	}
+	return nil
 }
 
 // IdentityCreateCmd writes a new software age identity without granting access.

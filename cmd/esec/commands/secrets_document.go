@@ -64,7 +64,7 @@ type secretDocumentView struct {
 
 // Run emits a document only after successful local decryption.
 func (c *SecretsShowCmd) Run(_ *cliCtx) error {
-	options := esec.ReadOptions{LocalOnly: true}
+	options := esec.ReadOptions{}
 	if c.GUI {
 		options.AgeUI = newGUIProtocol(os.Stdin, os.Stdout).ui()
 	}

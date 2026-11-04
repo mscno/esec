@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"testing"
 )
 
@@ -72,5 +73,33 @@ func TestMaybeExecExternal(t *testing.T) {
 				t.Errorf("args = %v, want %v", calls[0].args, tt.wantArgs)
 			}
 		})
+	}
+}
+
+func TestRetiredExecutablesAreNeverInvokedOrAdvertised(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+	old := execExternalFn
+	t.Cleanup(func() { execExternalFn = old })
+	execExternalFn = func(_ string, _ []string) int { t.Fatal("executed retired service"); return 99 }
+	for _, name := range []string{"vault", "vault-server", "legacy-setup", "daemon", "broker", "VAULT"} {
+		filename := "esec-" + name
+		if runtime.GOOS == "windows" {
+			filename += ".exe"
+		}
+		p := filepath.Join(dir, filename)
+		if err := os.WriteFile(p, []byte("#!/bin/sh\nexit 99\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(p, 0700); err != nil { //nolint:gosec // executable synthetic extension
+			t.Fatal(err)
+		}
+		code, handled := maybeExecExternal([]string{"esec", name, "status"})
+		if !handled || code != 1 {
+			t.Fatal("retired command did not fail locally")
+		}
+		if slices.Contains(externalCommands(), name) {
+			t.Fatal("advertised retired service")
+		}
 	}
 }

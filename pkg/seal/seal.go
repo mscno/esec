@@ -35,7 +35,7 @@ import (
 const Dir = ".esec"
 
 // Environment variables naming the age identities that open seals, for
-// machines (CI, deploys) that have no esec vault: the identity itself, or a
+// unattended machines (CI, deploys): the identity itself, or a
 // file of identities.
 const (
 	EnvIdentity     = "ESEC_AGE_IDENTITY"
@@ -47,8 +47,11 @@ var ErrNotSealed = errors.New("no sealed key")
 
 // Payload is what a seal holds.
 type Payload struct {
-	Project string `json:"project"`
-	Env     string `json:"env"`
+	// Access and Recipients bind standalone policy to this encrypted payload.
+	Access     string   `json:"access,omitempty"`
+	Recipients []string `json:"recipients,omitempty"`
+	Project    string   `json:"project"`
+	Env        string   `json:"env"`
 	// Guard is none, session or touch: how readers who are people open it.
 	Guard string `json:"guard"`
 	// Private is the environment's private key, 64 lowercase hex.

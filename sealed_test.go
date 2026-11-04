@@ -51,7 +51,7 @@ func TestDecryptWithSealedKey(t *testing.T) {
 	// No identity: the error says the key is sealed, and guarded.
 	t.Setenv(seal.EnvIdentity, "")
 	_, err = DecryptFile(file, repo, "")
-	if !errors.Is(err, ErrKeyNotFound) || !strings.Contains(err.Error(), "sealed in") || !strings.Contains(err.Error(), "touch") {
+	if !errors.Is(err, ErrKeyNotFound) || !strings.Contains(err.Error(), "sealed in") || !strings.Contains(err.Error(), "legacy hardware protection") {
 		t.Fatalf("want a sealed-key error, got %v", err)
 	}
 	// The machine's identity opens it.

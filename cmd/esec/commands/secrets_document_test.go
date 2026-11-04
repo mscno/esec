@@ -20,7 +20,7 @@ func TestLocalDocumentReadEditAndConflicts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc, err := (&SecretsShowCmd{File: path}).document(esec.ReadOptions{LocalOnly: true})
+	doc, err := (&SecretsShowCmd{File: path}).document(esec.ReadOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestLocalDocumentReadEditAndConflicts(t *testing.T) {
 	if revision == doc.Revision || bytes.Contains(next, []byte("synthetic-edit-must-stay-encrypted")) {
 		t.Fatal("edit not encrypted")
 	}
-	opened, err := (&SecretsShowCmd{File: path}).document(esec.ReadOptions{LocalOnly: true})
+	opened, err := (&SecretsShowCmd{File: path}).document(esec.ReadOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,8 +86,8 @@ func TestLocalOnlyNeverContactsLegacyBroker(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".env.production"), []byte("ESEC_PUBLIC_KEY="+pub+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	_, err = (&SecretsShowCmd{File: filepath.Join(root, ".env.production")}).document(esec.ReadOptions{LocalOnly: true, Socket: "/must-not-contact-broker"})
-	if err == nil || !strings.Contains(err.Error(), "legacy_vault_required") {
+	_, err = (&SecretsShowCmd{File: filepath.Join(root, ".env.production")}).document(esec.ReadOptions{})
+	if err == nil || !strings.Contains(err.Error(), "legacy_guard_requires_migration") {
 		t.Fatalf("unexpected failure: %v", err)
 	}
 }

@@ -1,14 +1,11 @@
 package commands
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/mscno/esec"
@@ -43,39 +40,12 @@ func (c *KeygenCmd) Run(ctx *cliCtx) error {
 		if err := c.save(pub, priv); err != nil {
 			return err
 		}
-		notifyVault()
 		fmt.Printf("ESEC_PUBLIC_KEY=%s\n", pub)
 		return nil
 	}
 	fmt.Printf("Public Key:\n%s\nPrivate Key:\n%s\n", pub, priv)
 
 	return nil
-}
-
-// Notification is a wake-up hint only. The daemon also reconciles persisted
-// keyrings, so missing/failed IPC never loses a key mutation or blocks keygen.
-func notifyVault() {
-	home := os.Getenv("ESEC_VAULT_HOME")
-	if home == "" {
-		base := os.Getenv("XDG_CONFIG_HOME")
-		if base == "" {
-			user, err := os.UserHomeDir()
-			if err != nil {
-				return
-			}
-			base = filepath.Join(user, ".config")
-		}
-		home = filepath.Join(base, "esec")
-	}
-	conn, err := net.DialTimeout("unix", filepath.Join(home, "run", "control.sock"), 100*time.Millisecond) //nolint:gosec // local Unix socket under configured vault home, never an HTTP request
-	if err != nil {
-		return
-	}
-	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(100 * time.Millisecond))
-	if err := json.NewEncoder(conn).Encode(map[string]any{"version": 1, "op": "changed"}); err != nil {
-		return
-	}
 }
 
 func (c *KeygenCmd) save(pub, priv string) error {

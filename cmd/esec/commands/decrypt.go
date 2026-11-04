@@ -57,7 +57,6 @@ func (c *DecryptCmd) Run(ctx *cliCtx) error {
 	data, err := readDocument(fileName, c.Format, c.KeyDir, key)
 	if err != nil {
 		ctx.Logger.Debug("decryption failed", "path", fileName, "error", err)
-		// esec vault prints KEY=value lines, not the file.
 		return err
 	}
 

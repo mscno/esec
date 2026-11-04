@@ -111,9 +111,3 @@ func TestKeygenSaveKeepsSealedKeyringSealed(t *testing.T) {
 		t.Fatal("existing plain keyring was sealed implicitly")
 	}
 }
-
-func TestCapabilities(t *testing.T) {
-	if err := (&CapabilitiesCmd{}).Run(&cliCtx{}); err != nil {
-		t.Fatal(err)
-	}
-}

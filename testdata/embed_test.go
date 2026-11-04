@@ -29,7 +29,7 @@ func TestEmbedDecryptWithNoVarsAndMissingFile(t *testing.T) {
 	clearEnvVars(t)
 	_, err := esec.DecryptFromEmbedFS(TestEmbed, "missing", esec.FileFormatEjson)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "error reading file from vault: open .ejson.missing: file does not exist")
+	assert.Contains(t, err.Error(), "error reading encrypted embedded file: open .ejson.missing: file does not exist")
 }
 
 func TestEmbedDecryptBadKey(t *testing.T) {
@@ -68,7 +68,7 @@ func TestEmbedDecryptGoodKeyWithMissingSuffix(t *testing.T) {
 	os.Setenv("ESEC_PRIVATE_KEY_MISSING", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 	_, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEjson)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "error reading file from vault: open .ejson.missing: file does not exist")
+	assert.Contains(t, err.Error(), "error reading encrypted embedded file: open .ejson.missing: file does not exist")
 }
 
 // YAML Format Tests
@@ -290,7 +290,7 @@ func TestEmbedDecryptYamlMissingFile(t *testing.T) {
 	os.Setenv("ESEC_PRIVATE_KEY_STAGING", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 	_, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEyaml)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "error reading file from vault: open .eyaml.staging: file does not exist")
+	assert.Contains(t, err.Error(), "error reading encrypted embedded file: open .eyaml.staging: file does not exist")
 }
 
 // Also test .eyml extension
@@ -508,7 +508,7 @@ func TestEmbedDecryptTomlMissingFile(t *testing.T) {
 	os.Setenv("ESEC_PRIVATE_KEY_STAGING", "24ab5041def8c84077bacce66524cc2ad37266ada17429e8e3c1db534dd2c2c5")
 	_, err := esec.DecryptFromEmbedFS(TestEmbed, "", esec.FileFormatEtoml)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "error reading file from vault: open .etoml.staging: file does not exist")
+	assert.Contains(t, err.Error(), "error reading encrypted embedded file: open .etoml.staging: file does not exist")
 }
 
 // Helper to clean up environment variables between tests

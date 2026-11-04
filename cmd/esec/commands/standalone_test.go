@@ -96,7 +96,7 @@ func TestStandaloneRecoveryAndNoPrivateKeyFallback(t *testing.T) {
 		t.Fatal("raw key bypassed standalone identity")
 	}
 	// Inspection does not contact a broker or open the key.
-	if got := esec.InspectRead(target, esec.ReadOptions{Socket: "/no-broker"}); got.Route != "local_age" || got.Broker != "not_required" {
+	if got := esec.InspectRead(target, esec.ReadOptions{}); got.Route != "local_age" {
 		t.Fatal("unexpected broker route")
 	}
 }
@@ -168,7 +168,7 @@ func TestStandaloneProductionExcludesDeveloper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if slicesContains(rs, dev.Recipient().String()) || !slicesContains(rs, machine.Recipient().String()) {
+	if len(rs) != 2 || slicesContains(rs, dev.Recipient().String()) || !slicesContains(rs, machine.Recipient().String()) {
 		t.Fatal("production recipients are incorrect")
 	}
 	if _, err := defaultRecipients(cfg, true, []string{dev.Recipient().String()}, false); err == nil {
