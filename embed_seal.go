@@ -1,6 +1,7 @@
 package esec
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -68,6 +69,11 @@ func openEmbeddedSeal(fsys fs.FS, env string, data []byte, fileFormat FileFormat
 	}
 	if err != nil {
 		return key, fmt.Errorf("the embedded %s: %w", path.Join(seal.Dir, env+".age"), err)
+	}
+	if standalone {
+		if err := checkEmbeddedPolicy(fsys, env, name, sealed, p); err != nil {
+			return key, err
+		}
 	}
 	return parseResolvedKey(p.Private, seal.EnvIdentity, &pub, nil)
 }
@@ -153,4 +159,33 @@ func sniffEmbeddedSeal(fsys fs.FS) (string, error) {
 	default:
 		return "", fmt.Errorf("%s opens the sealed keys of %s: name the environment", seal.EnvIdentity, strings.Join(opens, ", "))
 	}
+}
+
+// checkEmbeddedPolicy binds current standalone generations to their public
+// record and authenticated policy. Pre-record seals remain readable.
+func checkEmbeddedPolicy(fsys fs.FS, env, name string, sealed []byte, payload *seal.Payload) error {
+	pf, err := embeddedProject(fsys)
+	if err != nil {
+		return err
+	}
+	want := pf.Env[env]
+	public, err := payload.Public()
+	if err != nil || public != want.Key {
+		return errors.New("embedded key differs from project metadata")
+	}
+	data, err := fs.ReadFile(fsys, name+".json")
+	if errors.Is(err, fs.ErrNotExist) {
+		return (*seal.AccessRecord)(nil).CheckPayload(payload)
+	}
+	if err != nil {
+		return errors.New("cannot read embedded access record")
+	}
+	var record seal.AccessRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return errors.New("invalid embedded access record")
+	}
+	if record.Version != 1 || record.Project != pf.Project || record.Environment != env || record.PublicKey != public || record.SealHash != seal.Hash(sealed) || !record.Matches(want.Access, want.Recipients) {
+		return errors.New("embedded access record differs from project metadata or sealed key")
+	}
+	return record.CheckPayload(payload)
 }

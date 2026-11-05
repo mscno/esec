@@ -38,6 +38,18 @@ func IsBoxedMessage(data []byte) bool {
 	return messageParser.Find(data) != nil
 }
 
+// ValidateBoxedMessage checks envelope syntax, not authenticity or decryptability.
+func ValidateBoxedMessage(data []byte) error {
+	var message boxedMessage
+	if err := message.Load(data); err != nil {
+		return fmt.Errorf("invalid encrypted envelope")
+	}
+	if len(message.Box) < 16 {
+		return fmt.Errorf("encrypted envelope is shorter than its authentication tag")
+	}
+	return nil
+}
+
 // Dump dumps to the wire format
 func (b *boxedMessage) Dump() []byte {
 	pub := base64.StdEncoding.EncodeToString(b.EncrypterPublic[:])

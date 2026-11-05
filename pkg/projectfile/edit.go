@@ -20,6 +20,9 @@ func edit(raw []byte, orig, want *File) ([]byte, bool) {
 	if want.Project != orig.Project {
 		d.set("", "project", want.Project)
 	}
+	if want.Run != orig.Run {
+		d.set("run", "environment_variable", want.Run.EnvironmentVariable)
+	}
 	if !slices.Equal(want.RecoveryRecipients, orig.RecoveryRecipients) {
 		d.setRaw("", "recovery_recipients", tomlStrings(want.RecoveryRecipients))
 	}
@@ -58,6 +61,9 @@ func edit(raw []byte, orig, want *File) ([]byte, bool) {
 		}
 		if !slices.Equal(w.Readers, o.Readers) {
 			d.setRaw(table, "readers", tomlStrings(w.Readers))
+		}
+		if !slices.Equal(w.Run.PreserveEnv, o.Run.PreserveEnv) {
+			d.setRaw(table+".run", "preserve_env", tomlStrings(w.Run.PreserveEnv))
 		}
 	}
 	out := []byte(strings.Join(d.lines, ""))

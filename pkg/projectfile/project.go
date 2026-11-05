@@ -57,6 +57,7 @@ var ErrNotFound = errors.New("project file not found")
 // File is the content of esec.toml.
 type File struct {
 	Project string `toml:"project"`
+	Run     Run    `toml:"run,omitempty"`
 	// RecoveryRecipients labels offline public recovery identities. It grants no access;
 	// each environment must explicitly include a recipient in its own list.
 	RecoveryRecipients []string       `toml:"recovery_recipients,omitempty"`
@@ -86,6 +87,7 @@ type Files struct {
 
 // Env describes one environment.
 type Env struct {
+	Run EnvRun `toml:"run,omitempty"`
 	// Recipients selects standalone age access. No broker or private-key
 	// fallback is permitted. Access describes the intended deployment context.
 	Recipients []string `toml:"recipients,omitempty"`
@@ -102,7 +104,7 @@ type Env struct {
 
 // Equal reports whether two environments say the same.
 func (e Env) Equal(o Env) bool {
-	return e.Key == o.Key && e.Guard == o.Guard && e.Access == o.Access && slices.Equal(e.Recipients, o.Recipients) && slices.Equal(e.Readers, o.Readers)
+	return e.Key == o.Key && e.Guard == o.Guard && e.Access == o.Access && slices.Equal(e.Recipients, o.Recipients) && slices.Equal(e.Readers, o.Readers) && slices.Equal(e.Run.PreserveEnv, o.Run.PreserveEnv)
 }
 
 // GuardLevel returns the environment's guard, none when unset.
@@ -161,6 +163,11 @@ func (f *File) Validate() error {
 	if err := ValidateOrgRepo(f.Project); err != nil {
 		return err
 	}
+	if f.Run.EnvironmentVariable != "" {
+		if err := ValidateRunVariable(f.Run.EnvironmentVariable); err != nil {
+			return err
+		}
+	}
 	switch strings.TrimPrefix(f.Files.Format, ".") {
 	case "", "env", "ejson", "eyaml", "eyml", "etoml":
 	default:
@@ -185,6 +192,9 @@ func (f *File) Validate() error {
 	}
 	for name, e := range f.Env {
 		if err := e.validate(name); err != nil {
+			return err
+		}
+		if err := validateEnvRun(name, e, f.Run.EnvironmentVariable); err != nil {
 			return err
 		}
 	}
@@ -361,10 +371,11 @@ func (f *File) Save(dir string) error {
 }
 
 func (f *File) clone() *File {
-	c := &File{RecoveryRecipients: slices.Clone(f.RecoveryRecipients), Project: f.Project, Files: f.Files, Env: make(map[string]Env, len(f.Env))}
+	c := &File{Run: f.Run, RecoveryRecipients: slices.Clone(f.RecoveryRecipients), Project: f.Project, Files: f.Files, Env: make(map[string]Env, len(f.Env))}
 	for k, v := range f.Env {
 		v.Readers = slices.Clone(v.Readers)
 		v.Recipients = slices.Clone(v.Recipients)
+		v.Run.PreserveEnv = slices.Clone(v.Run.PreserveEnv)
 		c.Env[k] = v
 	}
 	return c
@@ -372,7 +383,7 @@ func (f *File) clone() *File {
 
 // same reports whether two files say the same.
 func (f *File) same(o *File) bool {
-	if f.Project != o.Project || f.Files != o.Files || !slices.Equal(f.RecoveryRecipients, o.RecoveryRecipients) {
+	if f.Project != o.Project || f.Files != o.Files || f.Run != o.Run || !slices.Equal(f.RecoveryRecipients, o.RecoveryRecipients) {
 		return false
 	}
 	for k, v := range f.Env {

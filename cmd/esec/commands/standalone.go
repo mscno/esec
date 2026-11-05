@@ -97,7 +97,7 @@ func (c *InitCmd) Run(ctx *cliCtx) error {
 		if w.production {
 			access = "production"
 		}
-		pf.Env[w.env] = projectfile.Env{Key: w.pub, Recipients: w.recipients, Access: access}
+		pf.Env[w.env] = projectfile.Env{Key: w.pub, Recipients: w.recipients, Access: access, Run: pf.Env[w.env].Run}
 		changes[w.path] = w.data
 	}
 	marker, err := pf.Marshal()
@@ -641,7 +641,7 @@ func rotateStandaloneProject(ctx *cliCtx, t *esec.ReadTarget, rs []string, optio
 	if pf.Env == nil {
 		pf.Env = map[string]projectfile.Env{}
 	}
-	pf.Env[t.Environment] = projectfile.Env{Key: pub, Recipients: rs, Access: t.Access}
+	pf.Env[t.Environment] = projectfile.Env{Key: pub, Recipients: rs, Access: t.Access, Run: pf.Env[t.Environment].Run}
 	marker, err := pf.Marshal()
 	if err != nil {
 		return err

@@ -1,3 +1,13 @@
+# v0.22.0
+
+- Add non-decrypting `check --ci` for managed ciphertext and public access drift.
+- Add `set ENV KEY` with private prompts or exact stdin, encrypted revision-checked writes.
+- Add optional APP_ENV-style binding and dev/test inherited override policy in esec.toml.
+- Add `run --explain [--json]` and `diff --keys-only [--json]` without revealing values.
+- Document public nested configuration, local overrides and encrypted environment separation.
+- Bind embedded standalone keys to their matching applied access records and authenticated recipient policy.
+- Bundle the updated CLI in both macOS app architectures.
+
 # v0.21.1
 
 - Fix initialization of plaintext dotenv files that retain an old public-key

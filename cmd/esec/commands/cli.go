@@ -49,6 +49,9 @@ func commandExit(err error) (int, bool) {
 }
 
 type cli struct {
+	Check      CheckCmd        `cmd:"" help:"Check managed ciphertext and access metadata without opening keys"`
+	Set        SetCmd          `cmd:"" help:"Set an encrypted value from a private prompt or stdin"`
+	Diff       DiffCmd         `cmd:"" help:"Compare key names across environments without decrypting"`
 	Recovery   RecoveryCmd     `cmd:"" help:"Create, verify, or restore an offline recovery phrase identity"`
 	Plan       PlanCmd         `cmd:"" help:"Preview esec.toml access changes without decrypting"`
 	Apply      ApplyCmd        `cmd:"" help:"Apply reviewed esec.toml access with confirmation and key rotation"`

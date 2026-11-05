@@ -567,7 +567,7 @@ func applyAccessPlan(ctx *cliCtx, p *AccessPlan, encryptExisting bool, options e
 		if err := writeStandaloneGeneration(p.root, p.Project, w.env, w.pub, access, w.recipients, w.sealed); err != nil {
 			return err
 		}
-		p.project.Env[w.env] = projectfile.Env{Key: w.pub, Recipients: w.recipients, Access: access}
+		p.project.Env[w.env] = projectfile.Env{Key: w.pub, Recipients: w.recipients, Access: access, Run: p.project.Env[w.env].Run}
 		changes[w.path] = w.data
 	}
 	marker, err := p.project.Marshal()

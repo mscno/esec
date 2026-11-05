@@ -6,14 +6,17 @@ uses local [age](https://age-encryption.org/) identities and optional
 [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey) hardware.
 It needs no Esec server, account, daemon, or menu bar app.
 
+See [configuration and secrets](docs/configuration.md) for typed public defaults,
+local overrides, `set`, `check --ci`, `run --explain` and key comparisons.
+
 ## Install
 
-Download the CLI for your platform from [v0.21.1 releases](https://github.com/mscno/esec/releases/tag/v0.21.1), or:
+Download the CLI for your platform from [v0.22.0 releases](https://github.com/mscno/esec/releases/tag/v0.22.0), or:
 
 ```sh
-go install github.com/mscno/esec/cmd/esec@v0.21.1
+go install github.com/mscno/esec/cmd/esec@v0.22.0
 # With mise:
-mise use -g go:github.com/mscno/esec/cmd/esec@0.21.1
+mise use -g go:github.com/mscno/esec/cmd/esec@0.22.0
 ```
 
 The optional **Esec.app** is available in the same release for Apple Silicon

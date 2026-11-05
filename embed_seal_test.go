@@ -2,6 +2,7 @@ package esec
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -124,5 +125,44 @@ func TestStandaloneEmbeddedMetadataFailsClosed(t *testing.T) {
 	fsys["esec.toml"] = &fstest.MapFile{Data: legacy}
 	if _, err := DecryptFromFS(fsys, conf); err == nil {
 		t.Fatal("missing recipients fell back to raw key")
+	}
+}
+
+func TestEmbeddedAuthenticatedAccessRecord(t *testing.T) {
+	id, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, priv, err := GenerateKeypair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := seal.Payload{Project: "test/app", Env: "dev", Private: priv, Access: "development", Recipients: []string{id.Recipient().String()}}
+	sealed, err := seal.Seal(payload, id.Recipient())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pf := &projectfile.File{Project: "test/app", Env: map[string]projectfile.Env{"dev": {Key: pub, Access: payload.Access, Recipients: payload.Recipients}}}
+	metadata, err := pf.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := ".esec/keys/dev/" + pub + ".age"
+	fsys := fstest.MapFS{"esec.toml": {Data: metadata}, name: {Data: sealed}}
+	if err := checkEmbeddedPolicy(fsys, "dev", name, sealed, &payload); err == nil {
+		t.Fatal("accepted missing authenticated record")
+	}
+	record := seal.AccessRecord{Version: 1, Project: payload.Project, Environment: "dev", PublicKey: pub, Access: payload.Access, Recipients: payload.Recipients, SealHash: seal.Hash(sealed)}
+	data, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fsys[name+".json"] = &fstest.MapFile{Data: data}
+	if err := checkEmbeddedPolicy(fsys, "dev", name, sealed, &payload); err != nil {
+		t.Fatal(err)
+	}
+	payload.Access = "production"
+	if err := checkEmbeddedPolicy(fsys, "dev", name, sealed, &payload); err == nil {
+		t.Fatal("accepted rewritten policy")
 	}
 }
