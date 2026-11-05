@@ -30,7 +30,7 @@ type InitCmd struct {
 	Production       bool     `help:"Use production recipients even for a custom environment name"`
 	MachineRecipient []string `help:"Explicit deployment recipients; never added to local identities"`
 	NoRecovery       bool     `help:"Allow development without a YubiKey or offline recovery recipient"`
-	EncryptExisting  bool     `help:"Explicitly adopt a plaintext dotenv file with no public key"`
+	EncryptExisting  bool     `help:"Encrypt existing plaintext dotenv values, replacing any old public-key header"`
 	Yes              bool     `help:"Confirm creation without prompting"`
 }
 
@@ -529,6 +529,7 @@ func (c *RotateCmd) Run(ctx *cliCtx) error {
 
 // AdoptCmd migrates an existing environment while preserving legacy recovery.
 type AdoptCmd struct {
+	Project          string   `help:"Project label, org/repo; creates missing esec.toml after successful adoption"`
 	Recovery         bool     `help:"Prompt privately for a recovery phrase to open the old age seal"`
 	RecoveryFormat   string   `default:"esec-v1" enum:"esec-v1,vault-v2" help:"Recovery phrase derivation format"`
 	File             string   `arg:"" help:"Existing environment to migrate with a new key"`
@@ -545,6 +546,10 @@ func (c *AdoptCmd) Run(ctx *cliCtx) error {
 	}
 	if t.Standalone {
 		return errors.New("already standalone; use esec rotate or esec recipients")
+	}
+	bootstrap, err := adoptionProject(t, c.Project)
+	if err != nil {
+		return err
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -568,7 +573,7 @@ func (c *AdoptCmd) Run(ctx *cliCtx) error {
 		}
 		options.AgeIdentities = []age.Identity{id}
 	}
-	return rotateStandaloneWithOptions(ctx, t, rs, options)
+	return rotateStandaloneProject(ctx, t, rs, options, bootstrap)
 }
 
 func rotateStandalone(ctx *cliCtx, t *esec.ReadTarget, rs []string) error {
@@ -576,9 +581,10 @@ func rotateStandalone(ctx *cliCtx, t *esec.ReadTarget, rs []string) error {
 }
 
 func rotateStandaloneWithOptions(ctx *cliCtx, t *esec.ReadTarget, rs []string, options esec.ReadOptions) error {
-	if err := validateRecipientChange(t, rs); err != nil {
-		return err
-	}
+	return rotateStandaloneProject(ctx, t, rs, options, nil)
+}
+
+func rotateStandaloneProject(ctx *cliCtx, t *esec.ReadTarget, rs []string, options esec.ReadOptions, bootstrap *projectfile.File) error {
 	if err := safeProjectPath(t.Root, filepath.Join(t.Root, ".esec")); err != nil {
 		return err
 	}
@@ -605,19 +611,19 @@ func rotateStandaloneWithOptions(ctx *cliCtx, t *esec.ReadTarget, rs []string, o
 	if err != nil {
 		return err
 	}
+	pf, err := rotationProject(t, bootstrap, markerBefore)
+	if err != nil {
+		return err
+	}
+	if err := validateRecipientChangeForProject(t, rs, pf); err != nil {
+		return err
+	}
 	expected := map[string]sourceSnapshot{t.Path: fileBefore, markerPath: markerBefore}
 	pub, priv, encrypted, err := rotatedCiphertextWithOptions(t, options)
 	if err != nil {
 		return err
 	}
 	if err := rejectSharedFiles(t); err != nil {
-		return err
-	}
-	pf, err := projectfile.Load(t.Root)
-	if err != nil {
-		return err
-	}
-	if err := registerLegacyRecovery(pf, t.Standalone); err != nil {
 		return err
 	}
 	for env, e := range pf.Env {
@@ -632,6 +638,9 @@ func rotateStandaloneWithOptions(ctx *cliCtx, t *esec.ReadTarget, rs []string, o
 	if err := writeStandaloneGeneration(t.Root, t.Project, t.Environment, pub, t.Access, rs, sealed); err != nil {
 		return err
 	}
+	if pf.Env == nil {
+		pf.Env = map[string]projectfile.Env{}
+	}
 	pf.Env[t.Environment] = projectfile.Env{Key: pub, Recipients: rs, Access: t.Access}
 	marker, err := pf.Marshal()
 	if err != nil {
@@ -644,6 +653,26 @@ func rotateStandaloneWithOptions(ctx *cliCtx, t *esec.ReadTarget, rs []string, o
 	return nil
 }
 
+func rotationProject(t *esec.ReadTarget, bootstrap *projectfile.File, markerBefore sourceSnapshot) (*projectfile.File, error) {
+	if bootstrap != nil {
+		if !markerBefore.Absent {
+			return nil, errors.New("project metadata appeared before adoption; retry")
+		}
+		if err := rejectOrphanedAncestors(filepath.Dir(t.Path)); err != nil {
+			return nil, err
+		}
+		return bootstrap, nil
+	}
+	pf, err := projectfile.Load(t.Root)
+	if err != nil {
+		return nil, err
+	}
+	if pf.Project != t.Project {
+		return nil, errors.New("project changed before rotation; retry")
+	}
+	return pf, nil
+}
+
 type pendingEnvironment struct {
 	env, path, pub string
 	data, sealed   []byte
@@ -654,6 +683,9 @@ type pendingEnvironment struct {
 func (c *InitCmd) loadProject(root string, cfg config.Config) (*projectfile.File, error) {
 	pf, err := projectfile.Load(root)
 	if errors.Is(err, projectfile.ErrNotFound) {
+		if err := rejectOrphanedAccess(root); err != nil {
+			return nil, err
+		}
 		if err := projectfile.ValidateOrgRepo(c.Project); err != nil {
 			return nil, err
 		}
@@ -750,11 +782,8 @@ func (c *InitCmd) initialPlaintext(ctx *cliCtx, path, format, pub string) ([]byt
 	body := []byte(skeleton(format, pub))
 	existing, err := os.ReadFile(path) //nolint:gosec // validated project destination
 	if err == nil {
-		if _, e := esec.ExtractPublicKey(existing, esec.FileFormat("."+format)); e == nil {
-			return nil, fmt.Errorf("%s already has an Esec public key; use esec adopt to rotate and seal its key without losing values", path)
-		}
-		if format != "env" || bytes.Contains(existing, []byte("ESEC[")) {
-			return nil, fmt.Errorf("%s is not an unencrypted dotenv file without a public key; not changed", path)
+		if err := validateInitPlaintext(path, format, existing); err != nil {
+			return nil, err
 		}
 		if !c.EncryptExisting {
 			return nil, fmt.Errorf("%s is plaintext; rerun with --encrypt-existing to add a new public key and encrypt its existing values", path)
@@ -764,7 +793,7 @@ func (c *InitCmd) initialPlaintext(ctx *cliCtx, path, format, pub string) ([]byt
 			return nil, err
 		}
 		if changed {
-			say(ctx, "Normalized multiline dotenv entries to single lines; comments were removed and values preserved.")
+			say(ctx, "Normalized dotenv entries and replaced any old public-key header; comments were removed and values preserved.")
 		}
 		body = append([]byte("ESEC_PUBLIC_KEY="+pub+"\n"), normalized...)
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -891,6 +920,14 @@ func readJournalCiphertext(journal, rel string, e journalEntry) ([]byte, error) 
 }
 
 func validateRecipientChange(t *esec.ReadTarget, rs []string) error {
+	pf, err := projectfile.Load(t.Root)
+	if err != nil {
+		return err
+	}
+	return validateRecipientChangeForProject(t, rs, pf)
+}
+
+func validateRecipientChangeForProject(t *esec.ReadTarget, rs []string, pf *projectfile.File) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -900,10 +937,6 @@ func validateRecipientChange(t *esec.ReadTarget, rs []string) error {
 	}
 	if t.AppliedPolicy != nil && t.AppliedPolicy.Access == "production" && t.Access != "production" {
 		return errors.New("production access cannot be downgraded")
-	}
-	pf, err := projectfile.Load(t.Root)
-	if err != nil {
-		return err
 	}
 	if !t.Standalone {
 		pf.RecoveryRecipients = seal.CanonicalRecipients(append(pf.RecoveryRecipients, cfg.Age.RecoveryRecipients...))
@@ -928,16 +961,4 @@ func writeStandaloneGeneration(root, project, env, pub, access string, rs []stri
 		return err
 	}
 	return writeImmutableFile(root, seal.AccessRecordPath(root, env, pub), append(encoded, '\n'))
-}
-
-func registerLegacyRecovery(pf *projectfile.File, standalone bool) error {
-	if standalone {
-		return nil
-	}
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-	pf.RecoveryRecipients = seal.CanonicalRecipients(append(pf.RecoveryRecipients, cfg.Age.RecoveryRecipients...))
-	return nil
 }

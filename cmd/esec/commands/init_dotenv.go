@@ -17,7 +17,9 @@ func normalizeInitDotenv(data []byte) ([]byte, bool, error) {
 		return nil, false, errors.New("invalid dotenv")
 	}
 	lines := strings.Split(string(data), "\n")
-	normalize := false
+	_, hasPublic := values[format.PublicKeyField]
+	_, hasUnderscored := values[format.UnderscoredPublicKeyField]
+	normalize := hasPublic || hasUnderscored
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
@@ -41,6 +43,11 @@ func normalizeInitDotenv(data []byte) ([]byte, bool, error) {
 	}
 	keys := make([]string, 0, len(values))
 	for key := range values {
+		// Init supplies a fresh public key. A public header alone does not mean
+		// the values are encrypted, and must not survive as a duplicate header.
+		if key == format.PublicKeyField || key == format.UnderscoredPublicKeyField {
+			continue
+		}
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)

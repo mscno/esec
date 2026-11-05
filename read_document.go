@@ -102,7 +102,7 @@ func readDocument(t *ReadTarget, o ReadOptions, info *ReadInfo) ([]byte, error) 
 		}
 		return decryptReadKey(t, p.Private)
 	}
-	key, err := findPrivateKeyForData(keyDir, t.Environment, o.PrivateKey, t.Content, t.Format, slog.New(slog.DiscardHandler))
+	key, err := findPrivateKeyForProjectData(keyDir, t.Project, t.Environment, o.PrivateKey, t.Content, t.Format, slog.New(slog.DiscardHandler))
 	if err == nil {
 		info.Source = "local_key"
 		return decryptData(key, t.Content, t.Format)

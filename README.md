@@ -8,12 +8,12 @@ It needs no Esec server, account, daemon, or menu bar app.
 
 ## Install
 
-Download the CLI for your platform from [v0.21.0 releases](https://github.com/mscno/esec/releases/tag/v0.21.0), or:
+Download the CLI for your platform from [v0.21.1 releases](https://github.com/mscno/esec/releases/tag/v0.21.1), or:
 
 ```sh
-go install github.com/mscno/esec/cmd/esec@v0.21.0
+go install github.com/mscno/esec/cmd/esec@v0.21.1
 # With mise:
-mise use -g go:github.com/mscno/esec/cmd/esec@0.21.0
+mise use -g go:github.com/mscno/esec/cmd/esec@0.21.1
 ```
 
 The optional **Esec.app** is available in the same release for Apple Silicon
@@ -96,15 +96,16 @@ if it contains production data. Development without recovery requires the
 explicit `--no-recovery` option; production requires a configured YubiKey.
 
 A missing secrets file gets **only its public key**. Esec never copies an
-`.env.example`. For an existing plaintext dotenv file without a public key,
+`.env.example`. For an existing plaintext dotenv file, with or without an old public-key header,
 inspect it and explicitly consent to encrypting its existing values:
 
 ```sh
 esec init --project acme/api --env dev --encrypt-existing --yes
 ```
 
-Multiline dotenv entries are normalized in memory before encryption. Existing
-encrypted files use `esec adopt`, described below.
+Multiline dotenv entries are normalized in memory before encryption. An old
+public-key header is replaced with the new key; existing values are preserved.
+Encrypted or mixed plaintext/encrypted files use `esec adopt`, described below.
 
 Commit the encrypted environment files, `esec.toml`, and `.esec/keys/`.
 The latter holds age-encrypted Esec environment keys and their public `.age.json`
@@ -422,6 +423,19 @@ esec adopt dev
 esec inspect dev
 esec run dev -- your-test-command
 ```
+
+If the repo has no `esec.toml` yet, supply its project label on the first adoption:
+
+```sh
+esec adopt dev --project acme/api
+```
+
+Run from the project root. The old key can come from the local `.esec-keyring`,
+the global project keyring, or explicit process credentials. Esec creates
+`esec.toml` together with the verified replacement ciphertext; a missing old key
+leaves both unchanged. If `.esec/` already contains seals or access records but
+`esec.toml` is missing, restore the original metadata first so access restrictions
+are preserved. A project-only `esec.toml` is also supported.
 
 `adopt` opens the old file with local credentials, creates a new environment
 key, re-encrypts its values, and seals the new key to standalone recipients.

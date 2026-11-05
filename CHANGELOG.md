@@ -1,3 +1,14 @@
+# v0.21.1
+
+- Fix initialization of plaintext dotenv files that retain an old public-key
+  header. `init --encrypt-existing` replaces the header and preserves values;
+  encrypted and mixed files still require adoption. Missing files contain only
+  a public key, and example files are never copied.
+- Add `adopt --project org/repo` to bootstrap missing project metadata only after
+  successful decryption and verification. Support legacy project keyrings during
+  bootstrap and reject orphaned access data rather than guessing its policy.
+- Fix adoption with a project-only `esec.toml` and improve migration errors.
+
 # v0.21.0
 
 - Add offline 24-word recovery identity creation/import, optional passphrases,

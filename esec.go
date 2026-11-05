@@ -89,12 +89,19 @@ func GlobalKeyringDir() string {
 // followed by the global keyring store (project-keyed via esec.toml, then
 // the default keyring).
 func resolveKeyringCandidates(keyPath string) []string {
+	return resolveProjectKeyringCandidates(keyPath, "")
+}
+
+func resolveProjectKeyringCandidates(keyPath, project string) []string {
 	if envPath := os.Getenv(EsecKeyringPath); envPath != "" {
 		return []string{envPath}
 	}
 	candidates := []string{filepath.Join(keyPath, DefaultKeyringFilename)}
 	if dir := GlobalKeyringDir(); dir != "" {
-		if project, _, err := projectfile.FindProjectFile(keyPath); err == nil {
+		if project == "" {
+			project, _, _ = projectfile.FindProjectFile(keyPath)
+		}
+		if project != "" && projectfile.ValidateOrgRepo(project) == nil {
 			candidates = append(candidates, filepath.Join(dir, projectfile.KeyringName(project)))
 		}
 		candidates = append(candidates, filepath.Join(dir, DefaultKeyringBasename))
@@ -679,6 +686,10 @@ func parseEnvSuffix(filePath string) string {
 // When a key is found via the pubkey-keyed entry, the stored private key is
 // validated to actually match that public key.
 func findPrivateKeyForData(keyPath, envSuffix, userSuppliedPrivateKey string, data []byte, fileFormat FileFormat, logger *slog.Logger) ([32]byte, error) {
+	return findPrivateKeyForProjectData(keyPath, "", envSuffix, userSuppliedPrivateKey, data, fileFormat, logger)
+}
+
+func findPrivateKeyForProjectData(keyPath, project, envSuffix, userSuppliedPrivateKey string, data []byte, fileFormat FileFormat, logger *slog.Logger) ([32]byte, error) {
 	var privKey [32]byte
 
 	// If the user supplied a private key, use it directly.
@@ -712,7 +723,7 @@ func findPrivateKeyForData(keyPath, envSuffix, userSuppliedPrivateKey string, da
 	if err := validateKeyPath(keyPath); err != nil {
 		return privKey, err
 	}
-	candidates := resolveKeyringCandidates(keyPath)
+	candidates := resolveProjectKeyringCandidates(keyPath, project)
 	filesSeen := 0
 	for _, keyringPath := range candidates {
 		checkKeyringPermissions(logger, keyringPath)
