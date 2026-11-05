@@ -88,6 +88,23 @@ esec init --project acme/api --env dev,test,staging --yes
 esec init --env production --yes
 ```
 
+Choose the secrets format when creating a project:
+
+```sh
+esec init --project acme/api --env dev,test --format etoml --yes
+# Or use --format ejson for JSON; env, eyaml and eyml are also supported.
+```
+
+The machine's default filename pattern is expanded for that format (normally
+`.etoml.dev` / `.ejson.dev`). `esec.toml` records `[files] format` and `name`;
+subsequent `init` calls reuse them. For a custom layout, set
+`name = "secrets/{env}.etoml"` in `[files]` before initialization. A conflicting
+`--format` is rejected; it does not convert existing environments. Existing
+plaintext requires `--encrypt-existing` for all formats. Conversion preserves
+native values but may normalize formatting/comments; encrypted or mixed files
+still require `esec adopt`. New files contain only a public key.
+
+
 | Environment | Default recipients |
 | --- | --- |
 | dev/test/staging and other ordinary names | This machine's developer identity, configured YubiKeys, optional recovery recipients |

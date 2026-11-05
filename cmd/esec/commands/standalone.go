@@ -26,11 +26,12 @@ import (
 type InitCmd struct {
 	Project          string   `help:"Project label, org/repo; defaults to the existing esec.toml"`
 	Env              string   `required:"" help:"Comma-separated environments to create"`
+	Format           string   `help:"Secrets format: env, etoml, ejson, eyaml or eyml; defaults to esec.toml or machine configuration"`
 	Dir              string   `default:"." type:"path" help:"Project directory"`
 	Production       bool     `help:"Use production recipients even for a custom environment name"`
 	MachineRecipient []string `help:"Explicit deployment recipients; never added to local identities"`
 	NoRecovery       bool     `help:"Allow development without a YubiKey or offline recovery recipient"`
-	EncryptExisting  bool     `help:"Encrypt existing plaintext dotenv values, replacing any old public-key header"`
+	EncryptExisting  bool     `help:"Encrypt existing plaintext values in the selected format, replacing any old public-key header"`
 	Yes              bool     `help:"Confirm creation without prompting"`
 }
 
@@ -681,6 +682,11 @@ type pendingEnvironment struct {
 }
 
 func (c *InitCmd) loadProject(root string, cfg config.Config) (*projectfile.File, error) {
+	if c.Format != "" {
+		if err := validateName(c.Format, "."+c.Format+".{env}"); err != nil {
+			return nil, err
+		}
+	}
 	pf, err := projectfile.Load(root)
 	if errors.Is(err, projectfile.ErrNotFound) {
 		if err := rejectOrphanedAccess(root); err != nil {
@@ -690,6 +696,9 @@ func (c *InitCmd) loadProject(root string, cfg config.Config) (*projectfile.File
 			return nil, err
 		}
 		format := strings.TrimPrefix(cfg.DefaultFormat, ".")
+		if c.Format != "" {
+			format = c.Format
+		}
 		name, err := derivedName(format, cfg.Files.Create, "")
 		if err != nil {
 			return nil, err
@@ -700,6 +709,20 @@ func (c *InitCmd) loadProject(root string, cfg config.Config) (*projectfile.File
 	}
 	if c.Project != "" && c.Project != pf.Project {
 		return nil, errors.New("--project differs from esec.toml")
+	}
+	currentFormat := pf.FilesFormat()
+	if currentFormat == "" && len(pf.Env) > 0 {
+		currentFormat = "env" // Legacy projects without [files] already use dotenv.
+	}
+	if c.Format != "" && c.Format != currentFormat {
+		if pf.FilesFormat() != "" || len(pf.Env) > 0 {
+			return nil, errors.New("--format conflicts with esec.toml; init does not convert existing environments")
+		}
+		name, err := derivedName(c.Format, cfg.Files.Create, "")
+		if err != nil {
+			return nil, err
+		}
+		pf.Files = projectfile.Files{Format: c.Format, Name: name}
 	}
 	if pf.Env == nil {
 		pf.Env = map[string]projectfile.Env{}
@@ -780,6 +803,13 @@ func (c *InitCmd) prepareConfiguredEnvironment(ctx *cliCtx, root, env string, pf
 
 func (c *InitCmd) initialPlaintext(ctx *cliCtx, path, format, pub string) ([]byte, error) {
 	body := []byte(skeleton(format, pub))
+	if format != "env" {
+		var err error
+		body, err = normalizeInitStructured(format, body, pub)
+		if err != nil {
+			return nil, err
+		}
+	}
 	existing, err := os.ReadFile(path) //nolint:gosec // validated project destination
 	if err == nil {
 		if err := validateInitPlaintext(path, format, existing); err != nil {
@@ -787,6 +817,14 @@ func (c *InitCmd) initialPlaintext(ctx *cliCtx, path, format, pub string) ([]byt
 		}
 		if !c.EncryptExisting {
 			return nil, fmt.Errorf("%s is plaintext; rerun with --encrypt-existing to add a new public key and encrypt its existing values", path)
+		}
+		if format != "env" {
+			body, err := normalizeInitStructured(format, existing, pub)
+			if err != nil {
+				return nil, err
+			}
+			say(ctx, "Normalized %s entries and replaced any old public-key header; formatting/comments may change, values preserved.", format)
+			return body, nil
 		}
 		normalized, changed, err := normalizeInitDotenv(existing)
 		if err != nil {

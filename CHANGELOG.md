@@ -1,3 +1,10 @@
+# v0.22.1
+
+- Add `init --format env|etoml|ejson|eyaml|eyml`, persisted in esec.toml and checked against existing project configuration.
+- Support consented initialization of existing TOML/JSON/YAML plaintext while preserving native arrays, tables and large integer values.
+- Fix empty EJSON initialization failing its round-trip check; new files still contain only a public key.
+- Add creation, decryption, consent, custom filename and format-conflict regression tests.
+
 # v0.22.0
 
 - Add non-decrypting `check --ci` for managed ciphertext and public access drift.

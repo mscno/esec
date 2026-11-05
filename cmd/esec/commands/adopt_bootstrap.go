@@ -127,7 +127,7 @@ func rejectOrphanedAncestors(dir string) error {
 }
 
 func validateInitPlaintext(path, format string, data []byte) error {
-	if format != "env" || bytes.Contains(data, []byte("ESEC[")) {
+	if bytes.Contains(data, []byte("ESEC[")) {
 		return fmt.Errorf("%s may contain encrypted values; use esec adopt (add --project org/repo if esec.toml is missing); not changed", path)
 	}
 	if _, err := esec.ExtractPublicKey(data, esec.FileFormat("."+format)); err == nil {
