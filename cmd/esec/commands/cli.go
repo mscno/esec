@@ -49,6 +49,7 @@ func commandExit(err error) (int, bool) {
 }
 
 type cli struct {
+	Blob       BlobCmd         `cmd:"" help:"Store, retrieve, or run commands with encrypted file blobs"`
 	Check      CheckCmd        `cmd:"" help:"Check managed ciphertext and access metadata without opening keys"`
 	Set        SetCmd          `cmd:"" help:"Set an encrypted value from a private prompt or stdin"`
 	Diff       DiffCmd         `cmd:"" help:"Compare key names across environments without decrypting"`

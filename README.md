@@ -8,15 +8,17 @@ It needs no Esec server, account, daemon, or menu bar app.
 
 See [configuration and secrets](docs/configuration.md) for typed public defaults,
 local overrides, `set`, `check --ci`, `run --explain` and key comparisons.
+See [encrypted file blobs](docs/file-blobs.md) for importing text or binary
+credentials and giving tools temporary private filenames with `esec blob run`.
 
 ## Install
 
-Download the CLI for your platform from [v0.22.0 releases](https://github.com/mscno/esec/releases/tag/v0.22.0), or:
+Download the CLI for your platform from [v0.23.0 releases](https://github.com/mscno/esec/releases/tag/v0.23.0), or:
 
 ```sh
-go install github.com/mscno/esec/cmd/esec@v0.22.0
+go install github.com/mscno/esec/cmd/esec@v0.23.0
 # With mise:
-mise use -g go:github.com/mscno/esec/cmd/esec@0.22.0
+mise use -g go:github.com/mscno/esec/cmd/esec@0.23.0
 ```
 
 The optional **Esec.app** is available in the same release for Apple Silicon

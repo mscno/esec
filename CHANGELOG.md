@@ -1,3 +1,10 @@
+# v0.23.0
+
+- Add `blob set/get/run` for exact text or binary credential files up to 1 MiB, stored as versioned base64 inside existing encrypted values and protected by the environment's recipients and rotation.
+- Import from a file or stdin with revision-checked ciphertext writes; export exact bytes to stdout or a new 0600 file without overwriting existing paths.
+- Run tools with selected blobs in private 0700 temporary directories and 0600 files, passing only their paths through explicit environment variables. Clean up after success, failure, start errors, SIGINT and SIGTERM. Disk materialization requires Unix permissions; Windows supports imports and stdout exports.
+- Allow `set --create` and `blob set --create` to add simple top-level JSON and TOML keys while preserving existing ciphertext and numeric values.
+
 # v0.22.1
 
 - Add `init --format env|etoml|ejson|eyaml|eyml`, persisted in esec.toml and checked against existing project configuration.

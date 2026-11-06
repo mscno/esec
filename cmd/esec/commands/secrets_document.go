@@ -203,9 +203,6 @@ func validateSecretEdit(data []byte, f *secretfile.File, update secretUpdate) er
 		if !update.Create {
 			return secretfile.ErrNotFound
 		}
-		if f.Format != string(fileutils.Env) && f.Format != string(fileutils.Eyaml) && f.Format != string(fileutils.Eyml) {
-			return errors.New("adding keys is supported in dotenv and YAML files")
-		}
 		if !regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`).MatchString(update.Key) {
 			return errors.New("use a key name starting with a letter, followed by letters, digits or underscores")
 		}

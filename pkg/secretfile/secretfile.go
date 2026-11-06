@@ -319,7 +319,7 @@ var ErrNotFound = errors.New("no such key in the file")
 
 // Set replaces the value at path with value, encrypted to the file's
 // public key, and leaves every other value as it is. With create, a
-// missing top-level key is added (dotenv and YAML files). The value must
+// missing top-level key is added. The value must
 // be one esec encrypts: not the public key, nor a key starting with _.
 func Set(data []byte, f fileutils.FileFormat, path, value string, create bool) ([]byte, error) {
 	last := path[strings.LastIndex(path, ".")+1:]
@@ -339,8 +339,14 @@ func Set(data []byte, f fileutils.FileFormat, path, value string, create bool) (
 		plain, err = setEnv(data, path, value, create)
 	case fileutils.Ejson:
 		plain, err = setJSON(data, path, value)
+		if create && errors.Is(err, ErrNotFound) {
+			plain, err = addTopLevel(data, f, path, value)
+		}
 	case fileutils.Etoml:
 		plain, err = setTOML(data, path, value)
+		if create && errors.Is(err, ErrNotFound) {
+			plain, err = addTopLevel(data, f, path, value)
+		}
 	case fileutils.Eyaml, fileutils.Eyml:
 		plain, err = setYAML(data, path, value, create)
 	default:
