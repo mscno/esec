@@ -1,3 +1,10 @@
+# v0.24.0
+
+- Add root `[workspace.members]` indexes over independent stores, with no inherited keys, recipients or policy.
+- Add global `--member NAME` selection for store operations while preserving caller-relative import/export paths and child working directories. Existing commands inside stores keep working unchanged.
+- Add read-only `check/status/plan/files --workspace` with sorted per-member JSON/text reports, independent plan hashes, CI drift checks and continued reporting when a member is invalid. Apply remains scoped to one store.
+- Reject mixed workspace/store manifests, ambiguous root environment selection, unsafe member paths, symlinked members, overlapping stores and nested repository/workspace boundaries.
+
 # v0.23.0
 
 - Add `blob set/get/run` for exact text or binary credential files up to 1 MiB, stored as versioned base64 inside existing encrypted values and protected by the environment's recipients and rotation.

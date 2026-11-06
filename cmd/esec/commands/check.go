@@ -16,9 +16,10 @@ import (
 
 // CheckCmd inspects declared environments without opening private credentials.
 type CheckCmd struct {
-	Dir  string `default:"." type:"path" help:"Project directory"`
-	CI   bool   `help:"Use non-interactive checks with exit 2 for findings (never opens keys)"`
-	JSON bool   `help:"Print findings as JSON without values"`
+	Workspace bool   `help:"Check every declared workspace member without opening keys"`
+	Dir       string `default:"." type:"path" help:"Project directory"`
+	CI        bool   `help:"Use non-interactive checks with exit 2 for findings (never opens keys)"`
+	JSON      bool   `help:"Print findings as JSON without values"`
 }
 
 type checkFinding struct {
@@ -34,6 +35,9 @@ type checkReport struct {
 
 // Run prints public diagnostics. Parsing failures never echo source lines.
 func (c *CheckCmd) Run(_ *cliCtx) error {
+	if c.Workspace {
+		return reportWorkspace(c.Dir, "check", "", c.JSON, true)
+	}
 	report := checkProject(c.Dir)
 	if c.JSON {
 		if err := json.NewEncoder(os.Stdout).Encode(report); err != nil {

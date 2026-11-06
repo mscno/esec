@@ -20,6 +20,18 @@ var (
 // Resolve finds exactly one secrets file. A format hint filters discovery;
 // it never overrides the actual format of an explicit filename.
 func Resolve(dir, input, formatHint string) (string, FileFormat, error) {
+	// Explicit files belong to their own store, even when invoked from a
+	// workspace root. Discovery preferences apply only to environment names.
+	if f, err := ParseFormat(input); err == nil {
+		p := input
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(dir, p)
+		}
+		if err := regularFile(p); err != nil {
+			return "", "", err
+		}
+		return p, f, nil
+	}
 	c, err := config.LoadDir(dir)
 	if err != nil {
 		return "", "", err
@@ -38,16 +50,6 @@ func Resolve(dir, input, formatHint string) (string, FileFormat, error) {
 			return "", "", err
 		}
 		formats = []FileFormat{f}
-	}
-	if f, err := ParseFormat(input); err == nil {
-		p := input
-		if !filepath.IsAbs(p) {
-			p = filepath.Join(dir, p)
-		}
-		if err := regularFile(p); err != nil {
-			return "", "", err
-		}
-		return p, f, nil
 	}
 	if err := config.ValidateEnvironment(input); err != nil {
 		return "", "", err

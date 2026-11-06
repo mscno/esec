@@ -40,7 +40,7 @@ func (c *InitCmd) Run(ctx *cliCtx) error {
 	if !c.Yes {
 		return errors.New("pass --yes to create the requested environments; use --encrypt-existing to consent to encrypting existing plaintext")
 	}
-	root, err := filepath.Abs(c.Dir)
+	root, err := storeDirectory(c.Dir)
 	if err != nil {
 		return err
 	}
@@ -427,7 +427,7 @@ type RepairCmd struct {
 
 // Run finishes a prepared ciphertext transaction.
 func (c *RepairCmd) Run(ctx *cliCtx) error {
-	root, err := filepath.Abs(c.Dir)
+	root, err := storeDirectory(c.Dir)
 	if err != nil {
 		return err
 	}

@@ -56,8 +56,9 @@ var ErrNotFound = errors.New("project file not found")
 
 // File is the content of esec.toml.
 type File struct {
-	Project string `toml:"project"`
-	Run     Run    `toml:"run,omitempty"`
+	Workspace *Workspace `toml:"workspace,omitempty"`
+	Project   string     `toml:"project,omitempty"`
+	Run       Run        `toml:"run,omitempty"`
 	// RecoveryRecipients labels offline public recovery identities. It grants no access;
 	// each environment must explicitly include a recipient in its own list.
 	RecoveryRecipients []string       `toml:"recovery_recipients,omitempty"`
@@ -160,6 +161,9 @@ func validEnv(env string) bool {
 
 // Validate checks the whole file.
 func (f *File) Validate() error {
+	if f.Workspace != nil {
+		return f.validateWorkspace()
+	}
 	if err := ValidateOrgRepo(f.Project); err != nil {
 		return err
 	}
@@ -372,6 +376,12 @@ func (f *File) Save(dir string) error {
 
 func (f *File) clone() *File {
 	c := &File{Run: f.Run, RecoveryRecipients: slices.Clone(f.RecoveryRecipients), Project: f.Project, Files: f.Files, Env: make(map[string]Env, len(f.Env))}
+	if f.Workspace != nil {
+		c.Workspace = &Workspace{Members: make(map[string]string)}
+		for name, path := range f.Workspace.Members {
+			c.Workspace.Members[name] = path
+		}
+	}
 	for k, v := range f.Env {
 		v.Readers = slices.Clone(v.Readers)
 		v.Recipients = slices.Clone(v.Recipients)
@@ -383,6 +393,9 @@ func (f *File) clone() *File {
 
 // same reports whether two files say the same.
 func (f *File) same(o *File) bool {
+	if !sameWorkspace(f.Workspace, o.Workspace) {
+		return false
+	}
 	if f.Project != o.Project || f.Files != o.Files || f.Run != o.Run || !slices.Equal(f.RecoveryRecipients, o.RecoveryRecipients) {
 		return false
 	}
@@ -414,6 +427,9 @@ func Find(dir string) (*File, string, error) {
 	for {
 		f, err := Load(abs)
 		if err == nil {
+			if f.Workspace != nil {
+				return nil, "", ErrWorkspace
+			}
 			return f, filepath.Join(abs, ProjectFileName), nil
 		}
 		if !errors.Is(err, ErrNotFound) {
@@ -455,6 +471,9 @@ func ReadProjectFile(dir string) (string, error) {
 	f, err := Load(dir)
 	if err != nil {
 		return "", err
+	}
+	if f.Workspace != nil {
+		return "", ErrWorkspace
 	}
 	return f.Project, nil
 }

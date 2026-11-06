@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
+
+	"github.com/alecthomas/kong"
 
 	"github.com/mscno/esec/pkg/config"
 	"github.com/pelletier/go-toml/v2"
@@ -19,6 +22,8 @@ import (
 
 // FilesCmd discovers ciphertext and key names without decrypting values.
 type FilesCmd struct {
+	storeRoot  string
+	Workspace  bool   `help:"List public file metadata grouped by declared workspace member"`
 	Registered bool   `help:"List remembered checkout paths from local migration metadata"`
 	Dir        string `default:"." type:"path" help:"Directory to search recursively"`
 	JSON       bool   `help:"Print JSON (the default)"`
@@ -26,6 +31,12 @@ type FilesCmd struct {
 
 // Run prints public local file metadata only.
 func (c *FilesCmd) Run(_ *cliCtx) error {
+	if c.Workspace {
+		if c.Registered {
+			return errors.New("--workspace cannot be combined with --registered")
+		}
+		return reportWorkspace(c.Dir, "files", "", true, false)
+	}
 	if c.Registered {
 		return registeredCheckoutPaths()
 	}
@@ -40,6 +51,9 @@ func (c *FilesCmd) Run(_ *cliCtx) error {
 	if files == nil {
 		files = []secretfile.File{}
 	}
+	if c.storeRoot != "" {
+		files = slices.DeleteFunc(files, func(f secretfile.File) bool { return f.Root != c.storeRoot })
+	}
 	return json.NewEncoder(os.Stdout).Encode(files)
 }
 
@@ -51,7 +65,7 @@ type SecretsCmd struct {
 
 // SecretsShowCmd opens a document using Esec's local key resolution.
 type SecretsShowCmd struct {
-	File string `required:"" type:"existingfile" help:"Exact secrets file"`
+	File string `required:"" help:"Exact secrets file; relative to the selected member when scoped"`
 	JSON bool   `help:"Print JSON (the default)"`
 	GUI  bool   `help:"Use JSON-lines hardware prompts and a result frame over stdin/stdout"`
 }
@@ -64,6 +78,7 @@ type secretDocumentView struct {
 
 // Run emits a document only after successful local decryption.
 func (c *SecretsShowCmd) Run(_ *cliCtx) error {
+	c.File = kong.ExpandPath(c.File)
 	options := esec.ReadOptions{}
 	if c.GUI {
 		options.AgeUI = newGUIProtocol(os.Stdin, os.Stdout).ui()
@@ -103,7 +118,7 @@ func (c *SecretsShowCmd) document(options esec.ReadOptions) (*secretDocumentView
 
 // SecretsUpdateCmd accepts only a JSON stdin payload, keeping values out of argv.
 type SecretsUpdateCmd struct {
-	File string `required:"" type:"existingfile" help:"Exact secrets file"`
+	File string `required:"" help:"Exact secrets file; relative to the selected member when scoped"`
 }
 type secretUpdate struct {
 	Revision string  `json:"revision"`
@@ -114,6 +129,7 @@ type secretUpdate struct {
 
 // Run encrypts an edit and prints its new ciphertext revision.
 func (c *SecretsUpdateCmd) Run(_ *cliCtx) error {
+	c.File = kong.ExpandPath(c.File)
 	var update secretUpdate
 	dec := json.NewDecoder(io.LimitReader(os.Stdin, 10<<20))
 	dec.DisallowUnknownFields()

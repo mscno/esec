@@ -49,6 +49,7 @@ func commandExit(err error) (int, bool) {
 }
 
 type cli struct {
+	Member     string          `help:"Select an independent store from the nearest workspace index"`
 	Blob       BlobCmd         `cmd:"" help:"Store, retrieve, or run commands with encrypted file blobs"`
 	Check      CheckCmd        `cmd:"" help:"Check managed ciphertext and access metadata without opening keys"`
 	Set        SetCmd          `cmd:"" help:"Set an encrypted value from a private prompt or stdin"`
@@ -117,7 +118,10 @@ func Execute(version string) {
 	// Make the library package log through the same handler.
 	slog.SetDefault(logger)
 
-	err = ctx.Run(&cliCtx{Logger: logger, Quiet: cli.Quiet})
+	err = cli.selectMember(ctx)
+	if err == nil {
+		err = ctx.Run(&cliCtx{Logger: logger, Quiet: cli.Quiet})
+	}
 
 	// Commands may request a specific process exit code (e.g. `run` forwarding
 	// the exit code of its child process). ExitError is silent: the command

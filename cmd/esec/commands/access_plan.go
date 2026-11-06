@@ -46,13 +46,17 @@ type EnvironmentPlan struct {
 
 // PlanCmd previews public access changes.
 type PlanCmd struct {
-	Dir  string `default:"." type:"path" help:"Project directory"`
-	Env  string `help:"Comma-separated environments; default: all"`
-	JSON bool   `help:"Print the public plan and its approval hash as JSON"`
+	Workspace bool   `help:"Preview access for every workspace member without opening keys"`
+	Dir       string `default:"." type:"path" help:"Project directory"`
+	Env       string `help:"Comma-separated environments; default: all"`
+	JSON      bool   `help:"Print the public plan and its approval hash as JSON"`
 }
 
 // Run prints a plan without decrypting any key.
 func (c *PlanCmd) Run(_ *cliCtx) error {
+	if c.Workspace {
+		return reportWorkspace(c.Dir, "plan", c.Env, c.JSON, false)
+	}
 	p, err := buildAccessPlan(c.Dir, c.Env)
 	if err != nil {
 		return err
@@ -62,14 +66,18 @@ func (c *PlanCmd) Run(_ *cliCtx) error {
 
 // StatusCmd reports unapplied access changes.
 type StatusCmd struct {
-	Dir   string `default:"." type:"path" help:"Project directory"`
-	Env   string `help:"Comma-separated environments; default: all"`
-	JSON  bool   `help:"Print public access status as JSON"`
-	Check bool   `help:"Exit 2 if any environment needs creation, migration, or application"`
+	Workspace bool   `help:"Report access for every workspace member without opening keys"`
+	Dir       string `default:"." type:"path" help:"Project directory"`
+	Env       string `help:"Comma-separated environments; default: all"`
+	JSON      bool   `help:"Print public access status as JSON"`
+	Check     bool   `help:"Exit 2 if any environment needs creation, migration, or application"`
 }
 
 // Run optionally returns a nonzero exit code for drift.
 func (c *StatusCmd) Run(_ *cliCtx) error {
+	if c.Workspace {
+		return reportWorkspace(c.Dir, "status", c.Env, c.JSON, c.Check)
+	}
 	p, err := buildAccessPlan(c.Dir, c.Env)
 	if err != nil {
 		return err

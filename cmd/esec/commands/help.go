@@ -21,6 +21,8 @@ A secrets file holds a public key and encrypted values and can be committed. New
 
 Commands take a filename or discover an environment across supported formats and naming patterns. Environment names match exactly: "prod" and "production" are different environments. Multiple matches fail; use --format or an explicit path. Preferences live in ~/.config/esec/config.toml.
 
+Monorepos can index independent stores with [workspace.members] in a root esec.toml. Select a store with --member NAME. check, status, plan and files support read-only --workspace reports; no access policy is inherited.
+
     esec keygen                        # a key pair to start a file with
     esec setup                         # configure this machine
     esec init --project acme/api --env dev --yes
@@ -30,6 +32,8 @@ Commands take a filename or discover an environment across supported formats and
     esec export .env.prod              # NAME=value lines
     esec run prod -- ./server          # run with the values as environment variables
     esec inspect prod                  # explain the read route without opening keys
+    esec check --workspace --ci         # check every declared store without opening keys
+    esec --member mobile blob get production APPLE_P8
 
 Scripts and agents: output goes to stdout and messages to stderr; "esec help <command>" explains one. Exit codes: 0 done, 1 failed, 80 bad usage; run returns its command's code.`
 
